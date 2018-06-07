@@ -7,7 +7,7 @@ import inc.common._
 
 object Codegen {
   def newClass(name: String)(writeClassMembers: ClassWriter => Unit) = {
-    val cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES)
+    val cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS)
     cw.visit(V1_8, ACC_PUBLIC + ACC_SUPER, name, null, Type.getInternalName(classOf[Object]), null)
     writeClassMembers(cw)
     cw.visitEnd()
