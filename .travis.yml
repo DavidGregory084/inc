@@ -1,0 +1,12 @@
+language: scala
+sudo: required
+dist: trusty
+
+script:
+  - curl -L -o ~/bin/mill https://github.com/lihaoyi/mill/releases/download/0.2.3/0.2.3 && chmod +x ~/bin/mill
+  - export PATH=~/bin/mill:$PATH
+  - mill _.test
+
+cache:
+  directories:
+  - $HOME/.coursier
