@@ -80,9 +80,9 @@ object Parser {
   }.map {
     case (moduleName, decls) =>
       if (moduleName.length > 1)
-        Module(Some(moduleName.dropRight(1).mkString(".")), moduleName.lastOption.getOrElse(""), decls)
+        Module(moduleName.dropRight(1), moduleName.lastOption.getOrElse(""), decls)
       else
-        Module(None, moduleName.headOption.getOrElse(""), decls)
+        Module(Seq.empty, moduleName.headOption.getOrElse(""), decls)
   }
 
   def parse(fileContents: String): Module = {

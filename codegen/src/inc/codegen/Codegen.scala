@@ -32,9 +32,7 @@ object Codegen {
   }
 
   def generate(mod: Module): Array[Byte] = {
-    val packageName = mod.pkg.map { p =>
-      p.replaceAll("\\.", "/") + "/"
-    }.getOrElse("")
+    val packageName = if (mod.pkg.isEmpty) "" else mod.pkg.mkString("", "/", "/")
 
     newClass(packageName + mod.name) { cw =>
       mod.declarations.foreach { decl =>

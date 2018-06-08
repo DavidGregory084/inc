@@ -2,7 +2,7 @@ package inc.common
 
 sealed trait Tree extends Product with Serializable
 
-final case class Module(pkg: Option[String], name: String, declarations: Seq[Declaration]) extends Tree
+final case class Module(pkg: Seq[String], name: String, declarations: Seq[Declaration]) extends Tree
 
 sealed trait Expr extends Tree
 

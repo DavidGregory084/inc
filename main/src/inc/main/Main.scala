@@ -10,13 +10,7 @@ object Main {
     val mod = Parser.parse(prog)
     val code = Codegen.generate(mod)
 
-    val packageNameSegments = {
-      val nameOrEmpty = mod.pkg.getOrElse("")
-      val nameSegments = nameOrEmpty.split("\\.")
-      nameSegments.filterNot(_.isEmpty)
-    }
-
-    val outDir = packageNameSegments.foldLeft(dest) {
+    val outDir = mod.pkg.foldLeft(dest) {
       case (path, next) => path / next
     }
 
