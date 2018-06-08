@@ -132,4 +132,54 @@ class ParserSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChec
       |module Long { let long = {42L}; let long2 = 0l }
       |""".trim.stripMargin) shouldBe mod2
   }
+
+  it should "parse literal booleans" in {
+    val mod = Module(None, "Boolean", Seq(Let("boolean", LiteralBoolean(true))))
+    val mod2 = Module(None, "Boolean", Seq(Let("boolean", LiteralBoolean(false)), Let("boolean2", LiteralBoolean(true))))
+
+    Parser.parse(
+      """
+      |module Boolean { let boolean = true }
+      |""".trim.stripMargin) shouldBe mod
+
+    Parser.parse(
+      """
+      |module Boolean { let boolean = false; let boolean2 = true }
+      |""".trim.stripMargin) shouldBe mod2
+  }
+
+  it should "parse literal floats and doubles" in {
+    val mod = Module(None, "Float", Seq(Let("float", LiteralFloat(3.142f))))
+    val mod2 = Module(None, "Double", Seq(Let("double", LiteralDouble(3.142d)), Let("double2", LiteralDouble(0.0001d))))
+
+    Parser.parse(
+      """
+      |module Float { let float = 3.142f }
+      |""".trim.stripMargin) shouldBe mod
+
+    Parser.parse(
+      """
+      |module Double { let double = 3.142; let double2 = 0.0001 }
+      |""".trim.stripMargin) shouldBe mod2
+
+    Parser.parse(
+      """
+      |module Double { let double = 3.142d; let double2 = 0.0001D }
+      |""".trim.stripMargin) shouldBe mod2
+  }
+
+  it should "parse package names" in {
+    val mod = Module(Some("Test"), "Float", Seq(Let("float", LiteralFloat(3.142f))))
+    val mod2 = Module(Some("Test.Parser"), "Double", Seq(Let("double", LiteralDouble(3.142d)), Let("double2", LiteralDouble(0.0001d))))
+
+    Parser.parse(
+      """
+      |module Test.Float { let float = 3.142f }
+      |""".trim.stripMargin) shouldBe mod
+
+    Parser.parse(
+      """
+      |module Test.Parser.Double { let double = 3.142; let double2 = 0.0001 }
+      |""".trim.stripMargin) shouldBe mod2
+  }
 }

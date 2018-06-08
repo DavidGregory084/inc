@@ -1,6 +1,6 @@
 package inc.parser
 
-import java.lang.{ Boolean, Long }
+import java.lang.{ Boolean, Double, Float, Long }
 
 import inc.common._
 
@@ -18,7 +18,8 @@ object Parser {
   val zero = P("0".!)
   val oneToNine = P(CharIn('1' to '9'))
   val zeroToNine = P(CharIn('0' to '9'))
-  val digits = P((oneToNine.rep(exactly = 1).! ~ zeroToNine.rep.!).map { case (first, rest) => first + rest })
+  val digits = P(zeroToNine.rep.!)
+  val digitsLeadingOneToNine = P((oneToNine.rep(exactly = 1).! ~ zeroToNine.rep.!).map { case (first, rest) => first + rest })
 
   val literalBoolean = P("true" | "false").!.map { b => LiteralBoolean(Boolean.parseBoolean(b)) }
 
@@ -30,16 +31,26 @@ object Parser {
 
   val literalString = P("\"" ~/ CharsWhile(c => !stringDisallowedChars.contains(c), min = 0).! ~ "\"").map(LiteralString)
 
-  val literalNum = P(((zero | digits) ~ CharIn("lL").?.!).map {
+  val literalIntegral = P((zero | digitsLeadingOneToNine) ~ CharIn("lL").?.!).map {
     case (num, suffix) =>
       if (suffix.isEmpty)
         LiteralInt(Integer.parseInt(num))
       else
         LiteralLong(Long.parseLong(num))
-  })
+  }
+
+  val literalFloatingPoint = P((zero | digitsLeadingOneToNine) ~ "." ~/ digits ~ (CharIn("dD") | CharIn("fF")).?.!).map {
+    case (wholeNumberPart, fractionPart, "") =>
+      LiteralDouble(Double.parseDouble(wholeNumberPart + "." + fractionPart))
+    case (wholeNumberPart, fractionPart, suffix) if suffix.toUpperCase == "D" =>
+      LiteralDouble(Double.parseDouble(wholeNumberPart + "." + fractionPart))
+    case (wholeNumberPart, fractionPart, suffix) if suffix.toUpperCase == "F" =>
+      LiteralFloat(Float.parseFloat(wholeNumberPart + "." + fractionPart))
+  }
 
   val literal =
-    literalNum |
+    literalFloatingPoint |
+      literalIntegral |
       literalChar |
       literalString |
       literalBoolean

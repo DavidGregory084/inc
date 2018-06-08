@@ -19,6 +19,10 @@ object Codegen {
       cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, name, Type.INT_TYPE.getDescriptor, null, i).visitEnd()
     case Let(name, LiteralLong(l)) =>
       cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, name, Type.LONG_TYPE.getDescriptor, null, l).visitEnd()
+    case Let(name, LiteralFloat(f)) =>
+      cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, name, Type.FLOAT_TYPE.getDescriptor, null, f).visitEnd()
+    case Let(name, LiteralDouble(d)) =>
+      cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, name, Type.DOUBLE_TYPE.getDescriptor, null, d).visitEnd()
     case Let(name, LiteralBoolean(b)) =>
       cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, name, Type.BOOLEAN_TYPE.getDescriptor, null, b).visitEnd()
     case Let(name, LiteralChar(c)) =>
@@ -28,7 +32,10 @@ object Codegen {
   }
 
   def generate(mod: Module): Array[Byte] = {
-    val packageName = mod.pkg.map(_ + "/").getOrElse("")
+    val packageName = mod.pkg.map { p =>
+      p.replaceAll("\\.", "/") + "/"
+    }.getOrElse("")
+
     newClass(packageName + mod.name) { cw =>
       mod.declarations.foreach { decl =>
         newDeclaration(cw, decl)

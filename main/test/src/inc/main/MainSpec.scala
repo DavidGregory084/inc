@@ -32,8 +32,9 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
   }
 
   def shouldCompileField[A](fieldName: String, stringValue: String, expectedValue: A) = withTmpDir { dir =>
-    val pkg = "Test."
-    val classFile = Main.compileProgram(dir, s"module ${pkg}${fieldName.capitalize} { let ${fieldName} = ${stringValue} }")
+    val pkg = "Test.Main."
+    val prog = s"module ${pkg}${fieldName.capitalize} { let ${fieldName} = ${stringValue} }"
+    val classFile = Main.compileProgram(dir, prog)
     val classFileName = classFile.name.dropRight(classFile.ext.length + 1)
     val clazz = loadClassFrom(dir, pkg + classFileName)
     getStatic(clazz, fieldName) shouldBe expectedValue
@@ -44,6 +45,16 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
   it should "compile a long field" in shouldCompileField("long", "42l", 42L)
 
   it should "recognise both long suffixes" in shouldCompileField("long", "42L", 42L)
+
+  it should "compile a float field" in shouldCompileField("float", "3.142f", 3.142f)
+
+  it should "recognise both float suffixes" in shouldCompileField("float", "3.142F", 3.142f)
+
+  it should "compile a double field" in shouldCompileField("double", "3.142d", 3.142d)
+
+  it should "recognise both double suffixes" in shouldCompileField("double", "3.142D", 3.142d)
+
+  it should "default to double when there is no suffix" in shouldCompileField("double", "3.142", 3.142d)
 
   it should "compile a true boolean field" in shouldCompileField("boolean", "true", true)
 
