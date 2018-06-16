@@ -34,7 +34,7 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
   def shouldCompileField[A](fieldName: String, stringValue: String, expectedValue: A) = withTmpDir { dir =>
     val pkg = "Test.Main."
     val prog = s"module ${pkg}${fieldName.capitalize} { let ${fieldName} = ${stringValue} }"
-    val classFile = Main.compileProgram(dir, prog)
+    val classFile = Main.compileProgram(dir, prog).fold(err => fail(err), identity)
     val classFileName = classFile.name.dropRight(classFile.ext.length + 1)
     val clazz = loadClassFrom(dir, pkg + classFileName)
     getStatic(clazz, fieldName) shouldBe expectedValue

@@ -85,14 +85,17 @@ object Parser {
         Module(Seq.empty, moduleName.headOption.getOrElse(""), decls)
   }
 
-  def parse(fileContents: String): Module = {
+  def parse(fileContents: String): Either[ParserError, Module] = {
     module.parse(fileContents) match {
       case Parsed.Success(mod, _) =>
-        mod
+        Right(mod)
       case f: Parsed.Failure =>
-        println(f.msg)
-        println(f.extra.traced)
-        throw new Exception("Parsing failed")
+        val traced = f.extra.traced
+        val expected = traced.expected
+        val index = traced.index
+        val input = traced.input
+        val errorMessage = input.repr.errorMessage(input, expected, index)
+        Left { ParserError(index, errorMessage) }
     }
   }
 }

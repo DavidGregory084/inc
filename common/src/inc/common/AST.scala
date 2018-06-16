@@ -1,5 +1,7 @@
 package inc.common
 
+abstract class Error(val msg: String) extends Throwable(msg) with Product with Serializable
+
 sealed trait Tree extends Product with Serializable
 
 final case class Module(pkg: Seq[String], name: String, declarations: Seq[Declaration]) extends Tree

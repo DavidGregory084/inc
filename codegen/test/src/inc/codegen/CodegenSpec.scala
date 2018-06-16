@@ -6,6 +6,10 @@ import org.scalatest.prop._
 
 class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks {
   "Codegen" should "generate code for literal integers" in {
-    Codegen.generate(Module(Seq.empty, "Integer", Seq(Let("integer", LiteralInt(42))))) should not be empty
+    val mod = Module(Seq.empty, "Integer", Seq(Let("integer", LiteralInt(42))))
+    Codegen.generate(mod).fold(
+      err => fail(err),
+      _ should not be empty
+    )
   }
 }

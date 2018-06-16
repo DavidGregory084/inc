@@ -31,12 +31,13 @@ object Codegen {
       cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, name, Type.getDescriptor(classOf[String]), null, s).visitEnd()
   }
 
-  def generate(mod: Module): Array[Byte] = {
+  def generate(mod: Module): Either[CodegenError, Array[Byte]] = {
     val packageName = if (mod.pkg.isEmpty) "" else mod.pkg.mkString("", "/", "/")
-
-    newClass(packageName + mod.name) { cw =>
-      mod.declarations.foreach { decl =>
-        newDeclaration(cw, decl)
+    Right {
+      newClass(packageName + mod.name) { cw =>
+        mod.declarations.foreach { decl =>
+          newDeclaration(cw, decl)
+        }
       }
     }
   }
