@@ -34,7 +34,7 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
   def shouldCompileField[A](fieldName: String, stringValue: String, expectedValue: A) = withTmpDir { dir =>
     val pkg = "Test.Main."
     val prog = s"module ${pkg}${fieldName.capitalize} { let ${fieldName} = ${stringValue} }"
-    val classFile = Main.compileProgram(dir, prog).fold(err => fail(err), identity)
+    val classFile = Main.compileProgram(dir, prog).fold(err => fail(err.head), identity)
     val classFileName = classFile.name.dropRight(classFile.ext.length + 1)
     val clazz = loadClassFrom(dir, pkg + classFileName)
     getStatic(clazz, fieldName) shouldBe expectedValue
@@ -70,5 +70,17 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
     whenever(!(s.contains('\"') || s.contains('\\') || s.contains('\n') || s.contains('\r'))) {
       shouldCompileField("string", "\"" + s + "\"", s)
     }
+  }
+
+  it should "compile a variable reference" in withTmpDir { dir =>
+    val pkg = "Test.Main."
+    val fieldName = "reference"
+    val prog = s"module ${pkg}Reference { let integer = 42; let ${fieldName} = integer }"
+    val result = Main.compileProgram(dir, prog)
+    result shouldBe 'right
+    val classFile = result.right.get
+    val classFileName = classFile.name.dropRight(classFile.ext.length + 1)
+    val clazz = loadClassFrom(dir, pkg + classFileName)
+    getStatic(clazz, fieldName) shouldBe 42
   }
 }

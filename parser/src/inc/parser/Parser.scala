@@ -21,31 +21,31 @@ object Parser {
   val digits = P(zeroToNine.rep.!)
   val digitsLeadingOneToNine = P((oneToNine.rep(exactly = 1).! ~ zeroToNine.rep.!).map { case (first, rest) => first + rest })
 
-  val literalBoolean = P("true" | "false").!.map { b => LiteralBoolean(Boolean.parseBoolean(b)) }
+  val literalBoolean = P("true" | "false").!.map { b => LiteralBoolean(Boolean.parseBoolean(b), ()) }
 
   val disallowedChars = "\\\n\r"
   val charDisallowedChars = "\'" + disallowedChars
   val stringDisallowedChars = "\"" + disallowedChars
 
-  val literalChar = P("'" ~/ CharPred(c => !charDisallowedChars.contains(c)).! ~ "'" ).map(s => LiteralChar(s(0)))
+  val literalChar = P("'" ~/ CharPred(c => !charDisallowedChars.contains(c)).! ~ "'" ).map(s => LiteralChar(s(0), ()))
 
-  val literalString = P("\"" ~/ CharsWhile(c => !stringDisallowedChars.contains(c), min = 0).! ~ "\"").map(LiteralString)
+  val literalString = P("\"" ~/ CharsWhile(c => !stringDisallowedChars.contains(c), min = 0).! ~ "\"").map(s => LiteralString(s, ()))
 
   val literalIntegral = P((zero | digitsLeadingOneToNine) ~ CharIn("lL").?.!).map {
     case (num, suffix) =>
       if (suffix.isEmpty)
-        LiteralInt(Integer.parseInt(num))
+        LiteralInt(Integer.parseInt(num), ())
       else
-        LiteralLong(Long.parseLong(num))
+        LiteralLong(Long.parseLong(num), ())
   }
 
   val literalFloatingPoint = P((zero | digitsLeadingOneToNine) ~ "." ~/ digits ~ (CharIn("dD") | CharIn("fF")).?.!).map {
     case (wholeNumberPart, fractionPart, "") =>
-      LiteralDouble(Double.parseDouble(wholeNumberPart + "." + fractionPart))
+      LiteralDouble(Double.parseDouble(wholeNumberPart + "." + fractionPart), ())
     case (wholeNumberPart, fractionPart, suffix) if suffix.toUpperCase == "D" =>
-      LiteralDouble(Double.parseDouble(wholeNumberPart + "." + fractionPart))
+      LiteralDouble(Double.parseDouble(wholeNumberPart + "." + fractionPart), ())
     case (wholeNumberPart, fractionPart, suffix) if suffix.toUpperCase == "F" =>
-      LiteralFloat(Float.parseFloat(wholeNumberPart + "." + fractionPart))
+      LiteralFloat(Float.parseFloat(wholeNumberPart + "." + fractionPart), ())
   }
 
   val literal =
@@ -63,11 +63,16 @@ object Parser {
   // Blocks
   def inBraces[A](p: Parser[A]) = P("{" ~/ allWs ~ p ~ allWs ~ "}")
 
+  val expression = literal | identifier.map(id => Reference(id, ()))
+
   val letDeclaration = P(
     "let" ~/ allWs ~ identifier ~ allWs ~ "=" ~ allWs ~
-      (inBraces(literal) | literal)
+      (inBraces(expression) | expression)
       ~ ws
-  ).map(Let.tupled)
+  ).map {
+    case (name, expr) =>
+      Let(name, expr, ())
+  }
 
   val decl = P(letDeclaration)
 
@@ -80,12 +85,12 @@ object Parser {
   }.map {
     case (moduleName, decls) =>
       if (moduleName.length > 1)
-        Module(moduleName.dropRight(1), moduleName.lastOption.getOrElse(""), decls)
+        Module(moduleName.dropRight(1), moduleName.lastOption.getOrElse(""), decls, ())
       else
-        Module(Seq.empty, moduleName.headOption.getOrElse(""), decls)
+        Module(Seq.empty, moduleName.headOption.getOrElse(""), decls, ())
   }
 
-  def parse(fileContents: String): Either[ParserError, Module] = {
+  def parse(fileContents: String): Either[List[ParserError], Module[Unit]] = {
     module.parse(fileContents) match {
       case Parsed.Success(mod, _) =>
         Right(mod)
@@ -95,7 +100,7 @@ object Parser {
         val index = traced.index
         val input = traced.input
         val errorMessage = input.repr.errorMessage(input, expected, index)
-        Left { ParserError(index, errorMessage) }
+        Left { List(ParserError(index, errorMessage)) }
     }
   }
 }

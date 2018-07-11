@@ -69,12 +69,19 @@ object parser extends ScalaSettingsModule {
   def ivyDeps = Agg(ivy"com.lihaoyi::fastparse:1.0.0")
 }
 
+object typechecker extends ScalaSettingsModule {
+  def moduleDeps = Seq(common)
+}
+
 object codegen extends ScalaSettingsModule {
   def moduleDeps = Seq(common)
   def ivyDeps = Agg(ivy"org.ow2.asm:asm:6.2")
 }
 
 object main extends ScalaSettingsModule {
-  def moduleDeps = Seq(common, parser, codegen)
-  def ivyDeps = Agg(ivy"com.lihaoyi::ammonite-ops:1.1.2")
+  def moduleDeps = Seq(common, parser, typechecker, codegen)
+  def ivyDeps = Agg(
+    ivy"com.lihaoyi::ammonite-ops:1.1.2",
+    ivy"com.lihaoyi::pprint:0.5.3"
+  )
 }
