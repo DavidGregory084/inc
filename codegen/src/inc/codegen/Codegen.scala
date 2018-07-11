@@ -1,6 +1,6 @@
 package inc.codegen
 
-import org.objectweb.asm.{ ClassWriter, Type => AsmType }
+import org.objectweb.asm.{ ClassWriter, MethodVisitor, Type => AsmType }
 import org.objectweb.asm.Opcodes._
 
 import inc.common._
@@ -26,7 +26,7 @@ object Codegen {
     case TypeVariable(_, _) => ???
   }
 
-  def newTopLevelDeclaration(cw: ClassWriter, decl: TopLevelDeclaration[Type]) = decl match {
+  def newTopLevelDeclaration(internalName: String, cw: ClassWriter, siv: MethodVisitor, decl: TopLevelDeclaration[Type]) = decl match {
     case Let(name, LiteralInt(i, _), _) =>
       cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, name, AsmType.INT_TYPE.getDescriptor, null, i).visitEnd()
     case Let(name, LiteralLong(l, _), _) =>
@@ -41,18 +41,32 @@ object Codegen {
       cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, name, AsmType.CHAR_TYPE.getDescriptor, null, c).visitEnd()
     case Let(name, LiteralString(s, _), _) =>
       cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, name, AsmType.getDescriptor(classOf[String]), null, s).visitEnd()
-    case Let(name, Reference(_, typ), _) =>
-      // TODO: Handle static initialization
-      cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, name, descriptorFor(typ), null, null).visitEnd()
+    case Let(name, Reference(ref, typ), _) =>
+      val descriptor = descriptorFor(typ)
+      cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, name, descriptor, null, null).visitEnd()
+      siv.visitFieldInsn(GETSTATIC, internalName, ref, descriptor)
+      siv.visitFieldInsn(PUTSTATIC, internalName, name, descriptor)
   }
 
   def generate(mod: Module[Type]): Either[List[CodegenError], Array[Byte]] = {
     val packageName = if (mod.pkg.isEmpty) "" else mod.pkg.mkString("", "/", "/")
     Right {
-      newClass(packageName + mod.name) { cw =>
+      val internalName = packageName + mod.name
+
+      newClass(internalName) { cw =>
+        val siv = cw.visitMethod(ACC_STATIC, "<clinit>", AsmType.getMethodDescriptor(AsmType.VOID_TYPE), null, null)
+
+        siv.visitCode()
+
         mod.declarations.foreach { decl =>
-          newTopLevelDeclaration(cw, decl)
+          newTopLevelDeclaration(internalName, cw, siv, decl)
         }
+
+        siv.visitInsn(RETURN)
+
+        siv.visitMaxs(0, 0)
+
+        siv.visitEnd()
       }
     }
   }
