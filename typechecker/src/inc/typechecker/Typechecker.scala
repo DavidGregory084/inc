@@ -3,7 +3,7 @@ package inc.typechecker
 import inc.common._
 
 object Typechecker {
-  case class Environment(env: Map[String, Type])
+  type Environment = Map[String, Type]
 
   def typecheck(expr: Expr[Unit], env: Environment): (Either[List[TypeError], Expr[Type]], Environment) = expr match {
     case int @ LiteralInt(_, _) =>
@@ -21,7 +21,7 @@ object Typechecker {
     case str @ LiteralString(_, _) =>
       (Right(str.copy(meta = Type.String)), env)
     case ref @ Reference(name, _)  =>
-      (env.env.get(name).map { typ =>
+      (env.get(name).map { typ =>
         Right(ref.copy(meta = typ))
       }.getOrElse(Left(List(TypeError(s"Reference to undefined symbol: $name")))), env)
   }
@@ -29,15 +29,16 @@ object Typechecker {
   def typecheck(decl: TopLevelDeclaration[Unit], env: Environment): (Either[List[TypeError], TopLevelDeclaration[Type]], Environment) = decl match {
     case Let(name, expr, _) =>
       val (res, updatedEnv) = typecheck(expr, env)
-      val updatedWithThis = res.toOption.fold(updatedEnv.env)(e => updatedEnv.env.updated(name, e.meta))
-      (res.map(e => Let(name, e, e.meta)), Environment(updatedWithThis))
+      val updatedWithRes = res.toOption.fold(updatedEnv)(e => updatedEnv.updated(name, e.meta))
+      (res.map(e => Let(name, e, e.meta)), updatedWithRes)
   }
 
   def typecheck(module: Module[Unit]): Either[List[TypeError], Module[Type]] = module match {
     case Module(_, _, decls, _) =>
-      val emptyEnv = Environment(Map.empty)
+      val emptyEnv = Map.empty[String, Type]
+      val emptyDecls = Seq.empty[Either[List[TypeError], TopLevelDeclaration[Type]]]
 
-      val typecheckedDecls = decls.foldLeft((Seq.empty[Either[List[TypeError], TopLevelDeclaration[Type]]], emptyEnv)) {
+      val typecheckedDecls = decls.foldLeft((emptyDecls, emptyEnv)) {
         case ((checked, env), decl) =>
           val (res, updatedEnv) = typecheck(decl, env)
           (checked :+ res, updatedEnv)
