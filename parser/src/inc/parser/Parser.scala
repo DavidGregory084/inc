@@ -100,7 +100,7 @@ object Parser {
         val index = traced.index
         val input = traced.input
         val errorMessage = input.repr.errorMessage(input, expected, index)
-        Left { List(ParserError(index, errorMessage)) }
+        ParserError.singleton(index, errorMessage)
     }
   }
 }
