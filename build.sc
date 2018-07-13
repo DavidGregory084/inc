@@ -82,6 +82,7 @@ object codegen extends ScalaSettingsModule {
 }
 
 object main extends ScalaSettingsModule {
+  def mainClass = Some("inc.main.Main")
   def moduleDeps = Seq(common, parser, typechecker, codegen)
   def ivyDeps = Agg(
     ivy"com.lihaoyi::ammonite-ops:1.1.2",
