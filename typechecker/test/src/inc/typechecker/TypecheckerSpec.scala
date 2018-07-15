@@ -33,4 +33,14 @@ class TypecheckerSpec extends FlatSpec with Matchers {
     val result = Typechecker.typecheck(mod)
     result shouldBe 'left
   }
+
+  it should "return an error when there is a field which is defined twice" in {
+    val mod = mkModule("Ref", Seq(
+      Let("int", LiteralInt(42, ()), ()),
+      Let("int2", Reference("int3", ()), ()),
+      Let("int2", Reference("int", ()), ())
+    ))
+    val result = Typechecker.typecheck(mod)
+    result shouldBe 'left
+  }
 }

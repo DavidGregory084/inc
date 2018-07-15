@@ -28,9 +28,12 @@ object Typechecker {
 
   def typecheck(decl: TopLevelDeclaration[Unit], env: Environment): Either[List[TypeError], (TopLevelDeclaration[Type], Environment)] = decl match {
     case Let(name, expr, _) =>
-      typecheck(expr, env).map {
+      typecheck(expr, env).flatMap {
         case (checkedExpr, updatedEnv) =>
-          (Let(name, checkedExpr, checkedExpr.meta), updatedEnv.updated(name, checkedExpr.meta))
+          if (updatedEnv.contains(name))
+            TypeError.singleton(s"Symbol $name is already defined")
+          else
+            Right((Let(name, checkedExpr, checkedExpr.meta), updatedEnv.updated(name, checkedExpr.meta)))
       }
   }
 
