@@ -38,7 +38,7 @@ object Codegen {
     case TypeVariable(_, _) => CodegenError.singleton("A type variable was found in code generation!")
   }
 
-  def newTopLevelDeclaration(internalName: String, cw: ClassWriter, siv: MethodVisitor, decl: TopLevelDeclaration[Type]): Either[List[CodegenError], Unit] =
+  def newTopLevelDeclaration(internalName: String, cw: ClassWriter, siv: MethodVisitor, decl: TopLevelDeclaration[NameWithType]): Either[List[CodegenError], Unit] =
     decl match {
       case Let(name, LiteralInt(i, _), _) =>
         Right(cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, name, AsmType.INT_TYPE.getDescriptor, null, i).visitEnd())
@@ -54,15 +54,15 @@ object Codegen {
         Right(cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, name, AsmType.CHAR_TYPE.getDescriptor, null, c).visitEnd())
       case Let(name, LiteralString(s, _), _) =>
         Right(cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, name, AsmType.getDescriptor(classOf[String]), null, s).visitEnd())
-      case Let(name, Reference(ref, typ), _) =>
-        descriptorFor(typ).map { descriptor =>
+      case Let(name, Reference(ref, nameWithType), _) =>
+        descriptorFor(nameWithType.typ).map { descriptor =>
           cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, name, descriptor, null, null).visitEnd()
           siv.visitFieldInsn(GETSTATIC, internalName, ref, descriptor)
           siv.visitFieldInsn(PUTSTATIC, internalName, name, descriptor)
         }
     }
 
-  def generate(mod: Module[Type]): Either[List[CodegenError], Array[Byte]] = {
+  def generate(mod: Module[NameWithType]): Either[List[CodegenError], Array[Byte]] = {
     val packageName = if (mod.pkg.isEmpty) "" else mod.pkg.mkString("", "/", "/")
 
     val internalName = packageName + mod.name

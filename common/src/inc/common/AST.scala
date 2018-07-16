@@ -37,6 +37,11 @@ final case class Let[A](name: String, binding: Expr[A], meta: A) extends TopLeve
 
 // final case class Def(name: String, params: Seq[Param], body: Expr) extends TopLevelDeclaration
 
+sealed trait Name
+case object NoName extends Name
+case class LocalName(name: String) extends Name
+case class FullName(pkg: Seq[String], name: String) extends Name
+
 sealed trait Type
 
 object Type {
@@ -63,3 +68,5 @@ object TypeVariable {
 }
 
 case class TypeConstructor(name: String, typeParams: Seq[Type]) extends Type
+
+case class NameWithType(name: Name, typ: Type)

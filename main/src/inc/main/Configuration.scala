@@ -2,6 +2,7 @@ package inc.main
 
 case class Configuration(
   printParser: Boolean = false,
+  printResolver: Boolean = false,
   printTyper: Boolean = false,
   printCodegen: Boolean = false,
   printPhaseTiming: Boolean = false

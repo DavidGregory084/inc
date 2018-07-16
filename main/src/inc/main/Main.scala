@@ -2,6 +2,7 @@ package inc.main
 
 import inc.common._
 import inc.parser.Parser
+import inc.resolver.Resolver
 import inc.typechecker.Typechecker
 import inc.codegen.Codegen
 
@@ -56,7 +57,9 @@ object Main {
 
       mod <- runPhase[Module[Unit]]("parser", config, _.printParser, Parser.parse(prog))
 
-      checked <- runPhase[Module[Type]]("typechecker", config, _.printTyper, Typechecker.typecheck(mod))
+      resolved <- runPhase[Module[Name]]("resolver", config, _.printResolver, Resolver.resolve(mod))
+
+      checked <- runPhase[Module[NameWithType]]("typechecker", config, _.printTyper, Typechecker.typecheck(resolved))
 
       code <- runPhase[Array[Byte]]("codegen", config, _.printCodegen, Codegen.generate(checked), Codegen.print)
 
