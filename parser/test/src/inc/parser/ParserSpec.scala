@@ -7,11 +7,11 @@ import org.scalatest.prop._
 class ParserSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks {
 
   def parseProgram(prog: String): Module[Unit] =
-    Parser.parse(prog).fold(err => fail(err.head), identity)
+    Parser.parse(prog).fold(err => fail(err.head.msg), identity)
 
   "Parser" should "parse literal integers" in {
-    val mod = Module(Seq.empty, "Integer", Seq(Let("integer", LiteralInt(42, ()), ())), ())
-    val mod2 = Module(Seq.empty, "Integer", Seq(Let("integer", LiteralInt(42, ()), ()), Let("integer2", LiteralInt(0, ()), ())), ())
+    val mod = Module(Seq.empty, "Integer", Seq.empty, Seq(Let("integer", LiteralInt(42, ()), ())), ())
+    val mod2 = Module(Seq.empty, "Integer", Seq.empty, Seq(Let("integer", LiteralInt(42, ()), ()), Let("integer2", LiteralInt(0, ()), ())), ())
 
     parseProgram("module Integer { let integer = 42 }") shouldBe mod
 
@@ -74,8 +74,8 @@ class ParserSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChec
   }
 
   it should "parse literal longs" in {
-    val mod = Module(Seq.empty, "Long", Seq(Let("long", LiteralLong(42L, ()), ())), ())
-    val mod2 = Module(Seq.empty, "Long", Seq(Let("long", LiteralLong(42L, ()), ()), Let("long2", LiteralLong(0L, ()), ())), ())
+    val mod = Module(Seq.empty, "Long", Seq.empty, Seq(Let("long", LiteralLong(42L, ()), ())), ())
+    val mod2 = Module(Seq.empty, "Long", Seq.empty, Seq(Let("long", LiteralLong(42L, ()), ()), Let("long2", LiteralLong(0L, ()), ())), ())
 
     parseProgram("module Long { let long = 42L }") shouldBe mod
 
@@ -138,8 +138,8 @@ class ParserSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChec
   }
 
   it should "parse literal booleans" in {
-    val mod = Module(Seq.empty, "Boolean", Seq(Let("boolean", LiteralBoolean(true, ()), ())), ())
-    val mod2 = Module(Seq.empty, "Boolean", Seq(Let("boolean", LiteralBoolean(false, ()), ()), Let("boolean2", LiteralBoolean(true, ()), ())), ())
+    val mod = Module(Seq.empty, "Boolean", Seq.empty, Seq(Let("boolean", LiteralBoolean(true, ()), ())), ())
+    val mod2 = Module(Seq.empty, "Boolean", Seq.empty, Seq(Let("boolean", LiteralBoolean(false, ()), ()), Let("boolean2", LiteralBoolean(true, ()), ())), ())
 
     parseProgram(
       """
@@ -153,8 +153,8 @@ class ParserSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChec
   }
 
   it should "parse literal floats and doubles" in {
-    val mod = Module(Seq.empty, "Float", Seq(Let("float", LiteralFloat(3.142f, ()), ())), ())
-    val mod2 = Module(Seq.empty, "Double", Seq(Let("double", LiteralDouble(3.142d, ()), ()), Let("double2", LiteralDouble(0.0001d, ()), ())), ())
+    val mod = Module(Seq.empty, "Float", Seq.empty, Seq(Let("float", LiteralFloat(3.142f, ()), ())), ())
+    val mod2 = Module(Seq.empty, "Double", Seq.empty, Seq(Let("double", LiteralDouble(3.142d, ()), ()), Let("double2", LiteralDouble(0.0001d, ()), ())), ())
 
     parseProgram(
       """
@@ -173,11 +173,11 @@ class ParserSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChec
   }
 
   it should "parse references to other fields" in {
-    val mod = Module(Seq.empty, "Float", Seq(
+    val mod = Module(Seq.empty, "Float", Seq.empty, Seq(
       Let("float", LiteralFloat(3.142f, ()), ()),
       Let("float2", Reference("float", ()), ())
     ), ())
-    val mod2 = Module(Seq.empty, "Double", Seq(
+    val mod2 = Module(Seq.empty, "Double", Seq.empty, Seq(
       Let("double", LiteralDouble(3.142d, ()), ()),
       Let("double2", LiteralDouble(0.0001d, ()), ()),
       Let("double3", Reference("double2", ()), ())
@@ -195,8 +195,8 @@ class ParserSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChec
   }
 
   it should "parse package names" in {
-    val mod = Module(Seq("Test"), "Float", Seq(Let("float", LiteralFloat(3.142f, ()), ())), ())
-    val mod2 = Module(Seq("Test", "Parser"), "Double", Seq(Let("double", LiteralDouble(3.142d, ()), ()), Let("double2", LiteralDouble(0.0001d, ()), ())), ())
+    val mod = Module(Seq("Test"), "Float", Seq.empty, Seq(Let("float", LiteralFloat(3.142f, ()), ())), ())
+    val mod2 = Module(Seq("Test", "Parser"), "Double", Seq.empty, Seq(Let("double", LiteralDouble(3.142d, ()), ()), Let("double2", LiteralDouble(0.0001d, ()), ())), ())
 
     parseProgram(
       """
@@ -206,6 +206,31 @@ class ParserSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChec
     parseProgram(
       """
       |module Test.Parser.Double { let double = 3.142; let double2 = 0.0001 }
+      |""".trim.stripMargin) shouldBe mod2
+  }
+
+  it should "parse module imports" in {
+    val mod = Module(
+      Seq("Test"), "Float",
+      Seq(ImportModule(Seq("Test"), "Import")),
+      Seq(Let("float", LiteralFloat(3.142f, ()), ())),
+      ()
+    )
+    val mod2 = Module(
+      Seq("Test", "Parser"), "Double",
+      Seq(ImportSymbols(Seq("Test"), "Import", Seq("foo", "bar", "Baz"))),
+      Seq(Let("double", LiteralDouble(3.142d, ()), ()), Let("double2", LiteralDouble(0.0001d, ()), ())),
+      ()
+    )
+
+    parseProgram(
+      """
+      |module Test.Float { import Test.Import; let float = 3.142f }
+      |""".trim.stripMargin) shouldBe mod
+
+    parseProgram(
+      """
+      |module Test.Parser.Double { import Test.Import.{ foo, bar, Baz }; let double = 3.142; let double2 = 0.0001 }
       |""".trim.stripMargin) shouldBe mod2
   }
 }

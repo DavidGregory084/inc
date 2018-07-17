@@ -13,6 +13,7 @@ object Parser {
 
   // Separators
   val maybeSemi = P(";".? ~ allWs)
+  val comma = P("," ~ allWs)
 
   // Literals
   val zero = P("0".!)
@@ -78,18 +79,33 @@ object Parser {
 
   val decl = P(letDeclaration)
 
-  val bracesBlock = P(inBraces(decl.rep(sep = maybeSemi)))
+  val imports = P {
+    "import" ~/ ws ~ identifier.rep(min = 1, sep = ".") ~ ("." ~ inBraces(identifier.rep(min = 1, sep = comma))).?
+  }.map {
+    case (ident, Some(symbols)) =>
+      if (ident.length > 1)
+        ImportSymbols(ident.init, ident.last, symbols)
+      else
+        ImportSymbols(Seq.empty, ident.head, symbols)
+    case (ident, None) =>
+      if (ident.length > 1)
+        ImportModule(ident.init, ident.last)
+      else
+        ImportModule(Seq.empty, ident.head)
+  }
+
+  val bracesBlock = P(inBraces(imports.rep(sep = maybeSemi) ~ maybeSemi ~ allWs ~ decl.rep(sep = maybeSemi)))
 
   val module = P {
     "module" ~/ ws ~ (identifier.rep(min = 1, sep = ".")) ~ allWs ~
       bracesBlock ~
       allWs ~ End
   }.map {
-    case (moduleName, decls) =>
+    case (moduleName, (imports, decls)) =>
       if (moduleName.length > 1)
-        Module(moduleName.dropRight(1), moduleName.lastOption.getOrElse(""), decls, ())
+        Module(moduleName.dropRight(1), moduleName.lastOption.getOrElse(""), imports, decls, ())
       else
-        Module(Seq.empty, moduleName.headOption.getOrElse(""), decls, ())
+        Module(Seq.empty, moduleName.headOption.getOrElse(""), imports, decls, ())
   }
 
   def parse(fileContents: String): Either[List[ParserError], Module[Unit]] = {

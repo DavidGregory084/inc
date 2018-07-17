@@ -7,12 +7,14 @@ class TypecheckerSpec extends FlatSpec with Matchers {
   def mkModule(name: String, decls: Seq[TopLevelDeclaration[Name]]) = Module(
     pkg = Seq("Test", "Typechecker"),
     name = name,
+    imports = Seq.empty,
     declarations = decls,
     meta = FullName(Seq("Test", "Typechecker"), name))
 
   def mkCheckedModule(name: String, decls: Seq[TopLevelDeclaration[NameWithType]]) = Module(
     pkg = Seq("Test", "Typechecker"),
     name = name,
+    imports = Seq.empty,
     declarations = decls,
     meta = NameWithType(FullName(Seq("Test", "Typechecker"), name), Type.Module))
 

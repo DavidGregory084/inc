@@ -38,7 +38,7 @@ object Typechecker {
   }
 
   def typecheck(module: Module[Name]): Either[List[TypeError], Module[NameWithType]] = module match {
-    case Module(_, _, decls, _) =>
+    case Module(_, _, _, decls, _) =>
       val emptyEnv = Map.empty[String, Type]
       val emptyDecls = Seq.empty[TopLevelDeclaration[NameWithType]]
       val emptyRes: Either[List[TypeError], (Seq[TopLevelDeclaration[NameWithType]], Environment)] = Right((emptyDecls, emptyEnv))

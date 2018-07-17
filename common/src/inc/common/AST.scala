@@ -9,10 +9,15 @@ sealed trait Tree[A] extends Product with Serializable {
 final case class Module[A](
   pkg: Seq[String],
   name: String,
-  // imports: Seq[Import],
+  imports: Seq[Import],
   declarations: Seq[TopLevelDeclaration[A]],
   meta: A
 ) extends Tree[A]
+
+sealed trait Import
+
+case class ImportModule(pkg: Seq[String], name: String) extends Import
+case class ImportSymbols(pkg: Seq[String], name: String, symbols: Seq[String]) extends Import
 
 sealed trait Expr[A] extends Tree[A]
 

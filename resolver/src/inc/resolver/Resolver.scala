@@ -39,7 +39,7 @@ object Resolver {
   }
 
   def resolve(module: Module[Unit]): Either[List[ResolverError], Module[Name]] = module match {
-    case Module(pkg, name, decls, _) =>
+    case Module(pkg, name, imports@_, decls, _) =>
       val emptyTbl = Map.empty[String, Name]
       val emptyDecls = Seq.empty[TopLevelDeclaration[Name]]
       val emptyRes: Either[List[ResolverError], (Seq[TopLevelDeclaration[Name]], SymbolTable)] = Right((emptyDecls, emptyTbl))

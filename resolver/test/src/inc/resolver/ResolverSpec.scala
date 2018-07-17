@@ -7,12 +7,14 @@ class ResolverSpec extends FlatSpec with Matchers {
   def mkModule(name: String, decls: Seq[TopLevelDeclaration[Unit]]) = Module(
     pkg = Seq("Test", "Typechecker"),
     name = name,
+    imports = Seq.empty,
     declarations = decls,
     meta = ())
 
   def mkResolvedModule(name: String, decls: Seq[TopLevelDeclaration[Name]]) = Module(
     pkg = Seq("Test", "Typechecker"),
     name = name,
+    imports = Seq.empty,
     declarations = decls,
     meta = FullName(Seq("Test", "Typechecker"), name))
 

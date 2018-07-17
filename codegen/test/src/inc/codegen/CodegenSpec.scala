@@ -10,6 +10,7 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
   def mkModule(name: String, decls: Seq[TopLevelDeclaration[NameWithType]]) = Module(
     pkg = Seq("Test", "Codegen"),
     name = name,
+    imports = Seq.empty,
     declarations = decls,
     meta = NameWithType(FullName(Seq("Test", "Codegen"), name), Type.Module))
 
