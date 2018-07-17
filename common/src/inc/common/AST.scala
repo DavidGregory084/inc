@@ -9,6 +9,7 @@ sealed trait Tree[A] extends Product with Serializable {
 final case class Module[A](
   pkg: Seq[String],
   name: String,
+  // imports: Seq[Import],
   declarations: Seq[TopLevelDeclaration[A]],
   meta: A
 ) extends Tree[A]
@@ -38,6 +39,7 @@ final case class Let[A](name: String, binding: Expr[A], meta: A) extends TopLeve
 // final case class Def(name: String, params: Seq[Param], body: Expr) extends TopLevelDeclaration
 
 sealed trait Name
+
 case object NoName extends Name
 case class LocalName(name: String) extends Name
 case class FullName(pkg: Seq[String], name: String) extends Name

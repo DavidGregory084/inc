@@ -63,7 +63,9 @@ object Parser {
   // Blocks
   def inBraces[A](p: Parser[A]) = P("{" ~/ allWs ~ p ~ allWs ~ "}")
 
-  val expression = literal | identifier.map(id => Reference(id, ()))
+  val reference = identifier.map(id => Reference(id, ()))
+
+  val expression = literal | reference
 
   val letDeclaration = P(
     "let" ~/ allWs ~ identifier ~ allWs ~ "=" ~ allWs ~

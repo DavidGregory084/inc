@@ -1,6 +1,6 @@
 package inc.codegen
 
-import java.io.PrintWriter
+import java.io.{ OutputStream, PrintWriter }
 import org.objectweb.asm.{ ClassReader, ClassWriter, MethodVisitor, Type => AsmType }
 import org.objectweb.asm.Opcodes._
 import org.objectweb.asm.util.TraceClassVisitor
@@ -8,9 +8,9 @@ import org.objectweb.asm.util.TraceClassVisitor
 import inc.common._
 
 object Codegen {
-  def print(code: Array[Byte]): Unit = {
+  def print(code: Array[Byte], os: OutputStream = System.out): Unit = {
     val reader = new ClassReader(code)
-    val writer = new PrintWriter(System.out)
+    val writer = new PrintWriter(os)
     val visitor = new TraceClassVisitor(writer)
     reader.accept(visitor, ClassReader.SKIP_DEBUG)
   }
