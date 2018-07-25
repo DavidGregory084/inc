@@ -194,6 +194,22 @@ class ParserSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChec
       |""".trim.stripMargin) shouldBe mod2
   }
 
+
+  it should "parse literal unit" in {
+    val mod = Module(Seq.empty, "Unit", Seq.empty, Seq(Let("unit", LiteralUnit(()), ())), ())
+    val mod2 = Module(Seq.empty, "Unit", Seq.empty, Seq(Let("unit", LiteralUnit(()), ()), Let("unit2", LiteralUnit(()), ())), ())
+
+    parseProgram(
+      """
+      |module Unit { let unit = () }
+      |""".trim.stripMargin) shouldBe mod
+
+    parseProgram(
+      """
+      |module Unit { let unit = (); let unit2 = () }
+      |""".trim.stripMargin) shouldBe mod2
+  }
+
   it should "parse package names" in {
     val mod = Module(Seq("Test"), "Float", Seq.empty, Seq(Let("float", LiteralFloat(3.142f, ()), ())), ())
     val mod2 = Module(Seq("Test", "Parser"), "Double", Seq.empty, Seq(Let("double", LiteralDouble(3.142d, ()), ()), Let("double2", LiteralDouble(0.0001d, ()), ())), ())

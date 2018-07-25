@@ -64,6 +64,8 @@ object decompiled extends JavaModule
 
 object common extends ScalaSettingsModule
 
+object rts extends ScalaSettingsModule
+
 object parser extends ScalaSettingsModule {
   def moduleDeps = Seq(common)
   def ivyDeps = Agg(ivy"com.lihaoyi::fastparse:1.0.0")
@@ -78,7 +80,7 @@ object typechecker extends ScalaSettingsModule {
 }
 
 object codegen extends ScalaSettingsModule {
-  def moduleDeps = Seq(common)
+  def moduleDeps = Seq(common, rts)
   def ivyDeps = Agg(
     ivy"org.ow2.asm:asm:6.2",
     ivy"org.ow2.asm:asm-util:6.2"
@@ -87,7 +89,7 @@ object codegen extends ScalaSettingsModule {
 
 object main extends ScalaSettingsModule {
   def mainClass = Some("inc.main.Main")
-  def moduleDeps = Seq(common, parser, resolver, typechecker, codegen)
+  def moduleDeps = Seq(common, rts, parser, resolver, typechecker, codegen)
   def ivyDeps = Agg(
     ivy"com.lihaoyi::ammonite-ops:1.1.2",
     ivy"com.lihaoyi::pprint:0.5.3"

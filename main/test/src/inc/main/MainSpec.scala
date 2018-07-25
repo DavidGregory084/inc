@@ -4,6 +4,7 @@ import ammonite.ops._
 import java.net.URLClassLoader
 import org.scalatest._
 import org.scalatest.prop._
+import inc.rts.{ Unit => IncUnit }
 
 class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks {
   def loadClassFrom(classFileDir: Path, className: String) = {
@@ -71,6 +72,8 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
       shouldCompileField("string", "\"" + s + "\"", s)
     }
   }
+
+  it should "compile a unit field" in shouldCompileField("unit", "()", IncUnit.instance)
 
   it should "compile a variable reference" in withTmpDir { dir =>
     val pkg = "Test.Main."

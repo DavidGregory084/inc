@@ -6,6 +6,7 @@ import org.objectweb.asm.Opcodes._
 import org.objectweb.asm.util.TraceClassVisitor
 
 import inc.common._
+import inc.rts.{ Unit => IncUnit }
 
 object Codegen {
   def print(code: Array[Byte], os: OutputStream = System.out): Unit = {
@@ -54,6 +55,12 @@ object Codegen {
         Right(cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, name, AsmType.CHAR_TYPE.getDescriptor, null, c).visitEnd())
       case Let(name, LiteralString(s, _), _) =>
         Right(cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, name, AsmType.getDescriptor(classOf[String]), null, s).visitEnd())
+      case Let(name, LiteralUnit(_), _) =>
+        Right {
+          cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, name, AsmType.getDescriptor(classOf[IncUnit]), null, null).visitEnd()
+          siv.visitFieldInsn(GETSTATIC, AsmType.getInternalName(classOf[IncUnit]), "instance", AsmType.getDescriptor(classOf[IncUnit]))
+          siv.visitFieldInsn(PUTSTATIC, internalName, name, AsmType.getDescriptor(classOf[IncUnit]))
+        }
       case Let(name, Reference(ref, nameWithType), _) =>
         descriptorFor(nameWithType.typ).map { descriptor =>
           cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, name, descriptor, null, null).visitEnd()

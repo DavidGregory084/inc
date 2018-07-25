@@ -20,6 +20,8 @@ object Typechecker {
       Right((char.copy(meta = NameWithType(char.meta, Type.Char)), env))
     case str @ LiteralString(_, _) =>
       Right((str.copy(meta = NameWithType(str.meta, Type.String)), env))
+    case unit @ LiteralUnit(_) =>
+      Right((unit.copy(meta = NameWithType(unit.meta, Type.Unit)), env))
     case ref @ Reference(name, _)  =>
       env.get(name).map { typ =>
         Right((ref.copy(meta = NameWithType(ref.meta, typ)), env))

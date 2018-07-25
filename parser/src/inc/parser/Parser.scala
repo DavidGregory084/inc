@@ -49,12 +49,17 @@ object Parser {
       LiteralFloat(Float.parseFloat(wholeNumberPart + "." + fractionPart), ())
   }
 
+  val literalUnit = P( "()" ).map { _ =>
+    LiteralUnit(())
+  }
+
   val literal =
     literalFloatingPoint |
       literalIntegral |
       literalChar |
       literalString |
-      literalBoolean
+      literalBoolean |
+      literalUnit
 
   // Identifiers
   val identifier = P((CharPred(Character.isJavaIdentifierStart).! ~ CharsWhile(Character.isJavaIdentifierPart).rep.!).map {

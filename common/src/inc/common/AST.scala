@@ -32,6 +32,7 @@ final case class LiteralDouble[A](d: Double, meta: A) extends Literal[A]
 final case class LiteralBoolean[A](b: Boolean, meta: A) extends Literal[A]
 final case class LiteralChar[A](c: Char, meta: A) extends Literal[A]
 final case class LiteralString[A](s: String, meta: A) extends Literal[A]
+final case class LiteralUnit[A](meta: A) extends Literal[A]
 
 final case class Reference[A](name: String, meta: A) extends Expr[A]
 
@@ -60,6 +61,7 @@ object Type {
   val Char = TypeConstructor("Char", Seq.empty)
   val String = TypeConstructor("String", Seq.empty)
   val Module = TypeConstructor("Module", Seq.empty)
+  val Unit = TypeConstructor("Unit", Seq.empty)
   def Function(from: Type, to: Type) = TypeConstructor("->", Seq(from, to))
 }
 

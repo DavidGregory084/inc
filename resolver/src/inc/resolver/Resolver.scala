@@ -20,6 +20,8 @@ object Resolver {
       Right((char.copy(meta = NoName), tbl))
     case str @ LiteralString(_, _) =>
       Right((str.copy(meta = NoName), tbl))
+    case unit @ LiteralUnit(_) =>
+      Right((unit.copy(meta = NoName), tbl))
     case ref @ Reference(name, _)  =>
       tbl.get(name).map { nm =>
         Right((ref.copy(meta = nm), tbl))
