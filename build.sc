@@ -1,5 +1,6 @@
 import mill._
 import mill.scalalib._
+import mill.contrib.scalapblib._
 
 trait ScalaSettingsModule extends ScalaModule {
   def scalaVersion = "2.12.4"
@@ -62,7 +63,11 @@ trait ScalaSettingsModule extends ScalaModule {
 
 object decompiled extends JavaModule
 
-object common extends ScalaSettingsModule
+object common extends ScalaPBModule with ScalaSettingsModule {
+  def scalaPBVersion = "0.8.0-RC1"
+  def scalaPBFlatPackage = true
+  def scalaPBGrpc = false
+}
 
 object rts extends ScalaSettingsModule
 

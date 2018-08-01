@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package inc.common.proto;
+
+message Unit {}
+
+message Symbols {
+  repeated string symbols = 1;
+}
+
+message Import {
+  repeated string pkg = 1;
+  string name = 2;
+  Symbols symbols = 3;
+}
+
+message Reference {
+  string name = 1;
+}
+
+message Expr {
+  oneof exprType {
+    Let let = 1;
+    Reference ref = 2;
+    int32 int = 3;
+    int64 long = 4;
+    float flt = 5;
+    double dbl = 6; 
+    bool booln = 7;
+    string str = 8;
+    string chr = 9;
+    Unit unit = 10;
+  }
+}
+
+message Let {
+  string name = 1;
+  Expr binding = 2;
+}
+
+message TopLevelDeclaration {
+  oneof declarationType {
+    Let let = 1;
+  }
+}
+
+message Module {
+  repeated string pkg = 1;
+  string name = 2;
+  repeated Import imports = 3;
+  repeated TopLevelDeclaration declarations = 4;
+}
