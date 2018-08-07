@@ -1,19 +1,50 @@
 package inc.codegen
 
 import java.io.{ OutputStream, PrintWriter }
-import org.objectweb.asm.{ ClassReader, ClassWriter, MethodVisitor, Type => AsmType }
+import java.util.Arrays
+import org.objectweb.asm.{ Attribute, ByteVector, ClassReader, ClassVisitor, ClassWriter, Label, MethodVisitor, Type => AsmType }
 import org.objectweb.asm.Opcodes._
 import org.objectweb.asm.util.TraceClassVisitor
 
 import inc.common._
 import inc.rts.{ Unit => IncUnit }
 
+case class InterfaceAttribute(buffer: Array[Byte]) extends Attribute("IncInterface") {
+  override def read(classReader: ClassReader, offset: Int, length: Int, charBuffer: Array[Char], codeAttributeOffset: Int, labels: Array[Label]) = {
+    InterfaceAttribute(Arrays.copyOfRange(classReader.b, offset, offset + length))
+  }
+  override def write(classWriter: ClassWriter, code: Array[Byte], codeLength: Int, maxStack: Int, maxLocals: Int): ByteVector = {
+    val byteVector = new ByteVector(buffer.length)
+    byteVector.putByteArray(buffer, 0, buffer.length)
+    byteVector
+  }
+}
+
+class InterfaceAttributeVisitor extends ClassVisitor(ASM6) {
+  var buffer: Array[Byte] = _
+  override def visitAttribute(attribute: Attribute) =
+    if (attribute.isInstanceOf[InterfaceAttribute])
+      buffer = attribute.asInstanceOf[InterfaceAttribute].buffer
+}
+
 object Codegen {
+  val InterfaceAttributePrototype = InterfaceAttribute(Array.empty)
+
   def print(code: Array[Byte], os: OutputStream = System.out): Unit = {
     val reader = new ClassReader(code)
     val writer = new PrintWriter(os)
     val visitor = new TraceClassVisitor(writer)
     reader.accept(visitor, ClassReader.SKIP_DEBUG)
+  }
+
+  def readInterface(code: Array[Byte]): Option[Module[NameWithType]] = {
+    val reader = new ClassReader(code)
+    val visitor = new InterfaceAttributeVisitor()
+    reader.accept(visitor, Array(InterfaceAttributePrototype), 0)
+    Option(visitor.buffer).map { buf =>
+      val protobuf = proto.Module.parseFrom(buf)
+      Module.fromProto(protobuf)
+    }
   }
 
   def newClass(name: String)(writeClassMembers: ClassWriter => Either[List[CodegenError], Unit]): Either[List[CodegenError], Array[Byte]] = {
@@ -88,6 +119,8 @@ object Codegen {
       siv.visitMaxs(0, 0)
 
       siv.visitEnd()
+
+      cw.visitAttribute(InterfaceAttribute(mod.toProto.toByteArray))
 
       if (writeDecls.forall(_.isRight))
         Right(())

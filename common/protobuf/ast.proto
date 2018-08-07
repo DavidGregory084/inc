@@ -2,8 +2,6 @@ syntax = "proto3";
 
 package inc.common.proto;
 
-message Unit {}
-
 message Symbols {
   repeated string symbols = 1;
 }
@@ -14,28 +12,90 @@ message Import {
   Symbols symbols = 3;
 }
 
+message TypeVariable {
+  int32 id = 1;
+}
+
+message TypeConstructor {
+  string name = 1;
+  repeated Type typeParams = 2;
+}
+
+message Type {
+  oneof typeType {
+    TypeVariable tyVar = 1;
+    TypeConstructor tyCon = 2;
+  }
+}
+
+message NameWithType {
+  string name = 1;
+  Type type = 2;
+}
+
 message Reference {
   string name = 1;
+  NameWithType namewithType = 2;
+}
+
+message LiteralInt {
+  int32 int = 1;
+  NameWithType namewithType = 2;
+}
+
+message LiteralLong {
+  int64 long = 1;
+  NameWithType namewithType = 2;
+}
+
+message LiteralFloat {
+  float flt = 1;
+  NameWithType namewithType = 2;
+}
+
+message LiteralDouble {
+  double flt = 1;
+  NameWithType namewithType = 2;
+}
+
+message LiteralBoolean {
+  bool boolean = 1;
+  NameWithType namewithType = 2;
+}
+
+message LiteralString {
+  string str = 1;
+  NameWithType namewithType = 2;
+}
+
+message LiteralChar {
+  string char = 1;
+  NameWithType namewithType = 2;
+}
+
+message LiteralUnit {
+  NameWithType namewithType = 1;
 }
 
 message Expr {
   oneof exprType {
-    Let let = 1;
     Reference ref = 2;
-    int32 int = 3;
-    int64 long = 4;
-    float flt = 5;
-    double dbl = 6; 
-    bool booln = 7;
-    string str = 8;
-    string chr = 9;
-    Unit unit = 10;
+    LiteralInt int = 3;
+    LiteralLong long = 4;
+    LiteralFloat flt = 5;
+    LiteralDouble dbl = 6; 
+    LiteralBoolean boolean = 7;
+    LiteralString str = 8;
+    LiteralChar char = 9;
+    LiteralUnit unit = 10;
   }
+  NameWithType nameWithType = 20;
 }
 
 message Let {
   string name = 1;
   Expr binding = 2;
+  NameWithType nameWithType = 3;
 }
 
 message TopLevelDeclaration {
@@ -49,4 +109,5 @@ message Module {
   string name = 2;
   repeated Import imports = 3;
   repeated TopLevelDeclaration declarations = 4;
+  NameWithType nameWithType = 5;
 }

@@ -34,6 +34,8 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
       |public class Test/Codegen/Ref {
       |
       |
+      |  ATTRIBUTE IncInterface : unknown
+      |
       |  // access flags 0x19
       |  public final static I int = 42
       |
@@ -55,5 +57,19 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
       |}
       |""".stripMargin
     )
+  }
+
+  it should "parse a module definition from a generated class file" in {
+    val mod = mkModule("Ref", Seq(
+      Let("int", LiteralInt(42, NameWithType(NoName, Type.Int)), NameWithType(LocalName("int"), Type.Int)),
+      Let("int2", Reference("int", NameWithType(NoName, Type.Int)), NameWithType(LocalName("int2"), Type.Int)),
+      Let("int3", Reference("int2", NameWithType(NoName, Type.Int)), NameWithType(LocalName("int3"), Type.Int))
+    ))
+
+    val result = Codegen.generate(mod)
+
+    result shouldBe 'right
+
+    Codegen.readInterface(result.right.get) shouldBe Some(mod)
   }
 }
