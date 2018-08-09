@@ -5,8 +5,39 @@ import java.io.ByteArrayOutputStream
 import inc.common._
 import org.scalatest._
 import org.scalatest.prop._
+import org.scalacheck._
 
 class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks {
+
+  val nameGen: Gen[String] =
+    for {
+      first <- Gen.alphaChar
+      rest <- Gen.alphaNumStr
+    } yield (first +: rest).mkString
+
+  val importGen: Gen[Import] =
+    for {
+      pkg <- Gen.containerOf[Vector, String](nameGen)
+      symbols <- Arbitrary.arbitrary[Boolean]
+      name <- nameGen
+      imp <- {
+        if (!symbols)
+          Gen.const(ImportModule(pkg, name))
+        else
+          Gen.containerOf[Vector, String](nameGen).flatMap { syms =>
+            ImportSymbols(pkg, name, syms)
+          }
+      }
+    } yield imp
+
+  implicit val arbitraryModule: Arbitrary[Module[NameWithType]] = Arbitrary {
+    for {
+      pkg <- Gen.containerOf[Vector, String](nameGen)
+      name <- nameGen
+      imports <- Gen.containerOf[Vector, Import](importGen)
+    } yield Module(pkg, name, imports, Vector.empty, NameWithType(FullName(pkg, name), Type.Module))
+  }
+
   def mkModule(name: String, decls: Seq[TopLevelDeclaration[NameWithType]]) = Module(
     pkg = Seq("Test", "Codegen"),
     name = name,
@@ -71,5 +102,14 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
     result shouldBe 'right
 
     Codegen.readInterface(result.right.get) shouldBe Some(mod)
+  }
+
+  it should "round trip arbitrary module files" in forAll { mod: Module[NameWithType] =>
+    // TODO: decide how to handle round tripping of the empty package
+    whenever(mod.pkg.nonEmpty) {
+      val result = Codegen.generate(mod)
+      result shouldBe 'right
+      Codegen.readInterface(result.right.get) shouldBe Some(mod)
+    }
   }
 }
