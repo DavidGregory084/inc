@@ -2,12 +2,16 @@ package inc.codegen
 
 import java.io.ByteArrayOutputStream
 
+import cats.data.StateT
 import inc.common._
 import org.scalatest._
 import org.scalatest.prop._
 import org.scalacheck._
+import org.scalacheck.cats.implicits._
 
 class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks {
+  type Decl = TopLevelDeclaration[NameWithType]
+  type Decls = Vector[TopLevelDeclaration[NameWithType]]
 
   val nameGen: Gen[String] =
     for {
@@ -15,27 +19,85 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
       rest <- Gen.alphaNumStr
     } yield (first +: rest).mkString
 
-  val importGen: Gen[Import] =
+  val literalGens = Vector(
+    Arbitrary.arbitrary[Int].map(LiteralInt(_, NameWithType(NoName, Type.Int))),
+    Arbitrary.arbitrary[Long].map(LiteralLong(_, NameWithType(NoName, Type.Long))),
+    Arbitrary.arbitrary[Float].map(LiteralFloat(_, NameWithType(NoName, Type.Float))),
+    Arbitrary.arbitrary[Double].map(LiteralDouble(_, NameWithType(NoName, Type.Double))),
+    Arbitrary.arbitrary[Boolean].map(LiteralBoolean(_, NameWithType(NoName, Type.Boolean))),
+    Arbitrary.arbitrary[Char].map(LiteralChar(_, NameWithType(NoName, Type.Char))),
+    Arbitrary.arbitrary[String].map(LiteralString(_, NameWithType(NoName, Type.String))),
+    Gen.const(LiteralUnit(NameWithType(NoName, Type.Unit)))
+  )
+
+  def referenceGen(decls: Decls) =
+    Gen.oneOf(decls).map { existing =>
+      Reference(existing.name, NameWithType(NoName, existing.meta.typ))
+    }
+
+  def exprGen(decls: Decls) = {
+    val exprGens =
+      if (decls.isEmpty)
+        literalGens
+      else
+        literalGens :+ referenceGen(decls)
+
+    Gen.oneOf(exprGens)
+      .flatMap(identity)
+  }
+
+  def letGen(decls: Decls) =
     for {
-      pkg <- Gen.containerOf[Vector, String](nameGen)
+      name <- nameGen
+      expr <- exprGen(decls)
+    } yield Let(name, expr, NameWithType(LocalName(name), expr.meta.typ))
+
+  val declGen =
+    StateT.modifyF[Gen, (Decls, Int)] {
+      case (decls, remaining) =>
+        letGen(decls).map { decl =>
+          (decls :+ decl, remaining - 1)
+        }
+    }
+
+  val declsGen: Gen[Decls] =
+    for {
+      size <- Gen.choose(0, 9)
+      decls <- declGen.get.flatMap {
+        case (existingDecls, remaining) =>
+          if (remaining < 0)
+            StateT.pure[Gen, (Decls, Int), Decls](existingDecls)
+          else
+            declGen.get.map(_._1)
+      }.runA((Vector.empty, size))
+    } yield decls
+
+  val importGen =
+    for {
+      pkgLen <- Gen.choose(0, 5)
+      pkg <- Gen.resize(pkgLen, Gen.containerOfN[Vector, String](pkgLen, nameGen))
       symbols <- Arbitrary.arbitrary[Boolean]
       name <- nameGen
       imp <- {
         if (!symbols)
           Gen.const(ImportModule(pkg, name))
         else
-          Gen.containerOf[Vector, String](nameGen).flatMap { syms =>
-            ImportSymbols(pkg, name, syms)
-          }
+          for {
+            symLen <- Gen.choose(2, 5)
+            syms <- Gen.resize(symLen, Gen.containerOfN[Vector, String](symLen, nameGen))
+          } yield ImportSymbols(pkg, name, syms)
       }
     } yield imp
 
   implicit val arbitraryModule: Arbitrary[Module[NameWithType]] = Arbitrary {
     for {
-      pkg <- Gen.containerOf[Vector, String](nameGen)
+      pkgLen <- Gen.choose(0, 5)
+      pkg <- Gen.resize(pkgLen, Gen.containerOfN[Vector, String](pkgLen, nameGen))
       name <- nameGen
-      imports <- Gen.containerOf[Vector, Import](importGen)
-    } yield Module(pkg, name, imports, Vector.empty, NameWithType(FullName(pkg, name), Type.Module))
+      decls <- declsGen
+      impLen <- Gen.choose(0, 5)
+      imports <- Gen.resize(impLen, Gen.containerOfN[Vector, Import](impLen, importGen))
+    } yield Module(pkg, name, imports, decls, NameWithType(FullName(pkg, name), Type.Module))
   }
 
   def mkModule(name: String, decls: Seq[TopLevelDeclaration[NameWithType]]) = Module(
@@ -105,11 +167,8 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
   }
 
   it should "round trip arbitrary module files" in forAll { mod: Module[NameWithType] =>
-    // TODO: decide how to handle round tripping of the empty package
-    whenever(mod.pkg.nonEmpty) {
-      val result = Codegen.generate(mod)
-      result shouldBe 'right
-      Codegen.readInterface(result.right.get) shouldBe Some(mod)
-    }
+    val result = Codegen.generate(mod)
+    result shouldBe 'right
+    Codegen.readInterface(result.right.get) shouldBe Some(mod)
   }
 }

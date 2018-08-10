@@ -122,6 +122,7 @@ final case class Reference[A](name: String, meta: A) extends Expr[A]
 
 sealed trait Declaration[A] extends Tree[A]
 sealed trait TopLevelDeclaration[A] extends Declaration[A] {
+  def name: String
   def toProto(implicit eqv: A =:= NameWithType): proto.TopLevelDeclaration = this match {
     case Let(name, expr, meta) =>
       val nameWithType = Some(eqv(meta).toProto)
@@ -149,8 +150,14 @@ sealed trait Name
 object Name {
   def fromString(str: String) = {
     if (str.indexOf('.') > 0) {
-      val arr = str.split("\\.")
-      FullName(arr.init, arr.last)
+      str.split("\\.") match {
+        case Array("<empty>", name) =>
+          FullName(Seq.empty, name)
+        case Array("<empty>", rest @ _*) =>
+          FullName(rest.init, rest.last)
+        case arr =>
+          FullName(arr.init, arr.last)
+      }
     } else if (str.nonEmpty)
       LocalName(str)
     else
@@ -172,6 +179,8 @@ sealed trait Type {
 }
 
 object Type {
+  val UnitClass = "inc.rts.Unit"
+
   val Int = TypeConstructor("Int", Seq.empty)
   val Long = TypeConstructor("Long", Seq.empty)
   val Float = TypeConstructor("Float", Seq.empty)
@@ -180,7 +189,7 @@ object Type {
   val Char = TypeConstructor("Char", Seq.empty)
   val String = TypeConstructor("String", Seq.empty)
   val Module = TypeConstructor("Module", Seq.empty)
-  val Unit = TypeConstructor("Unit", Seq.empty)
+  val Unit = TypeConstructor(UnitClass, Seq.empty)
   def Function(from: Type, to: Type) = TypeConstructor("->", Seq(from, to))
 
   def fromProto(typ: proto.Type): Type = typ.typeType match {
@@ -213,7 +222,10 @@ case class NameWithType(name: Name, typ: Type) {
   def toProto = proto.NameWithType(
     name = name match {
       case FullName(pkg, name) =>
-        (pkg :+ name).mkString(".")
+        if (pkg.isEmpty)
+          ("<empty>" :: name :: Nil).mkString(".")
+        else
+          (pkg :+ name).mkString(".")
       case LocalName(name) =>
         name
       case NoName =>

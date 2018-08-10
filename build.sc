@@ -56,7 +56,12 @@ trait ScalaSettingsModule extends ScalaModule {
     "-Ypartial-unification"
   )
   object test extends Tests {
-    def ivyDeps = Agg(ivy"org.scalatest::scalatest:3.0.5", ivy"org.scalacheck::scalacheck:1.14.0")
+    def ivyDeps = Agg(
+      ivy"org.typelevel::cats-core:1.1.0",
+      ivy"io.chrisdavenport::cats-scalacheck:0.1.0",
+      ivy"org.scalatest::scalatest:3.0.5",
+      ivy"org.scalacheck::scalacheck:1.14.0"
+    )
     def testFrameworks = Seq("org.scalatest.tools.Framework")
   }
 }
@@ -67,6 +72,7 @@ object common extends ScalaPBModule with ScalaSettingsModule {
   def scalaPBVersion = "0.8.0-RC1"
   def scalaPBFlatPackage = true
   def scalaPBGrpc = false
+  def ivyDeps = T { super.ivyDeps() ++ Agg(ivy"org.typelevel::paiges-core:0.2.1") }
 }
 
 object rts extends ScalaSettingsModule
