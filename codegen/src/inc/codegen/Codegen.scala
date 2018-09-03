@@ -66,8 +66,15 @@ object Codegen {
     case TypeConstructor("Boolean", _) => Right(AsmType.BOOLEAN_TYPE.getDescriptor)
     case TypeConstructor("Char", _) => Right(AsmType.CHAR_TYPE.getDescriptor)
     case TypeConstructor("String", _) => Right(AsmType.getDescriptor(classOf[String]))
-    case TypeConstructor(name, _) => Right(AsmType.getDescriptor(Class.forName(name)))
-    case TypeVariable(_, _) => CodegenError.singleton("A type variable was found in code generation!")
+    case TypeConstructor(name, _) =>
+      try {
+        Right(AsmType.getDescriptor(Class.forName(name)))
+      } catch {
+        case _: ClassNotFoundException =>
+          CodegenError.singleton(s"Class ${name} could not be found")
+      }
+    case TypeVariable(_, _) =>
+      CodegenError.singleton("A type variable was found in code generation!")
   }
 
   def newTopLevelDeclaration(internalName: String, cw: ClassWriter, siv: MethodVisitor, decl: TopLevelDeclaration[NameWithType]): Either[List[CodegenError], Unit] =
@@ -125,7 +132,7 @@ object Codegen {
       if (writeDecls.forall(_.isRight))
         Right(())
       else
-        Left(writeDecls.toList.flatMap(_.left.get))
+        Left(writeDecls.filter(_.isLeft).toList.flatMap(_.left.get))
     }
   }
 }

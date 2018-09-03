@@ -152,6 +152,15 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
     )
   }
 
+  it should "generate code for a module with a Unit field reference" in {
+    val mod = mkModule("Ref", Seq(
+      Let("unit", LiteralUnit(NameWithType(NoName, Type.Unit)), NameWithType(LocalName("unit"), Type.Unit)),
+      Let("unit2", Reference("unit", NameWithType(NoName, Type.Unit)), NameWithType(LocalName("unit2"), Type.Unit))
+    ))
+    val result = Codegen.generate(mod)
+    result shouldBe 'right
+  }
+
   it should "parse a module definition from a generated class file" in {
     val mod = mkModule("Ref", Seq(
       Let("int", LiteralInt(42, NameWithType(NoName, Type.Int)), NameWithType(LocalName("int"), Type.Int)),

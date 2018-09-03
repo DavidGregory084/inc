@@ -106,5 +106,10 @@ object codegen extends ScalaSettingsModule {
 object main extends ScalaSettingsModule {
   def mainClass = Some("inc.main.Main")
   def moduleDeps = Seq(common, rts, parser, resolver, typechecker, codegen)
-  def ivyDeps = Agg(ivy"com.lihaoyi::pprint:0.5.3")
+  def ivyDeps = Agg(
+    ivy"com.github.scopt::scopt:3.7.0",
+    ivy"com.lihaoyi::pprint:0.5.3",
+    // PPrint definitely requires scala-reflect
+    ivy"org.scala-lang:scala-reflect:${scalaVersion()}"
+  )
 }

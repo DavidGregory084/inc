@@ -1,6 +1,7 @@
 package inc.main
 
 case class Configuration(
+  classpath: String = ".",
   printParser: Boolean = false,
   printResolver: Boolean = false,
   printTyper: Boolean = false,

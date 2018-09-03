@@ -12,17 +12,49 @@ object Main {
   def main(args: Array[String]): Unit = {
     val dir = File.newTemporaryDirectory()
 
-    val result = try {
-      compileProgram(dir, args(0), Configuration.printTimings)
-    } finally {
-      dir.delete()
+    var prog = ""
+
+    val parser = new scopt.OptionParser[Configuration]("inc") {
+      head("inc", "0.1.0-SNAPSHOT")
+
+      opt[String]("classpath")
+        .abbr("cp")
+        .action((cp, config) => config.copy(classpath = cp))
+
+      opt[Unit]("print-parser")
+        .action((_, config) => config.copy(printParser = true))
+
+      opt[Unit]("print-resolver")
+        .action((_, config) => config.copy(printResolver = true))
+
+      opt[Unit]("print-typer")
+        .action((_, config) => config.copy(printTyper = true))
+
+      opt[Unit]("print-codegen")
+        .action((_, config) => config.copy(printCodegen = true))
+
+      opt[Unit]("print-timings")
+        .action((_, config) => config.copy(printPhaseTiming = true))
+
+      arg[String]("<prog>").action{ (p, config) =>
+        prog = p
+        config
+      }
     }
 
-    result match {
-      case Left(errors) =>
-        errors.foreach(println)
-      case Right(_) =>
-        println("Success")
+    try {
+      parser.parse(args, Configuration()) foreach { config =>
+        val result = compileProgram(dir, prog, config)
+
+        result match {
+          case Left(errors) =>
+            errors.foreach(println)
+          case Right(_) =>
+            println("Success")
+        }
+      }
+    } finally {
+      dir.delete()
     }
   }
 
