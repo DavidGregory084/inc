@@ -6,16 +6,16 @@ import inc.resolver.Resolver
 import inc.typechecker.Typechecker
 import inc.codegen.Codegen
 
-import ammonite.ops._
+import better.files._
 
 object Main {
   def main(args: Array[String]): Unit = {
-    val dir = tmp.dir()
+    val dir = File.newTemporaryDirectory()
 
     val result = try {
       compileProgram(dir, args(0), Configuration.printTimings)
     } finally {
-      rm! dir
+      dir.delete()
     }
 
     result match {
@@ -50,7 +50,7 @@ object Main {
     } yield out
   }
 
-  def compileProgram(dest: Path, prog: String, config: Configuration = Configuration.default): Either[List[Error], Path] = {
+  def compileProgram(dest: File, prog: String, config: Configuration = Configuration.default): Either[List[Error], File] = {
     val beforeAll = System.nanoTime
 
     for {
@@ -70,8 +70,12 @@ object Main {
 
       val out = outDir / s"${mod.name}.class"
 
-      rm! out
-      write(out, code)
+      if (out.exists)
+        out.delete()
+
+      out
+        .createIfNotExists(createParents = true)
+        .writeByteArray(code)
 
       val afterAll = System.nanoTime
 

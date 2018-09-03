@@ -1,15 +1,15 @@
 package inc.main
 
-import ammonite.ops._
+import better.files._
 import java.net.URLClassLoader
 import org.scalatest._
 import org.scalatest.prop._
 import inc.rts.{ Unit => IncUnit }
 
 class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks {
-  def loadClassFrom(classFileDir: Path, className: String) = {
+  def loadClassFrom(classFileDir: File, className: String) = {
     val classLoader = Thread.currentThread.getContextClassLoader.asInstanceOf[URLClassLoader]
-    val childLoader = URLClassLoader.newInstance(Array(classFileDir.toNIO.toUri.toURL), classLoader)
+    val childLoader = URLClassLoader.newInstance(Array(classFileDir.url), classLoader)
     Class.forName(s"${className}", true, childLoader)
   }
 
@@ -26,18 +26,17 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
     }
   }
 
-  def withTmpDir[A](test: Path => A) = {
-    val dir = tmp.dir()
+  def withTmpDir[A](test: File => A) = {
+    val dir = File.newTemporaryDirectory()
     try test(dir)
-    finally rm! dir
+    finally dir.delete()
   }
 
   def shouldCompileField[A](fieldName: String, stringValue: String, expectedValue: A) = withTmpDir { dir =>
     val pkg = "Test.Main."
     val prog = s"module ${pkg}${fieldName.capitalize} { let ${fieldName} = ${stringValue} }"
     val classFile = Main.compileProgram(dir, prog).fold(err => fail(err.head), identity)
-    val classFileName = classFile.name.dropRight(classFile.ext.length + 1)
-    val clazz = loadClassFrom(dir, pkg + classFileName)
+    val clazz = loadClassFrom(dir, pkg + classFile.nameWithoutExtension)
     getStatic(clazz, fieldName) shouldBe expectedValue
   }
 
@@ -82,8 +81,7 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
     val result = Main.compileProgram(dir, prog)
     result shouldBe 'right
     val classFile = result.right.get
-    val classFileName = classFile.name.dropRight(classFile.ext.length + 1)
-    val clazz = loadClassFrom(dir, pkg + classFileName)
+    val clazz = loadClassFrom(dir, pkg + classFile.nameWithoutExtension)
     getStatic(clazz, fieldName) shouldBe 42
   }
 }

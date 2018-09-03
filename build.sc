@@ -72,7 +72,12 @@ object common extends ScalaPBModule with ScalaSettingsModule {
   def scalaPBVersion = "0.8.0-RC1"
   def scalaPBFlatPackage = true
   def scalaPBGrpc = false
-  def ivyDeps = T { super.ivyDeps() ++ Agg(ivy"org.typelevel::paiges-core:0.2.1") }
+  def ivyDeps = T {
+    super.ivyDeps() ++ Agg(
+      ivy"org.typelevel::paiges-core:0.2.1",
+      ivy"com.github.pathikrit::better-files:3.6.0"
+    )
+  }
 }
 
 object rts extends ScalaSettingsModule
@@ -101,8 +106,5 @@ object codegen extends ScalaSettingsModule {
 object main extends ScalaSettingsModule {
   def mainClass = Some("inc.main.Main")
   def moduleDeps = Seq(common, rts, parser, resolver, typechecker, codegen)
-  def ivyDeps = Agg(
-    ivy"com.lihaoyi::ammonite-ops:1.1.2",
-    ivy"com.lihaoyi::pprint:0.5.3"
-  )
+  def ivyDeps = Agg(ivy"com.lihaoyi::pprint:0.5.3")
 }
