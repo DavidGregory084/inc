@@ -1,6 +1,9 @@
 package inc.typechecker
 
+import better.files._
 import inc.common._
+import inc.codegen.Codegen
+import java.io.ByteArrayOutputStream
 
 object Typechecker {
   type Environment = Map[String, Type]
@@ -39,11 +42,44 @@ object Typechecker {
       }
   }
 
-  def typecheck(module: Module[Name]): Either[List[TypeError], Module[NameWithType]] = module match {
-    case Module(_, _, _, decls, _) =>
-      val emptyEnv = Map.empty[String, Type]
+  def typecheck(module: Module[Name], classloader: ClassLoader): Either[List[TypeError], Module[NameWithType]] = module match {
+    case Module(_, _, imports, decls, _) =>
+      val initialEnv = imports.foldLeft(Map.empty[String, Type]) {
+        case (tbl, ImportModule(pkg, nm)) =>
+          val is = classloader.getResourceAsStream(pkg.mkString("/") + "/" + nm + ".class")
+          val baos = new ByteArrayOutputStream()
+
+          for {
+            in <- is.autoClosed
+            out <- baos.autoClosed
+          } in.pipeTo(out)
+
+          Codegen.readInterface(baos.toByteArray).map { mod =>
+            mod.declarations.foldLeft(tbl) {
+              case (tb, dcl) =>
+                tb.updated(dcl.name, dcl.meta.typ)
+            }
+          }.getOrElse(tbl)
+
+        case (tbl, ImportSymbols(pkg, nm, syms)) =>
+          val is = classloader.getResourceAsStream(pkg.mkString("/") + "/" + nm + ".class")
+          val baos = new ByteArrayOutputStream()
+
+          for {
+            in <- is.autoClosed
+            out <- baos.autoClosed
+          } in.pipeTo(out)
+
+          Codegen.readInterface(baos.toByteArray).map { mod =>
+            mod.declarations.filter(d => syms.contains(d.name)).foldLeft(tbl) {
+              case (tb, dcl) =>
+                tb.updated(dcl.name, dcl.meta.typ)
+            }
+          }.getOrElse(tbl)
+      }
+
       val emptyDecls = Seq.empty[TopLevelDeclaration[NameWithType]]
-      val emptyRes: Either[List[TypeError], (Seq[TopLevelDeclaration[NameWithType]], Environment)] = Right((emptyDecls, emptyEnv))
+      val emptyRes: Either[List[TypeError], (Seq[TopLevelDeclaration[NameWithType]], Environment)] = Right((emptyDecls, initialEnv))
 
       val typecheckedDecls = decls.foldLeft(emptyRes) {
         case (resSoFar, nextDecl) =>

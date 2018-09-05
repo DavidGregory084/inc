@@ -102,10 +102,16 @@ object Codegen {
       case Let(name, Reference(ref, nameWithType), _) =>
         descriptorFor(nameWithType.typ).map { descriptor =>
           cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, name, descriptor, null, null).visitEnd()
-          siv.visitFieldInsn(GETSTATIC, internalName, ref, descriptor)
+          siv.visitFieldInsn(GETSTATIC, toInternalName(nameWithType.name, internalName), ref, descriptor)
           siv.visitFieldInsn(PUTSTATIC, internalName, name, descriptor)
         }
     }
+
+  def toInternalName(name: Name, inClass: String) = name match {
+    case NoName => ""
+    case LocalName(_) => inClass
+    case FullName(pkg, cls, _) => pkg.mkString("/") + "/" + cls
+  }
 
   def generate(mod: Module[NameWithType]): Either[List[CodegenError], Array[Byte]] = {
     val packageName = if (mod.pkg.isEmpty) "" else mod.pkg.mkString("", "/", "/")

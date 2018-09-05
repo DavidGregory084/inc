@@ -88,11 +88,11 @@ object parser extends ScalaSettingsModule {
 }
 
 object resolver extends ScalaSettingsModule {
-  def moduleDeps = Seq(common)
+  def moduleDeps = Seq(common, codegen)
 }
 
 object typechecker extends ScalaSettingsModule {
-  def moduleDeps = Seq(common)
+  def moduleDeps = Seq(common, codegen)
 }
 
 object codegen extends ScalaSettingsModule {

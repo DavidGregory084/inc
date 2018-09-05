@@ -151,12 +151,12 @@ object Name {
   def fromString(str: String) = {
     if (str.indexOf('.') > 0) {
       str.split("\\.") match {
-        case Array("<empty>", name) =>
-          FullName(Seq.empty, name)
+        case Array("<empty>", cls, nm) =>
+          FullName(Seq.empty, cls, nm)
         case Array("<empty>", rest @ _*) =>
-          FullName(rest.init, rest.last)
+          FullName(rest.dropRight(2), rest(rest.length - 2), rest.last)
         case arr =>
-          FullName(arr.init, arr.last)
+          FullName(arr.dropRight(2), arr(arr.length - 2), arr.last)
       }
     } else if (str.nonEmpty)
       LocalName(str)
@@ -167,7 +167,7 @@ object Name {
 
 case object NoName extends Name
 case class LocalName(name: String) extends Name
-case class FullName(pkg: Seq[String], name: String) extends Name
+case class FullName(pkg: Seq[String], cls: String, name: String) extends Name
 
 sealed trait Type {
   def toProto: proto.Type = this match {
@@ -221,11 +221,11 @@ case class TypeConstructor(name: String, typeParams: Seq[Type]) extends Type
 case class NameWithType(name: Name, typ: Type) {
   def toProto = proto.NameWithType(
     name = name match {
-      case FullName(pkg, name) =>
+      case FullName(pkg, cls, name) =>
         if (pkg.isEmpty)
-          ("<empty>" :: name :: Nil).mkString(".")
+          ("<empty>" :: cls :: name :: Nil).mkString(".")
         else
-          (pkg :+ name).mkString(".")
+          (pkg :+ cls :+ name).mkString(".")
       case LocalName(name) =>
         name
       case NoName =>

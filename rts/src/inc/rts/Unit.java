@@ -5,4 +5,8 @@ public class Unit {
 
     protected Unit() {
     }
+
+    public String toString() {
+        return "()";
+    }
 }

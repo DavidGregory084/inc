@@ -7,10 +7,19 @@ import inc.typechecker.Typechecker
 import inc.codegen.Codegen
 
 import better.files._
+import java.net.URLClassLoader
+import java.io.{File => JavaFile}
+import java.nio.file.Paths
 
 object Main {
   def main(args: Array[String]): Unit = {
-    val dir = File.newTemporaryDirectory()
+    println(java.nio.file.Paths.get("/home/david/Repos/inc/out/").toUri.toURL)
+
+    // val cl = getClass.getClassLoader.asInstanceOf[java.net.URLClassLoader]
+    // println(cl.getURLs.mkString(System.lineSeparator))
+
+    // val dir = File.newTemporaryDirectory()
+    val dir = ".".toFile
 
     var prog = ""
 
@@ -42,20 +51,22 @@ object Main {
       }
     }
 
-    try {
+    // try {
       parser.parse(args, Configuration()) foreach { config =>
         val result = compileProgram(dir, prog, config)
 
         result match {
           case Left(errors) =>
+            println()
             errors.foreach(println)
           case Right(_) =>
+            println()
             println("Success")
         }
       }
-    } finally {
-      dir.delete()
-    }
+    // } finally {
+    //   dir.delete()
+    // }
   }
 
   def printPhaseTiming(phase: String, before: Long, after: Long): Unit =
@@ -66,7 +77,10 @@ object Main {
     config: Configuration,
     printOutput: Configuration => Boolean,
     phase: => Either[List[Error], A],
-    print: A => Unit = (a: A) => pprint.pprintln(a)
+    print: A => Unit = (a: A) => {
+      println()
+      pprint.pprintln(a)
+    }
   ): Either[List[Error], A] = {
     val before = System.nanoTime
 
@@ -75,7 +89,10 @@ object Main {
 
       after = System.nanoTime
 
-      _ = if (config.printPhaseTiming) printPhaseTiming(name, before, after)
+      _ = if (config.printPhaseTiming) {
+        println()
+        printPhaseTiming(name, before, after)
+      }
 
       _ = if (printOutput(config)) print(out)
 
@@ -85,13 +102,16 @@ object Main {
   def compileProgram(dest: File, prog: String, config: Configuration = Configuration.default): Either[List[Error], File] = {
     val beforeAll = System.nanoTime
 
+    val urls = config.classpath.split(JavaFile.pathSeparator).map(p => Paths.get(p).toUri.toURL)
+    val classloader = new URLClassLoader(urls)
+
     for {
 
       mod <- runPhase[Module[Unit]]("parser", config, _.printParser, Parser.parse(prog))
 
-      resolved <- runPhase[Module[Name]]("resolver", config, _.printResolver, Resolver.resolve(mod))
+      resolved <- runPhase[Module[Name]]("resolver", config, _.printResolver, Resolver.resolve(mod, classloader))
 
-      checked <- runPhase[Module[NameWithType]]("typechecker", config, _.printTyper, Typechecker.typecheck(resolved))
+      checked <- runPhase[Module[NameWithType]]("typechecker", config, _.printTyper, Typechecker.typecheck(resolved, classloader))
 
       code <- runPhase[Array[Byte]]("codegen", config, _.printCodegen, Codegen.generate(checked), Codegen.print(_))
 
@@ -111,6 +131,7 @@ object Main {
 
       val afterAll = System.nanoTime
 
+      println()
       println(s"""Compiled ${mod.pkg.mkString(".")}.${mod.name} in ${(afterAll - beforeAll) / 1000000}ms""")
 
       out
