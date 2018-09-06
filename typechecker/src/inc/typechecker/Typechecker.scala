@@ -1,9 +1,7 @@
 package inc.typechecker
 
-import better.files._
+import cats.data.Chain
 import inc.common._
-import inc.codegen.Codegen
-import java.io.ByteArrayOutputStream
 
 object Typechecker {
   type Environment = Map[String, Type]
@@ -42,29 +40,18 @@ object Typechecker {
       }
   }
 
-  def typecheck(module: Module[Name], classloader: ClassLoader): Either[List[TypeError], Module[NameWithType]] = module match {
+  def typecheck(module: Module[Name], importedMods: Map[(List[String], String), Module[NameWithType]]): Either[List[TypeError], Module[NameWithType]] = module match {
     case Module(_, _, imports, decls, _) =>
       val initialEnv = imports.foldLeft(Map.empty[String, Type]) {
         case (env, imprt) =>
           val (pkg, nm, syms) = imprt match {
             case ImportModule(pkg, nm) =>
-              (pkg, nm, Seq.empty[String])
+              (pkg, nm, List.empty[String])
             case ImportSymbols(pkg, nm, syms) =>
               (pkg, nm, syms)
           }
 
-          val className = pkg.mkString("/") + "/" + nm + ".class"
-          val classStream = Option(classloader.getResourceAsStream(className))
-          val outputStream = new ByteArrayOutputStream()
-
-          classStream.foreach { inputStream =>
-            for {
-              in <- inputStream.autoClosed
-              out <- outputStream.autoClosed
-            } in.pipeTo(out)
-          }
-
-          val updatedEnv = Codegen.readInterface(outputStream.toByteArray).map { mod =>
+          val updatedEnv = importedMods.get((pkg, nm)).map { mod =>
             val decls =
               if (syms.isEmpty)
                 mod.declarations
@@ -80,8 +67,8 @@ object Typechecker {
           updatedEnv.getOrElse(env)
       }
 
-      val emptyDecls = Seq.empty[TopLevelDeclaration[NameWithType]]
-      val emptyRes: Either[List[TypeError], (Seq[TopLevelDeclaration[NameWithType]], Environment)] = Right((emptyDecls, initialEnv))
+      val emptyDecls = Chain.empty[TopLevelDeclaration[NameWithType]]
+      val emptyRes: Either[List[TypeError], (Chain[TopLevelDeclaration[NameWithType]], Environment)] = Right((emptyDecls, initialEnv))
 
       val typecheckedDecls = decls.foldLeft(emptyRes) {
         case (resSoFar, nextDecl) =>
@@ -95,7 +82,7 @@ object Typechecker {
 
       typecheckedDecls.map {
         case (checked, _) =>
-          module.copy(declarations = checked, meta = NameWithType(module.meta, Type.Module))
+          module.copy(declarations = checked.toList, meta = NameWithType(module.meta, Type.Module))
       }
   }
 }

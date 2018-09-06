@@ -1,9 +1,7 @@
 package inc.resolver
 
-import better.files._
+import cats.data.Chain
 import inc.common._
-import inc.codegen.Codegen
-import java.io.ByteArrayOutputStream
 
 object Resolver {
   type SymbolTable = Map[String, Name]
@@ -43,62 +41,35 @@ object Resolver {
       }
   }
 
-  def resolve(module: Module[Unit], classloader: ClassLoader): Either[List[ResolverError], Module[Name]] = module match {
+  def resolve(module: Module[Unit], importedMods: Map[(List[String], String), Module[NameWithType]]): Either[List[ResolverError], Module[Name]] = module match {
     case Module(pkg, name, imports, decls, _) =>
       val initialTbl = imports.foldLeft(Map.empty[String, Name]) {
-        case (tbl, ImportModule(pkg, nm)) =>
-          val is = classloader.getResourceAsStream(pkg.mkString("/") + "/" + nm + ".class")
-          val baos = new ByteArrayOutputStream()
+        case (tbl, imprt) =>
+          val (pkg, nm, syms) = imprt match {
+            case ImportModule(pkg, nm) =>
+              (pkg, nm, List.empty[String])
+            case ImportSymbols(pkg, nm, syms) =>
+              (pkg, nm, syms)
+          }
 
-          for {
-            in <- is.autoClosed
-            out <- baos.autoClosed
-          } in.pipeTo(out)
+          val updatedTbl = importedMods.get((pkg, nm)).map { mod =>
+            val decls =
+              if (syms.isEmpty)
+                mod.declarations
+              else
+                mod.declarations.filter(d => syms.contains(d.name))
 
-          Codegen.readInterface(baos.toByteArray).map { mod =>
-            mod.declarations.foldLeft(tbl) {
+            decls.foldLeft(tbl) {
               case (tb, dcl) =>
-                dcl.meta.name match {
-                  case MemberName(_, cls, fn) =>
-                    tb.updated(dcl.name, MemberName(pkg, cls, fn))
-                  case LocalName(ln) =>
-                    tb.updated(dcl.name, MemberName(pkg, nm, ln))
-                  case ModuleName(_, _) =>
-                    ???
-                  case NoName =>
-                    ???
-                }
+                tb.updated(dcl.name, dcl.meta.name)
             }
-          }.getOrElse(tbl)
+          }
 
-        case (tbl, ImportSymbols(pkg, nm, syms)) =>
-          val is = classloader.getResourceAsStream(pkg.mkString("/") + "/" + nm + ".class")
-          val baos = new ByteArrayOutputStream()
-
-          for {
-            in <- is.autoClosed
-            out <- baos.autoClosed
-          } in.pipeTo(out)
-
-          Codegen.readInterface(baos.toByteArray).map { mod =>
-            mod.declarations.filter(d => syms.contains(d.name)).foldLeft(tbl) {
-              case (tb, dcl) =>
-                dcl.meta.name match {
-                  case MemberName(_, cls, fn) =>
-                    tb.updated(dcl.name, MemberName(pkg, cls, fn))
-                  case LocalName(ln) =>
-                    tb.updated(dcl.name, MemberName(pkg, nm, ln))
-                  case ModuleName(_, _) =>
-                    ???
-                  case NoName =>
-                    ???
-                }
-            }
-          }.getOrElse(tbl)
+          updatedTbl.getOrElse(tbl)
       }
 
-      val emptyDecls = Seq.empty[TopLevelDeclaration[Name]]
-      val emptyRes: Either[List[ResolverError], (Seq[TopLevelDeclaration[Name]], SymbolTable)] = Right((emptyDecls, initialTbl))
+      val emptyDecls = Chain.empty[TopLevelDeclaration[Name]]
+      val emptyRes: Either[List[ResolverError], (Chain[TopLevelDeclaration[Name]], SymbolTable)] = Right((emptyDecls, initialTbl))
 
       val resolvedDecls = decls.foldLeft(emptyRes) {
         case (resSoFar, nextDecl) =>
@@ -112,7 +83,7 @@ object Resolver {
 
       resolvedDecls.map {
         case (resolved, _) =>
-          module.copy(declarations = resolved, meta = ModuleName(pkg, name))
+          module.copy(declarations = resolved.toList, meta = ModuleName(pkg, name))
       }
   }
 }

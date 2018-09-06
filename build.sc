@@ -57,7 +57,7 @@ trait ScalaSettingsModule extends ScalaModule {
   )
   object test extends Tests {
     def ivyDeps = Agg(
-      ivy"org.typelevel::cats-core:1.1.0",
+      ivy"org.typelevel::cats-core:1.3.0",
       ivy"io.chrisdavenport::cats-scalacheck:0.1.0",
       ivy"org.scalatest::scalatest:3.0.5",
       ivy"org.scalacheck::scalacheck:1.14.0"
@@ -74,6 +74,7 @@ object common extends ScalaPBModule with ScalaSettingsModule {
   def scalaPBGrpc = false
   def ivyDeps = T {
     super.ivyDeps() ++ Agg(
+      ivy"org.typelevel::cats-core:1.3.0",
       ivy"org.typelevel::paiges-core:0.2.1",
       ivy"com.github.pathikrit::better-files:3.6.0"
     )
@@ -88,11 +89,11 @@ object parser extends ScalaSettingsModule {
 }
 
 object resolver extends ScalaSettingsModule {
-  def moduleDeps = Seq(common, codegen)
+  def moduleDeps = Seq(common)
 }
 
 object typechecker extends ScalaSettingsModule {
-  def moduleDeps = Seq(common, codegen)
+  def moduleDeps = Seq(common)
 }
 
 object codegen extends ScalaSettingsModule {

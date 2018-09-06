@@ -7,18 +7,18 @@ import inc.typechecker.Typechecker
 import inc.codegen.Codegen
 
 import better.files._
+import cats.data.Chain
+import cats.data.Validated
+import cats.implicits._
 import java.net.URLClassLoader
-import java.io.{File => JavaFile}
+import java.io.{File => JavaFile, ByteArrayOutputStream}
+import java.net.URL
 import java.nio.file.Paths
 
 object Main {
+  val NL = System.lineSeparator
+
   def main(args: Array[String]): Unit = {
-    println(java.nio.file.Paths.get("/home/david/Repos/inc/out/").toUri.toURL)
-
-    // val cl = getClass.getClassLoader.asInstanceOf[java.net.URLClassLoader]
-    // println(cl.getURLs.mkString(System.lineSeparator))
-
-    // val dir = File.newTemporaryDirectory()
     val dir = ".".toFile
 
     var prog = ""
@@ -51,22 +51,18 @@ object Main {
       }
     }
 
-    // try {
-      parser.parse(args, Configuration()) foreach { config =>
-        val result = compileProgram(dir, prog, config)
+    parser.parse(args, Configuration()) foreach { config =>
+      val result = compileProgram(dir, prog, config)
 
-        result match {
-          case Left(errors) =>
-            println()
-            errors.foreach(println)
-          case Right(_) =>
-            println()
-            println("Success")
-        }
+      result match {
+        case Left(errors) =>
+          println()
+          errors.foreach(println)
+        case Right(_) =>
+          println()
+          println("Success")
       }
-    // } finally {
-    //   dir.delete()
-    // }
+    }
   }
 
   def printPhaseTiming(phase: String, before: Long, after: Long): Unit =
@@ -99,19 +95,59 @@ object Main {
     } yield out
   }
 
-  def compileProgram(dest: File, prog: String, config: Configuration = Configuration.default): Either[List[Error], File] = {
+  def readImports(imports: List[Import], classloader: ClassLoader): Map[(List[String], String), Module[NameWithType]] = {
+    val distinctPrefixes = imports.map {
+      case ImportModule(pkg, nm) =>
+        (pkg, nm)
+      case ImportSymbols(pkg, nm, _) =>
+        (pkg, nm)
+    }.distinct
+
+    val modules = distinctPrefixes.flatMap {
+      case (pkg, nm) =>
+        val className = pkg.mkString("/") + "/" + nm + ".class"
+        val classStream = Option(classloader.getResourceAsStream(className))
+        val outputStream = new ByteArrayOutputStream()
+
+        classStream.foreach { inputStream =>
+          for {
+            in <- inputStream.autoClosed
+            out <- outputStream.autoClosed
+          } in.pipeTo(out)
+        }
+
+        val maybeInterface = Codegen.readInterface(outputStream.toByteArray)
+
+        maybeInterface
+          .toList
+          .map { mod => (pkg, nm) -> mod }
+    }
+
+    modules.toMap
+  }
+
+  def parseUrls(classpath: String): Either[List[Throwable], Array[URL]] = {
+    val urlStrings = classpath.split(JavaFile.pathSeparator)
+    Chain.fromSeq(urlStrings).traverse { p =>
+      val path = Validated.catchNonFatal(Paths.get(p))
+      val url = path.map(_.toUri.toURL)
+      url.leftMap(t => List(t))
+    }.map(_.iterator.toArray).toEither
+  }
+
+  def compileProgram(dest: File, prog: String, config: Configuration = Configuration.default): Either[List[Throwable], File] = {
     val beforeAll = System.nanoTime
 
-    val urls = config.classpath.split(JavaFile.pathSeparator).map(p => Paths.get(p).toUri.toURL)
-    val classloader = new URLClassLoader(urls)
-
     for {
+      urls <- parseUrls(config.classpath)
 
       mod <- runPhase[Module[Unit]]("parser", config, _.printParser, Parser.parse(prog))
 
-      resolved <- runPhase[Module[Name]]("resolver", config, _.printResolver, Resolver.resolve(mod, classloader))
+      importedMods = readImports(mod.imports, new URLClassLoader(urls))
 
-      checked <- runPhase[Module[NameWithType]]("typechecker", config, _.printTyper, Typechecker.typecheck(resolved, classloader))
+      resolved <- runPhase[Module[Name]]("resolver", config, _.printResolver, Resolver.resolve(mod, importedMods))
+
+      checked <- runPhase[Module[NameWithType]]("typechecker", config, _.printTyper, Typechecker.typecheck(resolved, importedMods))
 
       code <- runPhase[Array[Byte]]("codegen", config, _.printCodegen, Codegen.generate(checked), Codegen.print(_))
 
@@ -131,8 +167,7 @@ object Main {
 
       val afterAll = System.nanoTime
 
-      println()
-      println(s"""Compiled ${mod.pkg.mkString(".")}.${mod.name} in ${(afterAll - beforeAll) / 1000000}ms""")
+      println(NL + s"""Compiled ${mod.pkg.mkString(".")}.${mod.name} in ${(afterAll - beforeAll) / 1000000}ms""")
 
       out
     }

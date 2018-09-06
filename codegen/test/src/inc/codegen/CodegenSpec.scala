@@ -11,7 +11,7 @@ import org.scalacheck.cats.implicits._
 
 class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks {
   type Decl = TopLevelDeclaration[NameWithType]
-  type Decls = Vector[TopLevelDeclaration[NameWithType]]
+  type Decls = List[TopLevelDeclaration[NameWithType]]
 
   val nameGen: Gen[String] =
     for {
@@ -19,7 +19,7 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
       rest <- Gen.alphaNumStr
     } yield (first +: rest).mkString
 
-  val literalGens = Vector(
+  val literalGens = List(
     Arbitrary.arbitrary[Int].map(LiteralInt(_, NameWithType(NoName, Type.Int))),
     Arbitrary.arbitrary[Long].map(LiteralLong(_, NameWithType(NoName, Type.Long))),
     Arbitrary.arbitrary[Float].map(LiteralFloat(_, NameWithType(NoName, Type.Float))),
@@ -69,13 +69,13 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
             StateT.pure[Gen, (Decls, Int), Decls](existingDecls)
           else
             declGen.get.map(_._1)
-      }.runA((Vector.empty, size))
+      }.runA((List.empty, size))
     } yield decls
 
   val importGen =
     for {
       pkgLen <- Gen.choose(0, 5)
-      pkg <- Gen.resize(pkgLen, Gen.containerOfN[Vector, String](pkgLen, nameGen))
+      pkg <- Gen.resize(pkgLen, Gen.listOfN(pkgLen, nameGen))
       symbols <- Arbitrary.arbitrary[Boolean]
       name <- nameGen
       imp <- {
@@ -84,7 +84,7 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
         else
           for {
             symLen <- Gen.choose(2, 5)
-            syms <- Gen.resize(symLen, Gen.containerOfN[Vector, String](symLen, nameGen))
+            syms <- Gen.resize(symLen, Gen.listOfN(symLen, nameGen))
           } yield ImportSymbols(pkg, name, syms)
       }
     } yield imp
@@ -92,23 +92,23 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
   implicit val arbitraryModule: Arbitrary[Module[NameWithType]] = Arbitrary {
     for {
       pkgLen <- Gen.choose(0, 5)
-      pkg <- Gen.resize(pkgLen, Gen.containerOfN[Vector, String](pkgLen, nameGen))
+      pkg <- Gen.resize(pkgLen, Gen.listOfN(pkgLen, nameGen))
       name <- nameGen
       decls <- declsGen
       impLen <- Gen.choose(0, 5)
-      imports <- Gen.resize(impLen, Gen.containerOfN[Vector, Import](impLen, importGen))
+      imports <- Gen.resize(impLen, Gen.listOfN(impLen, importGen))
     } yield Module(pkg, name, imports, decls, NameWithType(ModuleName(pkg, name), Type.Module))
   }
 
-  def mkModule(name: String, decls: Seq[TopLevelDeclaration[NameWithType]]) = Module(
-    pkg = Seq("Test", "Codegen"),
+  def mkModule(name: String, decls: List[TopLevelDeclaration[NameWithType]]) = Module(
+    pkg = List("Test", "Codegen"),
     name = name,
-    imports = Seq.empty,
+    imports = List.empty,
     declarations = decls,
-    meta = NameWithType(ModuleName(Seq("Test", "Codegen"), name), Type.Module))
+    meta = NameWithType(ModuleName(List("Test", "Codegen"), name), Type.Module))
 
   "Codegen" should "generate code for a simple module" in {
-    val mod = mkModule("Ref", Seq(
+    val mod = mkModule("Ref", List(
       Let("int", LiteralInt(42, NameWithType(NoName, Type.Int)), NameWithType(LocalName("int"), Type.Int)),
       Let("int2", Reference("int", NameWithType(NoName, Type.Int)), NameWithType(LocalName("int2"), Type.Int)),
       Let("int3", Reference("int2", NameWithType(NoName, Type.Int)), NameWithType(LocalName("int3"), Type.Int))
@@ -153,7 +153,7 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
   }
 
   it should "generate code for a module with a Unit field reference" in {
-    val mod = mkModule("Ref", Seq(
+    val mod = mkModule("Ref", List(
       Let("unit", LiteralUnit(NameWithType(NoName, Type.Unit)), NameWithType(LocalName("unit"), Type.Unit)),
       Let("unit2", Reference("unit", NameWithType(NoName, Type.Unit)), NameWithType(LocalName("unit2"), Type.Unit))
     ))
@@ -162,7 +162,7 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
   }
 
   it should "parse a module definition from a generated class file" in {
-    val mod = mkModule("Ref", Seq(
+    val mod = mkModule("Ref", List(
       Let("int", LiteralInt(42, NameWithType(NoName, Type.Int)), NameWithType(LocalName("int"), Type.Int)),
       Let("int2", Reference("int", NameWithType(NoName, Type.Int)), NameWithType(LocalName("int2"), Type.Int)),
       Let("int3", Reference("int2", NameWithType(NoName, Type.Int)), NameWithType(LocalName("int3"), Type.Int))

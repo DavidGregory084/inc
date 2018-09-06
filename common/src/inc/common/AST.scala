@@ -7,10 +7,10 @@ sealed trait Tree[A] extends Product with Serializable {
 }
 
 final case class Module[A](
-  pkg: Seq[String],
+  pkg: List[String],
   name: String,
-  imports: Seq[Import],
-  declarations: Seq[TopLevelDeclaration[A]],
+  imports: List[Import],
+  declarations: List[TopLevelDeclaration[A]],
   meta: A
 ) extends Tree[A] {
   def toProto(implicit eqv: A =:= NameWithType): proto.Module = proto.Module(
@@ -23,10 +23,10 @@ final case class Module[A](
 }
 object Module {
   def fromProto(mod: proto.Module): Module[NameWithType] = Module(
-    pkg = mod.pkg,
+    pkg = mod.pkg.toList,
     name = mod.name,
-    imports = mod.imports.map(Import.fromProto),
-    declarations = mod.declarations.map(TopLevelDeclaration.fromProto),
+    imports = mod.imports.toList.map(Import.fromProto),
+    declarations = mod.declarations.toList.map(TopLevelDeclaration.fromProto),
     meta = NameWithType.fromProto(mod.nameWithType.getOrElse(throw new Exception("No type in protobuf")))
   )
 }
@@ -40,14 +40,14 @@ sealed trait Import {
 object Import {
   def fromProto(imp: proto.Import): Import = imp.symbols match {
     case Some(syms) =>
-      ImportSymbols(imp.pkg, imp.name, syms.symbols)
+      ImportSymbols(imp.pkg.toList, imp.name, syms.symbols.toList)
     case None =>
-      ImportModule(imp.pkg, imp.name)
+      ImportModule(imp.pkg.toList, imp.name)
   }
 }
 
-case class ImportModule(pkg: Seq[String], name: String) extends Import
-case class ImportSymbols(pkg: Seq[String], name: String, symbols: Seq[String]) extends Import
+case class ImportModule(pkg: List[String], name: String) extends Import
+case class ImportSymbols(pkg: List[String], name: String, symbols: List[String]) extends Import
 
 sealed trait Expr[A] extends Tree[A] {
   def toProto(implicit eqv: A =:= NameWithType): proto.Expr = this match {
@@ -154,7 +154,6 @@ sealed trait Name {
     case MemberName(pkg, cls, nm) => proto.Name(proto.Name.NameType.MemberName(proto.MemberName(pkg, cls, nm)))
   }
 }
-
 object Name {
   def fromProto(name: proto.Name): Name = name.nameType match {
     case proto.Name.NameType.NoName(_) =>
@@ -162,9 +161,9 @@ object Name {
     case proto.Name.NameType.LocalName(proto.LocalName(nm)) =>
       LocalName(nm)
     case proto.Name.NameType.ModuleName(proto.ModuleName(pkg, cls)) =>
-      ModuleName(pkg, cls)
+      ModuleName(pkg.toList, cls)
     case proto.Name.NameType.MemberName(proto.MemberName(pkg, cls, nm)) =>
-      MemberName(pkg, cls, nm)
+      MemberName(pkg.toList, cls, nm)
     case proto.Name.NameType.Empty =>
       throw new Exception("Empty Name in protobuf")
   }
@@ -172,8 +171,8 @@ object Name {
 
 case object NoName extends Name
 case class LocalName(name: String) extends Name
-case class ModuleName(pkg: Seq[String], cls: String) extends Name
-case class MemberName(pkg: Seq[String], cls: String, name: String) extends Name
+case class ModuleName(pkg: List[String], cls: String) extends Name
+case class MemberName(pkg: List[String], cls: String, name: String) extends Name
 
 sealed trait Type {
   def toProto: proto.Type = this match {
@@ -187,22 +186,22 @@ sealed trait Type {
 object Type {
   val UnitClass = "inc.rts.Unit"
 
-  val Int = TypeConstructor("Int", Seq.empty)
-  val Long = TypeConstructor("Long", Seq.empty)
-  val Float = TypeConstructor("Float", Seq.empty)
-  val Double = TypeConstructor("Double", Seq.empty)
-  val Boolean = TypeConstructor("Boolean", Seq.empty)
-  val Char = TypeConstructor("Char", Seq.empty)
-  val String = TypeConstructor("String", Seq.empty)
-  val Module = TypeConstructor("Module", Seq.empty)
-  val Unit = TypeConstructor(UnitClass, Seq.empty)
-  def Function(from: Type, to: Type) = TypeConstructor("->", Seq(from, to))
+  val Int = TypeConstructor("Int", List.empty)
+  val Long = TypeConstructor("Long", List.empty)
+  val Float = TypeConstructor("Float", List.empty)
+  val Double = TypeConstructor("Double", List.empty)
+  val Boolean = TypeConstructor("Boolean", List.empty)
+  val Char = TypeConstructor("Char", List.empty)
+  val String = TypeConstructor("String", List.empty)
+  val Module = TypeConstructor("Module", List.empty)
+  val Unit = TypeConstructor(UnitClass, List.empty)
+  def Function(from: Type, to: Type) = TypeConstructor("->", List(from, to))
 
   def fromProto(typ: proto.Type): Type = typ.typeType match {
     case proto.Type.TypeType.TyVar(proto.TypeVariable(id)) =>
       TypeVariable(id)
     case proto.Type.TypeType.TyCon(proto.TypeConstructor(name, typeParams)) =>
-      TypeConstructor(name, typeParams.map(Type.fromProto))
+      TypeConstructor(name, typeParams.toList.map(Type.fromProto))
     case proto.Type.TypeType.Empty =>
       throw new Exception("Empty Type in protobuf")
   }
@@ -222,7 +221,7 @@ object TypeVariable {
   }
 }
 
-case class TypeConstructor(name: String, typeParams: Seq[Type]) extends Type
+case class TypeConstructor(name: String, typeParams: List[Type]) extends Type
 
 case class NameWithType(name: Name, typ: Type) {
   def toProto = proto.NameWithType(

@@ -89,14 +89,14 @@ object Parser {
   }.map {
     case (ident, Some(symbols)) =>
       if (ident.length > 1)
-        ImportSymbols(ident.init, ident.last, symbols)
+        ImportSymbols(ident.init.toList, ident.last, symbols.toList)
       else
-        ImportSymbols(Seq.empty, ident.head, symbols)
+        ImportSymbols(List.empty, ident.head, symbols.toList)
     case (ident, None) =>
       if (ident.length > 1)
-        ImportModule(ident.init, ident.last)
+        ImportModule(ident.init.toList, ident.last)
       else
-        ImportModule(Seq.empty, ident.head)
+        ImportModule(List.empty, ident.head)
   }
 
   val bracesBlock = P(inBraces(imports.rep(sep = maybeSemi) ~ maybeSemi ~ allWs ~ decl.rep(sep = maybeSemi)))
@@ -108,9 +108,9 @@ object Parser {
   }.map {
     case (moduleName, (imports, decls)) =>
       if (moduleName.length > 1)
-        Module(moduleName.dropRight(1), moduleName.lastOption.getOrElse(""), imports, decls, ())
+        Module(moduleName.dropRight(1).toList, moduleName.lastOption.getOrElse(""), imports.toList, decls.toList, ())
       else
-        Module(Seq.empty, moduleName.headOption.getOrElse(""), imports, decls, ())
+        Module(List.empty, moduleName.headOption.getOrElse(""), imports.toList, decls.toList, ())
   }
 
   def parse(fileContents: String): Either[List[ParserError], Module[Unit]] = {

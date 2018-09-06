@@ -1,5 +1,6 @@
 package inc.codegen
 
+import cats.implicits._
 import java.io.{ OutputStream, PrintWriter }
 import java.util.Arrays
 import org.objectweb.asm.{ Attribute, ByteVector, ClassReader, ClassVisitor, ClassWriter, Label, MethodVisitor, Type => AsmType }
@@ -148,14 +149,9 @@ object Codegen {
       // We'll use this to initialize fields that are declared in the class
       //
       withMethodVisitor(cw, "<clinit>", AsmType.getMethodDescriptor(AsmType.VOID_TYPE)) { siv =>
-        val writeDecls = mod.declarations.map { decl =>
+        mod.declarations.traverse_ { decl =>
           newTopLevelDeclaration(internalName, cw, siv, decl)
         }
-
-        if (writeDecls.forall(_.isRight))
-          Right(())
-        else
-          Left(writeDecls.filter(_.isLeft).toList.flatMap(_.left.get))
       }
     }
   }
