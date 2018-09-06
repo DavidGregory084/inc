@@ -146,28 +146,34 @@ final case class Let[A](name: String, binding: Expr[A], meta: A) extends TopLeve
 
 // final case class Def(name: String, params: Seq[Param], body: Expr) extends TopLevelDeclaration
 
-sealed trait Name
+sealed trait Name {
+  def toProto: proto.Name = this match {
+    case NoName => proto.Name(proto.Name.NameType.NoName(proto.NoName()))
+    case LocalName(nm) => proto.Name(proto.Name.NameType.LocalName(proto.LocalName(nm)))
+    case ModuleName(pkg, cls) => proto.Name(proto.Name.NameType.ModuleName(proto.ModuleName(pkg, cls)))
+    case MemberName(pkg, cls, nm) => proto.Name(proto.Name.NameType.MemberName(proto.MemberName(pkg, cls, nm)))
+  }
+}
+
 object Name {
-  def fromString(str: String) = {
-    if (str.indexOf('.') > 0) {
-      str.split("\\.") match {
-        case Array("<empty>", cls, nm) =>
-          FullName(Seq.empty, cls, nm)
-        case Array("<empty>", rest @ _*) =>
-          FullName(rest.dropRight(2), rest(rest.length - 2), rest.last)
-        case arr =>
-          FullName(arr.dropRight(2), arr(arr.length - 2), arr.last)
-      }
-    } else if (str.nonEmpty)
-      LocalName(str)
-    else
+  def fromProto(name: proto.Name): Name = name.nameType match {
+    case proto.Name.NameType.NoName(_) =>
       NoName
+    case proto.Name.NameType.LocalName(proto.LocalName(nm)) =>
+      LocalName(nm)
+    case proto.Name.NameType.ModuleName(proto.ModuleName(pkg, cls)) =>
+      ModuleName(pkg, cls)
+    case proto.Name.NameType.MemberName(proto.MemberName(pkg, cls, nm)) =>
+      MemberName(pkg, cls, nm)
+    case proto.Name.NameType.Empty =>
+      throw new Exception("Empty Name in protobuf")
   }
 }
 
 case object NoName extends Name
 case class LocalName(name: String) extends Name
-case class FullName(pkg: Seq[String], cls: String, name: String) extends Name
+case class ModuleName(pkg: Seq[String], cls: String) extends Name
+case class MemberName(pkg: Seq[String], cls: String, name: String) extends Name
 
 sealed trait Type {
   def toProto: proto.Type = this match {
@@ -220,22 +226,15 @@ case class TypeConstructor(name: String, typeParams: Seq[Type]) extends Type
 
 case class NameWithType(name: Name, typ: Type) {
   def toProto = proto.NameWithType(
-    name = name match {
-      case FullName(pkg, cls, name) =>
-        if (pkg.isEmpty)
-          ("<empty>" :: cls :: name :: Nil).mkString(".")
-        else
-          (pkg :+ cls :+ name).mkString(".")
-      case LocalName(name) =>
-        name
-      case NoName =>
-        ""
-    },
+    name = Some(name.toProto),
     `type` = Some(typ.toProto)
   )
 }
 
 object NameWithType {
   def fromProto(nameWithType: proto.NameWithType): NameWithType =
-    NameWithType(Name.fromString(nameWithType.name), Type.fromProto(nameWithType.`type`.getOrElse(throw new Exception("No type in protobuf"))))
+    NameWithType(
+      Name.fromProto(nameWithType.name.getOrElse(throw new Exception("No name in protobuf"))),
+      Type.fromProto(nameWithType.`type`.getOrElse(throw new Exception("No type in protobuf")))
+    )
 }

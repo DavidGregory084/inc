@@ -97,7 +97,7 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
       decls <- declsGen
       impLen <- Gen.choose(0, 5)
       imports <- Gen.resize(impLen, Gen.containerOfN[Vector, Import](impLen, importGen))
-    } yield Module(pkg, name, imports, decls, NameWithType(FullName(pkg, name), Type.Module))
+    } yield Module(pkg, name, imports, decls, NameWithType(ModuleName(pkg, name), Type.Module))
   }
 
   def mkModule(name: String, decls: Seq[TopLevelDeclaration[NameWithType]]) = Module(
@@ -105,7 +105,7 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
     name = name,
     imports = Seq.empty,
     declarations = decls,
-    meta = NameWithType(FullName(Seq("Test", "Codegen"), name), Type.Module))
+    meta = NameWithType(ModuleName(Seq("Test", "Codegen"), name), Type.Module))
 
   "Codegen" should "generate code for a simple module" in {
     val mod = mkModule("Ref", Seq(

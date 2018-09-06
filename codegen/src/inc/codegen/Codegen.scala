@@ -47,14 +47,26 @@ object Codegen {
     }
   }
 
-  def newClass(name: String)(writeClassMembers: ClassWriter => Either[List[CodegenError], Unit]): Either[List[CodegenError], Array[Byte]] = {
+  def withClassWriter(className: String)(f: ClassWriter => Either[List[CodegenError], Unit]): Either[List[CodegenError], Array[Byte]] = {
     val cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS)
 
-    cw.visit(V1_8, ACC_PUBLIC + ACC_SUPER, name, null, AsmType.getInternalName(classOf[Object]), null)
+    cw.visit(V1_8, ACC_PUBLIC + ACC_SUPER, className, null, AsmType.getInternalName(classOf[Object]), null)
 
-    writeClassMembers(cw).map { _  =>
+    f(cw).map { _  =>
       cw.visitEnd()
       cw.toByteArray()
+    }
+  }
+
+  def withMethodVisitor(cw: ClassWriter, methodName: String, methodDescriptor: String)(f: MethodVisitor => Either[List[CodegenError], Unit]): Either[List[CodegenError], Unit] = {
+    val mv = cw.visitMethod(ACC_STATIC, methodName, methodDescriptor, null, null)
+
+    mv.visitCode()
+
+    f(mv).map { _ =>
+      mv.visitInsn(RETURN)
+      mv.visitMaxs(0, 0)
+      mv.visitEnd()
     }
   }
 
@@ -77,40 +89,48 @@ object Codegen {
       CodegenError.singleton("A type variable was found in code generation!")
   }
 
-  def newTopLevelDeclaration(internalName: String, cw: ClassWriter, siv: MethodVisitor, decl: TopLevelDeclaration[NameWithType]): Either[List[CodegenError], Unit] =
-    decl match {
-      case Let(name, LiteralInt(i, _), _) =>
-        Right(cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, name, AsmType.INT_TYPE.getDescriptor, null, i).visitEnd())
-      case Let(name, LiteralLong(l, _), _) =>
-        Right(cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, name, AsmType.LONG_TYPE.getDescriptor, null, l).visitEnd())
-      case Let(name, LiteralFloat(f, _), _) =>
-        Right(cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, name, AsmType.FLOAT_TYPE.getDescriptor, null, f).visitEnd())
-      case Let(name, LiteralDouble(d, _), _) =>
-        Right(cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, name, AsmType.DOUBLE_TYPE.getDescriptor, null, d).visitEnd())
-      case Let(name, LiteralBoolean(b, _), _) =>
-        Right(cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, name, AsmType.BOOLEAN_TYPE.getDescriptor, null, b).visitEnd())
-      case Let(name, LiteralChar(c, _), _) =>
-        Right(cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, name, AsmType.CHAR_TYPE.getDescriptor, null, c).visitEnd())
-      case Let(name, LiteralString(s, _), _) =>
-        Right(cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, name, AsmType.getDescriptor(classOf[String]), null, s).visitEnd())
-      case Let(name, LiteralUnit(_), _) =>
+  def newTopLevelLet(internalName: String, cw: ClassWriter, siv: MethodVisitor, let: Let[NameWithType]): Either[List[CodegenError], Unit] = {
+    let.binding match {
+      case LiteralInt(i, _) =>
+        Right(cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, let.name, AsmType.INT_TYPE.getDescriptor, null, i).visitEnd())
+      case LiteralLong(l, _) =>
+        Right(cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, let.name, AsmType.LONG_TYPE.getDescriptor, null, l).visitEnd())
+      case LiteralFloat(f, _) =>
+        Right(cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, let.name, AsmType.FLOAT_TYPE.getDescriptor, null, f).visitEnd())
+      case LiteralDouble(d, _) =>
+        Right(cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, let.name, AsmType.DOUBLE_TYPE.getDescriptor, null, d).visitEnd())
+      case LiteralBoolean(b, _) =>
+        Right(cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, let.name, AsmType.BOOLEAN_TYPE.getDescriptor, null, b).visitEnd())
+      case LiteralChar(c, _) =>
+        Right(cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, let.name, AsmType.CHAR_TYPE.getDescriptor, null, c).visitEnd())
+      case LiteralString(s, _) =>
+        Right(cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, let.name, AsmType.getDescriptor(classOf[String]), null, s).visitEnd())
+      case LiteralUnit(_) =>
         Right {
-          cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, name, AsmType.getDescriptor(classOf[IncUnit]), null, null).visitEnd()
+          cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, let.name, AsmType.getDescriptor(classOf[IncUnit]), null, null).visitEnd()
           siv.visitFieldInsn(GETSTATIC, AsmType.getInternalName(classOf[IncUnit]), "instance", AsmType.getDescriptor(classOf[IncUnit]))
-          siv.visitFieldInsn(PUTSTATIC, internalName, name, AsmType.getDescriptor(classOf[IncUnit]))
+          siv.visitFieldInsn(PUTSTATIC, internalName, let.name, AsmType.getDescriptor(classOf[IncUnit]))
         }
-      case Let(name, Reference(ref, nameWithType), _) =>
+      case Reference(ref, nameWithType) =>
         descriptorFor(nameWithType.typ).map { descriptor =>
-          cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, name, descriptor, null, null).visitEnd()
-          siv.visitFieldInsn(GETSTATIC, toInternalName(nameWithType.name, internalName), ref, descriptor)
-          siv.visitFieldInsn(PUTSTATIC, internalName, name, descriptor)
+          cw.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, let.name, descriptor, null, null).visitEnd()
+          siv.visitFieldInsn(GETSTATIC, toInternalName(nameWithType.name, orElse = internalName), ref, descriptor)
+          siv.visitFieldInsn(PUTSTATIC, internalName, let.name, descriptor)
         }
     }
+  }
 
-  def toInternalName(name: Name, inClass: String) = name match {
-    case NoName => ""
-    case LocalName(_) => inClass
-    case FullName(pkg, cls, _) => pkg.mkString("/") + "/" + cls
+  def newTopLevelDeclaration(internalName: String, cw: ClassWriter, siv: MethodVisitor, decl: TopLevelDeclaration[NameWithType]): Either[List[CodegenError], Unit] =
+    decl match {
+      case let @ Let(_, _, _) =>
+        newTopLevelLet(internalName, cw, siv, let)
+    }
+
+  def toInternalName(name: Name, orElse: String) = name match {
+    case NoName => orElse
+    case LocalName(_) => orElse
+    case ModuleName(pkg, cls) => pkg.mkString("/") + "/" + cls
+    case MemberName(pkg, cls, _) => pkg.mkString("/") + "/" + cls
   }
 
   def generate(mod: Module[NameWithType]): Either[List[CodegenError], Array[Byte]] = {
@@ -118,27 +138,25 @@ object Codegen {
 
     val internalName = packageName + mod.name
 
-    newClass(internalName) { cw =>
-      val siv = cw.visitMethod(ACC_STATIC, "<clinit>", AsmType.getMethodDescriptor(AsmType.VOID_TYPE), null, null)
-
-      siv.visitCode()
-
-      val writeDecls = mod.declarations.map { decl =>
-        newTopLevelDeclaration(internalName, cw, siv, decl)
-      }
-
-      siv.visitInsn(RETURN)
-
-      siv.visitMaxs(0, 0)
-
-      siv.visitEnd()
-
+    // Create a new class definition to represent this module
+    withClassWriter(internalName) { cw =>
+      // Persist the module AST to the class file as protobuf
       cw.visitAttribute(InterfaceAttribute(mod.toProto.toByteArray))
 
-      if (writeDecls.forall(_.isRight))
-        Right(())
-      else
-        Left(writeDecls.filter(_.isLeft).toList.flatMap(_.left.get))
+      // A builder for the static initializer
+      //
+      // We'll use this to initialize fields that are declared in the class
+      //
+      withMethodVisitor(cw, "<clinit>", AsmType.getMethodDescriptor(AsmType.VOID_TYPE)) { siv =>
+        val writeDecls = mod.declarations.map { decl =>
+          newTopLevelDeclaration(internalName, cw, siv, decl)
+        }
+
+        if (writeDecls.forall(_.isRight))
+          Right(())
+        else
+          Left(writeDecls.filter(_.isLeft).toList.flatMap(_.left.get))
+      }
     }
   }
 }

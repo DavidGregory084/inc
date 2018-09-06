@@ -28,8 +28,34 @@ message Type {
   }
 }
 
-message NameWithType {
+message NoName {}
+
+message LocalName {
   string name = 1;
+}
+
+message ModuleName {
+  repeated string pkg = 1;
+  string cls = 2;
+}
+
+message MemberName {
+  repeated string pkg = 1;
+  string cls = 2;
+  string name = 3;
+}
+
+message Name {
+  oneof nameType {
+    NoName noName = 1;
+    LocalName localName = 2;
+    ModuleName moduleName = 3;
+    MemberName memberName = 4;
+  }
+}
+
+message NameWithType {
+  Name name = 1;
   Type type = 2;
 }
 

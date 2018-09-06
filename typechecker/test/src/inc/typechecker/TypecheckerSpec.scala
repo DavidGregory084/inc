@@ -9,21 +9,21 @@ class TypecheckerSpec extends FlatSpec with Matchers {
     name = name,
     imports = Seq.empty,
     declarations = decls,
-    meta = FullName(Seq("Test", "Typechecker"), name))
+    meta = ModuleName(Seq("Test", "Typechecker"), name))
 
   def mkCheckedModule(name: String, decls: Seq[TopLevelDeclaration[NameWithType]]) = Module(
     pkg = Seq("Test", "Typechecker"),
     name = name,
     imports = Seq.empty,
     declarations = decls,
-    meta = NameWithType(FullName(Seq("Test", "Typechecker"), name), Type.Module))
+    meta = NameWithType(ModuleName(Seq("Test", "Typechecker"), name), Type.Module))
 
   "Typechecker" should "typecheck let bound literals successfully" in {
     val mod = mkModule("Int", Seq(Let("int", LiteralInt(42, NoName), LocalName("int"))))
     val expected = mkCheckedModule("Int", Seq(
       Let("int", LiteralInt(42, NameWithType(NoName, Type.Int)), NameWithType(LocalName("int"), Type.Int)))
     )
-    val result = Typechecker.typecheck(mod)
+    val result = Typechecker.typecheck(mod, null)
     result shouldBe 'right
     result.right.get shouldBe expected
   }
@@ -37,7 +37,7 @@ class TypecheckerSpec extends FlatSpec with Matchers {
       Let("int", LiteralInt(42, NameWithType(NoName, Type.Int)), NameWithType(LocalName("int"), Type.Int)),
       Let("int2", Reference("int", NameWithType(NoName, Type.Int)), NameWithType(LocalName("int2"), Type.Int))
     ))
-    val result = Typechecker.typecheck(mod)
+    val result = Typechecker.typecheck(mod, null)
     result shouldBe 'right
     result.right.get shouldBe expected
   }
@@ -47,7 +47,7 @@ class TypecheckerSpec extends FlatSpec with Matchers {
       Let("int", LiteralInt(42, NoName), LocalName("int")),
       Let("int2", Reference("int3", NoName), LocalName("int2"))
     ))
-    val result = Typechecker.typecheck(mod)
+    val result = Typechecker.typecheck(mod, null)
     result shouldBe 'left
   }
 
@@ -57,7 +57,7 @@ class TypecheckerSpec extends FlatSpec with Matchers {
       Let("int2", Reference("int3", NoName), LocalName("int2")),
       Let("int2", Reference("int", NoName), LocalName("int2"))
     ))
-    val result = Typechecker.typecheck(mod)
+    val result = Typechecker.typecheck(mod, null)
     result shouldBe 'left
   }
 }

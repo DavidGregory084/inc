@@ -59,10 +59,12 @@ object Resolver {
             mod.declarations.foldLeft(tbl) {
               case (tb, dcl) =>
                 dcl.meta.name match {
-                  case FullName(_, cls, fn) =>
-                    tb.updated(dcl.name, FullName(pkg, cls, fn))
+                  case MemberName(_, cls, fn) =>
+                    tb.updated(dcl.name, MemberName(pkg, cls, fn))
                   case LocalName(ln) =>
-                    tb.updated(dcl.name, FullName(pkg, nm, ln))
+                    tb.updated(dcl.name, MemberName(pkg, nm, ln))
+                  case ModuleName(_, _) =>
+                    ???
                   case NoName =>
                     ???
                 }
@@ -82,10 +84,12 @@ object Resolver {
             mod.declarations.filter(d => syms.contains(d.name)).foldLeft(tbl) {
               case (tb, dcl) =>
                 dcl.meta.name match {
-                  case FullName(_, cls, fn) =>
-                    tb.updated(dcl.name, FullName(pkg, cls, fn))
+                  case MemberName(_, cls, fn) =>
+                    tb.updated(dcl.name, MemberName(pkg, cls, fn))
                   case LocalName(ln) =>
-                    tb.updated(dcl.name, FullName(pkg, nm, ln))
+                    tb.updated(dcl.name, MemberName(pkg, nm, ln))
+                  case ModuleName(_, _) =>
+                    ???
                   case NoName =>
                     ???
                 }
@@ -108,7 +112,7 @@ object Resolver {
 
       resolvedDecls.map {
         case (resolved, _) =>
-          module.copy(declarations = resolved, meta = FullName(pkg, name, ""))
+          module.copy(declarations = resolved, meta = ModuleName(pkg, name))
       }
   }
 }

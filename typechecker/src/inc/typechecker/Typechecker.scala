@@ -45,37 +45,39 @@ object Typechecker {
   def typecheck(module: Module[Name], classloader: ClassLoader): Either[List[TypeError], Module[NameWithType]] = module match {
     case Module(_, _, imports, decls, _) =>
       val initialEnv = imports.foldLeft(Map.empty[String, Type]) {
-        case (tbl, ImportModule(pkg, nm)) =>
-          val is = classloader.getResourceAsStream(pkg.mkString("/") + "/" + nm + ".class")
-          val baos = new ByteArrayOutputStream()
+        case (env, imprt) =>
+          val (pkg, nm, syms) = imprt match {
+            case ImportModule(pkg, nm) =>
+              (pkg, nm, Seq.empty[String])
+            case ImportSymbols(pkg, nm, syms) =>
+              (pkg, nm, syms)
+          }
 
-          for {
-            in <- is.autoClosed
-            out <- baos.autoClosed
-          } in.pipeTo(out)
+          val className = pkg.mkString("/") + "/" + nm + ".class"
+          val classStream = Option(classloader.getResourceAsStream(className))
+          val outputStream = new ByteArrayOutputStream()
 
-          Codegen.readInterface(baos.toByteArray).map { mod =>
-            mod.declarations.foldLeft(tbl) {
-              case (tb, dcl) =>
-                tb.updated(dcl.name, dcl.meta.typ)
+          classStream.foreach { inputStream =>
+            for {
+              in <- inputStream.autoClosed
+              out <- outputStream.autoClosed
+            } in.pipeTo(out)
+          }
+
+          val updatedEnv = Codegen.readInterface(outputStream.toByteArray).map { mod =>
+            val decls =
+              if (syms.isEmpty)
+                mod.declarations
+              else
+                mod.declarations.filter(d => syms.contains(d.name))
+
+            decls.foldLeft(env) {
+              case (e, dcl) =>
+                e.updated(dcl.name, dcl.meta.typ)
             }
-          }.getOrElse(tbl)
+          }
 
-        case (tbl, ImportSymbols(pkg, nm, syms)) =>
-          val is = classloader.getResourceAsStream(pkg.mkString("/") + "/" + nm + ".class")
-          val baos = new ByteArrayOutputStream()
-
-          for {
-            in <- is.autoClosed
-            out <- baos.autoClosed
-          } in.pipeTo(out)
-
-          Codegen.readInterface(baos.toByteArray).map { mod =>
-            mod.declarations.filter(d => syms.contains(d.name)).foldLeft(tbl) {
-              case (tb, dcl) =>
-                tb.updated(dcl.name, dcl.meta.typ)
-            }
-          }.getOrElse(tbl)
+          updatedEnv.getOrElse(env)
       }
 
       val emptyDecls = Seq.empty[TopLevelDeclaration[NameWithType]]
