@@ -41,7 +41,10 @@ object Resolver {
       }
   }
 
-  def resolve(module: Module[Unit], importedMods: Map[(List[String], String), Module[NameWithType]]): Either[List[ResolverError], Module[Name]] = module match {
+  def resolve(
+    module: Module[Unit],
+    importedMods: Map[(List[String], String), Module[NameWithType]] = Map.empty
+  ): Either[List[ResolverError], Module[Name]] = module match {
     case Module(pkg, name, imports, decls, _) =>
       val initialTbl = imports.foldLeft(Map.empty[String, Name]) {
         case (tbl, imprt) =>

@@ -23,7 +23,7 @@ class TypecheckerSpec extends FlatSpec with Matchers {
     val expected = mkCheckedModule("Int", List(
       Let("int", LiteralInt(42, NameWithType(NoName, Type.Int)), NameWithType(LocalName("int"), Type.Int)))
     )
-    val result = Typechecker.typecheck(mod, null)
+    val result = Typechecker.typecheck(mod)
     result shouldBe 'right
     result.right.get shouldBe expected
   }
@@ -37,7 +37,7 @@ class TypecheckerSpec extends FlatSpec with Matchers {
       Let("int", LiteralInt(42, NameWithType(NoName, Type.Int)), NameWithType(LocalName("int"), Type.Int)),
       Let("int2", Reference("int", NameWithType(NoName, Type.Int)), NameWithType(LocalName("int2"), Type.Int))
     ))
-    val result = Typechecker.typecheck(mod, null)
+    val result = Typechecker.typecheck(mod)
     result shouldBe 'right
     result.right.get shouldBe expected
   }
@@ -47,7 +47,7 @@ class TypecheckerSpec extends FlatSpec with Matchers {
       Let("int", LiteralInt(42, NoName), LocalName("int")),
       Let("int2", Reference("int3", NoName), LocalName("int2"))
     ))
-    val result = Typechecker.typecheck(mod, null)
+    val result = Typechecker.typecheck(mod)
     result shouldBe 'left
   }
 
@@ -57,7 +57,7 @@ class TypecheckerSpec extends FlatSpec with Matchers {
       Let("int2", Reference("int3", NoName), LocalName("int2")),
       Let("int2", Reference("int", NoName), LocalName("int2"))
     ))
-    val result = Typechecker.typecheck(mod, null)
+    val result = Typechecker.typecheck(mod)
     result shouldBe 'left
   }
 }

@@ -21,7 +21,7 @@ class ResolverSpec extends FlatSpec with Matchers {
   "Resolver" should "resolve names for local let bindings" in {
     val mod = mkModule("Int", List(Let("int", LiteralInt(42, ()), ())))
     val expected = mkResolvedModule("Int", List(Let("int", LiteralInt(42, NoName), LocalName("int"))))
-    val result = Resolver.resolve(mod, null)
+    val result = Resolver.resolve(mod)
     result shouldBe 'right
     result.right.get shouldBe expected
   }
@@ -31,7 +31,7 @@ class ResolverSpec extends FlatSpec with Matchers {
       Let("int", LiteralInt(42, ()), ()),
       Let("int2", Reference("int3", ()), ())
     ))
-    val result = Resolver.resolve(mod, null)
+    val result = Resolver.resolve(mod)
     result shouldBe 'left
   }
 
@@ -40,7 +40,7 @@ class ResolverSpec extends FlatSpec with Matchers {
       Let("int", LiteralInt(42, ()), ()),
       Let("int", LiteralInt(43, ()), ())
     ))
-    val result = Resolver.resolve(mod, null)
+    val result = Resolver.resolve(mod)
     result shouldBe 'left
   }
 }

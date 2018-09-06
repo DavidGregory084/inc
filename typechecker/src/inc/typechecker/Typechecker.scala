@@ -40,7 +40,10 @@ object Typechecker {
       }
   }
 
-  def typecheck(module: Module[Name], importedMods: Map[(List[String], String), Module[NameWithType]]): Either[List[TypeError], Module[NameWithType]] = module match {
+  def typecheck(
+    module: Module[Name],
+    importedMods: Map[(List[String], String), Module[NameWithType]] = Map.empty
+  ): Either[List[TypeError], Module[NameWithType]] = module match {
     case Module(_, _, imports, decls, _) =>
       val initialEnv = imports.foldLeft(Map.empty[String, Type]) {
         case (env, imprt) =>
