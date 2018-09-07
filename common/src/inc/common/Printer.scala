@@ -37,6 +37,8 @@ object Printer {
         Doc.text("()")
       case Reference(ref, _) =>
         Doc.text(ref)
+      case If(_, _, _, _) =>
+        ???
     }
 
     val decls = Doc.intercalate(Doc.char(';') + Doc.line, declarations.map {

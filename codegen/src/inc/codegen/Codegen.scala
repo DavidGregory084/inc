@@ -118,6 +118,8 @@ object Codegen {
           siv.visitFieldInsn(GETSTATIC, toInternalName(nameWithType.name, orElse = internalName), ref, descriptor)
           siv.visitFieldInsn(PUTSTATIC, internalName, let.name, descriptor)
         }
+      case If(_, _, _, _) =>
+        ???
     }
   }
 

@@ -78,6 +78,9 @@ sealed trait Expr[A] extends Tree[A] {
     case Reference(name, meta) =>
       val nameWithType = Some(eqv(meta).toProto)
       proto.Expr(nameWithType, proto.Expr.ExprType.Ref(proto.Reference(name, nameWithType)))
+    case If(cond, thenExpr, elseExpr, meta) =>
+      val nameWithType = Some(eqv(meta).toProto)
+      proto.Expr(nameWithType, proto.Expr.ExprType.If(proto.If(Some(cond.toProto), Some(thenExpr.toProto), Some(elseExpr.toProto), nameWithType)))
   }
 }
 object Expr {
@@ -100,12 +103,24 @@ object Expr {
       LiteralUnit(NameWithType.fromProto(nameWithType.getOrElse(throw new Exception("No type in protobuf"))))
     case proto.Expr.ExprType.Ref(proto.Reference(name, nameWithType)) =>
       Reference(name, NameWithType.fromProto(nameWithType.getOrElse(throw new Exception("No type in protobuf"))))
+    case proto.Expr.ExprType.If(proto.If(cond, thenExpr, elseExpr, nameWithType)) =>
+      If(
+        Expr.fromProto(cond.getOrElse(throw new Exception("No if condition in protobuf"))),
+        Expr.fromProto(thenExpr.getOrElse(throw new Exception("No then expression in protobuf"))),
+        Expr.fromProto(elseExpr.getOrElse(throw new Exception("No else expression in protobuf"))),
+        NameWithType.fromProto(nameWithType.getOrElse(throw new Exception("No type in protobuf")))
+      )
     case proto.Expr.ExprType.Empty =>
       throw new Exception("Empty Expr in protobuf")
   }
 }
 
-// case class Block(decls: Seq[LocalDeclaration], result: Expr) extends Expr
+final case class If[A](
+  cond: Expr[A],
+  thenExpr: Expr[A],
+  elseExpr: Expr[A],
+  meta: A
+) extends Expr[A]
 
 sealed trait Literal[A] extends Expr[A]
 

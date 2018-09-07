@@ -52,21 +52,17 @@ object Main {
     }
 
     parser.parse(args, Configuration()) foreach { config =>
-      val result = compileProgram(dir, prog, config)
-
-      result match {
+      compileProgram(dir, prog, config) match {
         case Left(errors) =>
-          println()
-          errors.foreach(println)
+          errors.map(e => NL + e.getMessage).foreach(println)
         case Right(_) =>
-          println()
-          println("Success")
+          println(NL + "Success")
       }
     }
   }
 
   def printPhaseTiming(phase: String, before: Long, after: Long): Unit =
-    println(s"Completed $phase in ${(after - before) / 1000000}ms")
+    println(NL + s"Completed $phase in ${(after - before) / 1000000}ms")
 
   def runPhase[A](
     name: String,
@@ -86,7 +82,6 @@ object Main {
       after = System.nanoTime
 
       _ = if (config.printPhaseTiming) {
-        println()
         printPhaseTiming(name, before, after)
       }
 

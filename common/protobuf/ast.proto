@@ -103,6 +103,13 @@ message LiteralUnit {
   NameWithType namewithType = 1;
 }
 
+message If {
+  Expr cond = 1;
+  Expr thenExpr = 2;
+  Expr elseExpr = 3;
+  NameWithType nameWithType = 4;
+}
+
 message Expr {
   oneof exprType {
     Reference ref = 2;
@@ -114,6 +121,7 @@ message Expr {
     LiteralString str = 8;
     LiteralChar char = 9;
     LiteralUnit unit = 10;
+    If if = 11;
   }
   NameWithType nameWithType = 20;
 }

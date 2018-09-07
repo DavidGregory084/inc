@@ -27,6 +27,8 @@ object Typechecker {
       env.get(name).map { typ =>
         Right((ref.copy(meta = NameWithType(ref.meta, typ)), env))
       }.getOrElse(TypeError.singleton(s"Reference to undefined symbol: $name"))
+    case If(_, _, _, _) =>
+      ???
   }
 
   def typecheck(decl: TopLevelDeclaration[Name], env: Environment): Either[List[TypeError], (TopLevelDeclaration[NameWithType], Environment)] = decl match {
