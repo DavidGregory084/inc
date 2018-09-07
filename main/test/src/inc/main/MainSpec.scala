@@ -58,7 +58,7 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
 
   it should "compile a true boolean field" in shouldCompileField("boolean", "true", true)
 
-  it should "compile a false boolean field" in shouldCompileField("boolean", "true", true)
+  it should "compile a false boolean field" in shouldCompileField("boolean", "false", false)
 
   it should "compile a char field" in forAll { c: Char =>
     whenever(c != '\'' && c != '\\' && c != '\n' && c != '\r') {
@@ -83,5 +83,27 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
     val classFile = result.right.get
     val clazz = loadClassFrom(dir, pkg + classFile.nameWithoutExtension)
     getStatic(clazz, fieldName) shouldBe 42
+  }
+
+  it should "compile an if expression and return the then branch when the condition is true" in withTmpDir { dir =>
+    val pkg = "Test.Main."
+    val fieldName = "z"
+    val prog = s"module ${pkg}If { let a = true; let x = 42; let y = 41; let ${fieldName} = if a then x else y }"
+    val result = Main.compileProgram(dir, prog)
+    result shouldBe 'right
+    val classFile = result.right.get
+    val clazz = loadClassFrom(dir, pkg + classFile.nameWithoutExtension)
+    getStatic(clazz, fieldName) shouldBe 42
+  }
+
+  it should "compile an if expression and return the else branch when the condition is false" in withTmpDir { dir =>
+    val pkg = "Test.Main."
+    val fieldName = "z"
+    val prog = s"module ${pkg}If { let a = false; let x = 42; let y = 41; let ${fieldName} = if a then x else y }"
+    val result = Main.compileProgram(dir, prog)
+    result shouldBe 'right
+    val classFile = result.right.get
+    val clazz = loadClassFrom(dir, pkg + classFile.nameWithoutExtension)
+    getStatic(clazz, fieldName) shouldBe 41
   }
 }
