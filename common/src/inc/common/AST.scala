@@ -191,8 +191,8 @@ case class MemberName(pkg: List[String], cls: String, name: String) extends Name
 
 sealed trait Type {
   def toProto: proto.Type = this match {
-    case TypeVariable(i, _) =>
-      proto.Type(proto.Type.TypeType.TyVar(proto.TypeVariable(i)))
+    // case TypeVariable(i, _) =>
+    //   proto.Type(proto.Type.TypeType.TyVar(proto.TypeVariable(i)))
     case TypeConstructor(name, tyParams) =>
       proto.Type(proto.Type.TypeType.TyCon(proto.TypeConstructor(name, tyParams.map(_.toProto))))
   }
@@ -213,8 +213,8 @@ object Type {
   def Function(from: Type, to: Type) = TypeConstructor("->", List(from, to))
 
   def fromProto(typ: proto.Type): Type = typ.typeType match {
-    case proto.Type.TypeType.TyVar(proto.TypeVariable(id)) =>
-      TypeVariable(id)
+    // case proto.Type.TypeType.TyVar(proto.TypeVariable(id)) =>
+    //   TypeVariable(id)
     case proto.Type.TypeType.TyCon(proto.TypeConstructor(name, typeParams)) =>
       TypeConstructor(name, typeParams.toList.map(Type.fromProto))
     case proto.Type.TypeType.Empty =>
@@ -222,19 +222,19 @@ object Type {
   }
 }
 
-case class TypeVariable(id: Int, name: String) extends Type
+// case class TypeVariable(id: Int, name: String) extends Type
 
-object TypeVariable {
-  var nextVariableId = 0
+// object TypeVariable {
+//   var nextVariableId = 0
 
-  def apply(id: Int): TypeVariable = TypeVariable(id, "A" + id)
+//   def apply(id: Int): TypeVariable = TypeVariable(id, "A" + id)
 
-  def apply(): TypeVariable = {
-    val tyVar = TypeVariable(nextVariableId, "A" + nextVariableId)
-    nextVariableId += 1
-    tyVar
-  }
-}
+//   def apply(): TypeVariable = {
+//     val tyVar = TypeVariable(nextVariableId, "A" + nextVariableId)
+//     nextVariableId += 1
+//     tyVar
+//   }
+// }
 
 case class TypeConstructor(name: String, typeParams: List[Type]) extends Type
 

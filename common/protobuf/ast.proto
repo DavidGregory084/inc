@@ -12,9 +12,9 @@ message Import {
   Symbols symbols = 3;
 }
 
-message TypeVariable {
-  int32 id = 1;
-}
+// message TypeVariable {
+//   int32 id = 1;
+// }
 
 message TypeConstructor {
   string name = 1;
@@ -23,7 +23,7 @@ message TypeConstructor {
 
 message Type {
   oneof typeType {
-    TypeVariable tyVar = 1;
+    // TypeVariable tyVar = 1;
     TypeConstructor tyCon = 2;
   }
 }

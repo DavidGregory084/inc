@@ -1,10 +1,26 @@
 package inc.typechecker
 
 import cats.data.Chain
+import cats.implicits._
 import inc.common._
 
 object Typechecker {
   type Environment = Map[String, Type]
+
+  def unify(leftExpr: Type, rightExpr: Type, env: Environment): Either[List[TypeError], (Type, Environment)] = {
+    ((leftExpr, rightExpr) match {
+      case (TypeConstructor(l, lvars), TypeConstructor(r, rvars)) =>
+        if (l != r)
+          TypeError.singleton(s"Cannot unify $l with $r")
+        else
+          lvars.zip(rvars).traverse {
+            case (ll, rr) =>
+              unify(ll, rr, env).map(_._1)
+          }.map { vars =>
+            TypeConstructor(l, vars)
+          }
+    }).map { ty => (ty, env) }
+  }
 
   def typecheck(expr: Expr[Name], env: Environment): Either[List[TypeError], (Expr[NameWithType], Environment)] = expr match {
     case int @ LiteralInt(_, _) =>
@@ -27,8 +43,27 @@ object Typechecker {
       env.get(name).map { typ =>
         Right((ref.copy(meta = NameWithType(ref.meta, typ)), env))
       }.getOrElse(TypeError.singleton(s"Reference to undefined symbol: $name"))
-    case If(_, _, _, _) =>
-      ???
+    case If(cond, thenExpr, elseExpr, nm) =>
+      for {
+        // Typecheck the condition
+        r1 <- typecheck(cond, env)
+        (c, _) = r1
+        // Unify it with Boolean
+        _ <- unify(c.meta.typ, Type.Boolean, env)
+
+        // Typecheck the then expression
+        r2 <- typecheck(thenExpr, env)
+        (t, _) = r2
+
+        // Typecheck the else expression
+        r3 <- typecheck(elseExpr, env)
+        (e, _) = r3
+
+        // Unify the then expression and the else expression
+        r4 <- unify(t.meta.typ, e.meta.typ, env)
+        (i, e4) = r4
+
+      } yield (If(c, t, e, NameWithType(nm, i)), e4)
   }
 
   def typecheck(decl: TopLevelDeclaration[Name], env: Environment): Either[List[TypeError], (TopLevelDeclaration[NameWithType], Environment)] = decl match {

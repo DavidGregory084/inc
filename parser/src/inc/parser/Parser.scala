@@ -7,6 +7,15 @@ import inc.common._
 import fastparse.all._
 
 object Parser {
+  val ReservedWords = P(
+    "module" |
+    "import" |
+    "let" |
+    "if" |
+    "then" |
+    "else"
+  )
+
   // Whitespace
   val ws = P(CharsWhile(_ == ' ', min = 0))
   val allWs = P(CharsWhile(Character.isWhitespace, min = 0))
@@ -62,7 +71,7 @@ object Parser {
       literalUnit
 
   // Identifiers
-  val identifier = P((CharPred(Character.isJavaIdentifierStart).! ~ CharsWhile(Character.isJavaIdentifierPart).rep.!).map {
+  val identifier = !ReservedWords ~ P((CharPred(Character.isJavaIdentifierStart).! ~ CharsWhile(Character.isJavaIdentifierPart).rep.!).map {
     case (first, rest) => first + rest
   })
 
@@ -71,7 +80,16 @@ object Parser {
 
   val reference = identifier.map(id => Reference(id, ()))
 
-  val expression = literal | reference
+  val ifExpr = P(
+    "if" ~/ allWs ~ expression ~ allWs ~
+      "then" ~ allWs ~ expression ~ allWs ~
+      "else" ~ allWs ~ expression ~ ws
+  ).map {
+    case (cond, thenExpr, elseExpr) =>
+      If(cond, thenExpr, elseExpr, ())
+  }
+
+  val expression: Parser[Expr[Unit]] = literal | reference | ifExpr
 
   val letDeclaration = P(
     "let" ~/ allWs ~ identifier ~ allWs ~ "=" ~ allWs ~

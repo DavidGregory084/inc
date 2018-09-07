@@ -92,8 +92,8 @@ object Codegen {
       }.leftFlatMap { _ =>
         CodegenError.singleton(s"Class ${name} could not be found")
       }
-    case TypeVariable(_, _) =>
-      CodegenError.singleton("A type variable was found in code generation!")
+    // case TypeVariable(_, _) =>
+    //   CodegenError.singleton("A type variable was found in code generation!")
   }
 
   def newStaticField[A](classWriter: ClassWriter)(fieldName: String, fieldDescriptor: String, initialValue: A): Either[List[CodegenError], Unit] =
@@ -105,6 +105,45 @@ object Codegen {
       staticInitializer.visitFieldInsn(GETSTATIC, referencedClass, referencedField, fieldDescriptor)
       staticInitializer.visitFieldInsn(PUTSTATIC, enclosingClass, fieldName, fieldDescriptor)
     }
+
+  def newExpr(className: String, methodVisitor: MethodVisitor)(expr: Expr[NameWithType]): Either[List[CodegenError], Unit] = expr match {
+    case LiteralInt(i, _) =>
+      Right(methodVisitor.visitLdcInsn(i))
+    case LiteralLong(l, _) =>
+      Right(methodVisitor.visitLdcInsn(l))
+    case LiteralFloat(f, _) =>
+      Right(methodVisitor.visitLdcInsn(f))
+    case LiteralDouble(d, _) =>
+      Right(methodVisitor.visitLdcInsn(d))
+    case LiteralBoolean(b, _) =>
+      Right(methodVisitor.visitLdcInsn(b))
+    case LiteralChar(c, _) =>
+      Right(methodVisitor.visitLdcInsn(c))
+    case LiteralString(s, _) =>
+      Right(methodVisitor.visitLdcInsn(s))
+    case LiteralUnit(_) =>
+      val unitClass = classOf[IncUnit]
+      val descriptor = AsmType.getDescriptor(unitClass)
+      val internalName = AsmType.getInternalName(unitClass)
+      Right(methodVisitor.visitFieldInsn(GETSTATIC, internalName, "instance", descriptor))
+    case If(cond, thenExpr, elseExpr, _) =>
+      val trueLabel = new Label
+      val falseLabel = new Label
+      for {
+        _ <- newExpr(className, methodVisitor)(cond)
+        _ = methodVisitor.visitJumpInsn(IFEQ, falseLabel)
+        _ <- newExpr(className, methodVisitor)(thenExpr)
+        _ = methodVisitor.visitJumpInsn(GOTO, trueLabel)
+        _ = methodVisitor.visitLabel(falseLabel)
+        _ <- newExpr(className, methodVisitor)(elseExpr)
+        _ = methodVisitor.visitLabel(trueLabel)
+      } yield ()
+    case Reference(ref, nameWithType) =>
+      descriptorFor(nameWithType.typ).map { descriptor =>
+        val internalName = getInternalName(nameWithType.name, enclosingClass = className)
+        methodVisitor.visitFieldInsn(GETSTATIC, internalName, ref, descriptor)
+      }
+  }
 
   def newTopLevelLet(className: String, classWriter: ClassWriter, staticInitializer: MethodVisitor, let: Let[NameWithType]): Either[List[CodegenError], Unit] = {
     let.binding match {
@@ -132,8 +171,12 @@ object Codegen {
           val internalName = getInternalName(nameWithType.name, enclosingClass = className)
           newStaticFieldFrom(classWriter, className, staticInitializer)(let.name, descriptor, internalName, ref)
         }
-      case If(_, _, _, _) =>
-        ???
+      case ifExpr @ If(_, thenExpr, _, _) =>
+        descriptorFor(thenExpr.meta.typ).map { descriptor =>
+          classWriter.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, let.name, descriptor, null, null).visitEnd()
+          newExpr(className, staticInitializer)(ifExpr)
+          staticInitializer.visitFieldInsn(PUTSTATIC, className, let.name, descriptor)
+        }
     }
   }
 

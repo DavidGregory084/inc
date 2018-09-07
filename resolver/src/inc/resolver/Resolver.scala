@@ -27,8 +27,15 @@ object Resolver {
       tbl.get(name).map { nm =>
         Right((ref.copy(meta = nm), tbl))
       }.getOrElse(ResolverError.singleton(s"Reference to undefined symbol: $name"))
-    case If(_, _, _, _) =>
-      ???
+    case If(cond, thenExpr, elseExpr, _) =>
+      for {
+        r1 <- resolve(cond, tbl)
+        (c, t1) = r1
+        r2 <- resolve(thenExpr, t1)
+        (t, t2) = r2
+        r3 <- resolve(elseExpr, t2)
+        (e, t3) = r3
+      } yield (If(c, t, e, NoName), t3)
   }
 
   def resolve(decl: TopLevelDeclaration[Unit], tbl: SymbolTable): Either[List[ResolverError], (TopLevelDeclaration[Name], SymbolTable)] = decl match {

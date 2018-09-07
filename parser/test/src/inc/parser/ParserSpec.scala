@@ -249,4 +249,66 @@ class ParserSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChec
       |module Test.Parser.Double { import Test.Import.{ foo, bar, Baz }; let double = 3.142; let double2 = 0.0001 }
       |""".trim.stripMargin) shouldBe mod2
   }
+
+  it should "parse if expressions" in {
+    val mod = Module(List.empty, "Integer", List.empty, List(Let("integer", If(LiteralBoolean(true, ()), LiteralInt(42, ()), LiteralInt(41, ()), ()), ())), ())
+    val mod2 = Module(List.empty, "Integer", List.empty, List(Let("integer", If(LiteralBoolean(true, ()), LiteralInt(42, ()), LiteralInt(41, ()), ()), ()), Let("integer2", If(LiteralBoolean(true, ()), LiteralInt(0, ()), LiteralInt(1, ()), ()), ())), ())
+
+    parseProgram("module Integer { let integer = if true then 42 else 41 }") shouldBe mod
+
+    parseProgram("module  Integer  {  let  integer  =  if true then 42 else 41  } ") shouldBe mod
+
+    parseProgram(
+      """
+      |module Integer {
+      |   let integer = if true then 42 else 41
+      |}
+      |""".trim.stripMargin) shouldBe mod
+
+    parseProgram(
+      """
+      |module Integer {
+      |   let integer =
+      |     if true
+      |       then 42
+      |       else 41
+      |}
+      |""".trim.stripMargin) shouldBe mod
+
+    parseProgram(
+      """
+      |module Integer
+      |{
+      |   let integer =
+      |   {
+      |     if true then
+      |       42
+      |     else 41
+      |   }
+      |}
+      |""".trim.stripMargin) shouldBe mod
+
+    parseProgram(
+      """
+      |module Integer {
+      |   let integer =
+      |     if true then
+      |       42
+      |     else
+      |       41
+      |}
+      |""".trim.stripMargin) shouldBe mod
+
+    parseProgram(
+      """
+      |module Integer {
+      |   let integer = { if true then 42 else 41 }
+      |   let integer2 = {
+      |      if true
+      |    then 0
+      |  else 1
+      |   }
+      |}
+      |""".trim.stripMargin) shouldBe mod2
+  }
 }

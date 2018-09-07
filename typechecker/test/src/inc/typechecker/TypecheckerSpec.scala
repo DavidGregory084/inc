@@ -60,4 +60,38 @@ class TypecheckerSpec extends FlatSpec with Matchers {
     val result = Typechecker.typecheck(mod)
     result shouldBe 'left
   }
+
+  it should "ensure the expression provided to if is a Boolean" in {
+    val mod1 = mkModule("If", List(
+      Let("integer", If(LiteralBoolean(true, NoName), LiteralInt(42, NoName), LiteralInt(41, NoName), NoName), LocalName("integer"))
+    ))
+
+    val result1 = Typechecker.typecheck(mod1)
+    result1 shouldBe 'right
+
+    val mod2 = mkModule("If", List(
+      Let("integer", If(LiteralInt(1, NoName), LiteralInt(42, NoName), LiteralInt(41, NoName), NoName), LocalName("integer"))
+    ))
+
+    val result2 = Typechecker.typecheck(mod2)
+    result2 shouldBe 'left
+    result2.left.get.head shouldBe TypeError("Cannot unify Int with Boolean")
+  }
+
+  it should "ensure the expressions provided to both branches of an if are compatible" in {
+    val mod1 = mkModule("If", List(
+      Let("integer", If(LiteralBoolean(true, NoName), LiteralInt(42, NoName), LiteralInt(41, NoName), NoName), LocalName("integer"))
+    ))
+
+    val result1 = Typechecker.typecheck(mod1)
+    result1 shouldBe 'right
+
+    val mod2 = mkModule("If", List(
+      Let("integer", If(LiteralBoolean(true, NoName), LiteralInt(42, NoName), LiteralDouble(41.0, NoName), NoName), LocalName("integer"))
+    ))
+
+    val result2 = Typechecker.typecheck(mod2)
+    result2 shouldBe 'left
+    result2.left.get.head shouldBe TypeError("Cannot unify Int with Double")
+  }
 }
