@@ -110,6 +110,12 @@ message If {
   NameWithType nameWithType = 4;
 }
 
+message Lambda {
+  string variable = 1;
+  Expr body = 2;
+  NameWithType namewithtype = 3;
+}
+
 message Expr {
   oneof exprType {
     Reference ref = 2;
@@ -122,6 +128,7 @@ message Expr {
     LiteralChar char = 9;
     LiteralUnit unit = 10;
     If if = 11;
+    Lambda lambda = 12;
   }
   NameWithType nameWithType = 20;
 }

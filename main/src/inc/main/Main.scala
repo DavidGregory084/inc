@@ -138,6 +138,8 @@ object Main {
 
       mod <- runPhase[Module[Unit]]("parser", config, _.printParser, Parser.parse(prog))
 
+      _ = println(NL + mod)
+
       importedMods = readImports(mod.imports, new URLClassLoader(urls))
 
       resolved <- runPhase[Module[Name]]("resolver", config, _.printResolver, Resolver.resolve(mod, importedMods))
