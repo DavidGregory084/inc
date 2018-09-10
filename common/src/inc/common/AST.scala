@@ -84,9 +84,9 @@ sealed trait Expr[A] extends Tree[A] {
     case If(cond, thenExpr, elseExpr, meta) =>
       val nameWithType = Some(eqv(meta).toProto)
       proto.Expr(nameWithType, proto.Expr.ExprType.If(proto.If(Some(cond.toProto), Some(thenExpr.toProto), Some(elseExpr.toProto), nameWithType)))
-    case Lambda(variable, body, meta) =>
-      val nameWithType = Some(eqv(meta).toProto)
-      proto.Expr(nameWithType, proto.Expr.ExprType.Lambda(proto.Lambda(variable, Some(body.toProto))))
+    // case Lambda(variable, body, meta) =>
+    //   val nameWithType = Some(eqv(meta).toProto)
+    //   proto.Expr(nameWithType, proto.Expr.ExprType.Lambda(proto.Lambda(variable, Some(body.toProto))))
   }
 }
 object Expr {
@@ -116,12 +116,12 @@ object Expr {
         Expr.fromProto(elseExpr.getOrElse(throw new Exception("No else expression in protobuf"))),
         NameWithType.fromProto(nameWithType.getOrElse(throw new Exception("No type in protobuf")))
       )
-    case proto.Expr.ExprType.Lambda(proto.Lambda(variable, body, nameWithType)) =>
-      Lambda(
-        variable,
-        Expr.fromProto(body.getOrElse(throw new Exception("No lambda body in protobuf"))),
-        NameWithType.fromProto(nameWithType.getOrElse(throw new Exception("No type in protobuf")))
-      )
+    // case proto.Expr.ExprType.Lambda(proto.Lambda(variable, body, nameWithType)) =>
+    //   Lambda(
+    //     variable,
+    //     Expr.fromProto(body.getOrElse(throw new Exception("No lambda body in protobuf"))),
+    //     NameWithType.fromProto(nameWithType.getOrElse(throw new Exception("No type in protobuf")))
+    //   )
     case proto.Expr.ExprType.Empty =>
       throw new Exception("Empty Expr in protobuf")
   }
@@ -134,11 +134,11 @@ final case class If[A](
   meta: A
 ) extends Expr[A]
 
-final case class Lambda[A](
-  variable: String,
-  body: Expr[A],
-  meta: A
-) extends Expr[A]
+// final case class Lambda[A](
+//   variable: String,
+//   body: Expr[A],
+//   meta: A
+// ) extends Expr[A]
 
 sealed trait Literal[A] extends Expr[A]
 

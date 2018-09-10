@@ -36,11 +36,11 @@ object Resolver {
         r3 <- resolve(elseExpr, t2)
         (e, t3) = r3
       } yield (If(c, t, e, NoName), t3)
-    case Lambda(variable, body, _) =>
-      for {
-        r <- resolve(body, tbl)
-        (b, t1) = r
-      } yield (Lambda(variable, b, NoName), t1 + (variable -> LocalName(variable)))
+    // case Lambda(variable, body, _) =>
+    //   for {
+    //     r <- resolve(body, tbl)
+    //     (b, t1) = r
+    //   } yield (Lambda(variable, b, NoName), t1 + (variable -> LocalName(variable)))
   }
 
   def resolve(decl: TopLevelDeclaration[Unit], tbl: SymbolTable): Either[List[ResolverError], (TopLevelDeclaration[Name], SymbolTable)] = decl match {

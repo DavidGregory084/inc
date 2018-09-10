@@ -64,12 +64,12 @@ object Typechecker {
         (i, e4) = r4
 
       } yield (If(c, t, e, NameWithType(nm, i)), e4)
-    case Lambda(variable, body, name) =>
-      for {
-        // Typecheck the body with the variable in scope
-        r <- typecheck(cond, env)
-        (b, e) = r
-      } yield (Lambda(), e)
+    // case Lambda(variable, body, name) =>
+    //   for {
+    //     // Typecheck the body with the variable in scope
+    //     r <- typecheck(cond, env)
+    //     (b, e) = r
+    //   } yield (Lambda(), e)
   }
 
   def typecheck(decl: TopLevelDeclaration[Name], env: Environment): Either[List[TypeError], (TopLevelDeclaration[NameWithType], Environment)] = decl match {

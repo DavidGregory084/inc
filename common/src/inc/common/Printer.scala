@@ -41,8 +41,8 @@ object Printer {
         Doc.text("if") & expr(c) /
           (Doc.text("then") & expr(t)).nested(2) /
           (Doc.text("else") & expr(e)).nested(2)
-      case Lambda(v, b, _) =>
-        Doc.text(v) & Doc.text("->") & expr(b).nested(2)
+      // case Lambda(v, b, _) =>
+      //   Doc.text(v) & Doc.text("->") & expr(b).nested(2)
     }
 
     val decls = Doc.intercalate(Doc.char(';') + Doc.line, declarations.map {
