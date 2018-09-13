@@ -12,9 +12,9 @@ message Import {
   Symbols symbols = 3;
 }
 
-// message TypeVariable {
-//   int32 id = 1;
-// }
+message TypeVariable {
+  int32 id = 1;
+}
 
 message TypeConstructor {
   string name = 1;
@@ -23,9 +23,14 @@ message TypeConstructor {
 
 message Type {
   oneof typeType {
-    // TypeVariable tyVar = 1;
+    TypeVariable tyVar = 1;
     TypeConstructor tyCon = 2;
   }
+}
+
+message TypeScheme {
+  repeated TypeVariable bound = 1;
+  Type type = 2;
 }
 
 message NoName {}
@@ -56,7 +61,7 @@ message Name {
 
 message NameWithType {
   Name name = 1;
-  Type type = 2;
+  TypeScheme type = 2;
 }
 
 message Reference {
@@ -110,11 +115,11 @@ message If {
   NameWithType nameWithType = 4;
 }
 
-// message Lambda {
-//   string variable = 1;
-//   Expr body = 2;
-//   NameWithType namewithtype = 3;
-// }
+message Lambda {
+  string variable = 1;
+  Expr body = 2;
+  NameWithType namewithtype = 3;
+}
 
 message Expr {
   oneof exprType {
@@ -128,7 +133,7 @@ message Expr {
     LiteralChar char = 9;
     LiteralUnit unit = 10;
     If if = 11;
-    // Lambda lambda = 12;
+    Lambda lambda = 12;
   }
   NameWithType nameWithType = 20;
 }

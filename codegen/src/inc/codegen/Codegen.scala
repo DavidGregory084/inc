@@ -59,19 +59,52 @@ object Codegen {
     }
   }
 
+  def returnInstructionFor(methodDescriptor: String) = {
+    AsmType.getReturnType(methodDescriptor) match {
+      case AsmType.VOID_TYPE =>
+        RETURN
+      case AsmType.BOOLEAN_TYPE | AsmType.CHAR_TYPE | AsmType.BYTE_TYPE | AsmType.SHORT_TYPE | AsmType.INT_TYPE =>
+        IRETURN
+      case AsmType.LONG_TYPE =>
+        LRETURN
+      case AsmType.FLOAT_TYPE =>
+        FRETURN
+      case AsmType.DOUBLE_TYPE =>
+        DRETURN
+      case _ =>
+        ARETURN
+    }
+  }
+
+  def loadInstructionFor(asmType: AsmType) = asmType match {
+    case AsmType.VOID_TYPE =>
+      throw new Exception("Attempt to return void")
+    case AsmType.BOOLEAN_TYPE | AsmType.CHAR_TYPE | AsmType.BYTE_TYPE | AsmType.SHORT_TYPE | AsmType.INT_TYPE =>
+      ILOAD
+    case AsmType.LONG_TYPE =>
+      LLOAD
+    case AsmType.FLOAT_TYPE =>
+      FLOAD
+    case AsmType.DOUBLE_TYPE =>
+      DLOAD
+    case _ =>
+      println("Unknown ASM type "+asmType)
+      ALOAD
+  }
+
   def withMethodVisitor(classWriter: ClassWriter, methodName: String, methodDescriptor: String)(f: MethodVisitor => Either[List[CodegenError], Unit]): Either[List[CodegenError], Unit] = {
     val methodVisitor = classWriter.visitMethod(ACC_STATIC, methodName, methodDescriptor, null, null)
 
     methodVisitor.visitCode()
 
     f(methodVisitor).map { _ =>
-      methodVisitor.visitInsn(RETURN)
+      methodVisitor.visitInsn(returnInstructionFor(methodDescriptor))
       methodVisitor.visitMaxs(0, 0)
       methodVisitor.visitEnd()
     }
   }
 
-  def descriptorFor(typ: Type): Either[List[CodegenError], String] = typ match {
+  def descriptorFor(typ: TypeScheme): Either[List[CodegenError], String] = typ.typ match {
     case TypeConstructor("Int", _) =>
       Right(AsmType.INT_TYPE.getDescriptor)
     case TypeConstructor("Long", _) =>
@@ -92,8 +125,33 @@ object Codegen {
       }.leftFlatMap { _ =>
         CodegenError.singleton(s"Class ${name} could not be found")
       }
-    // case TypeVariable(_, _) =>
-    //   CodegenError.singleton("A type variable was found in code generation!")
+    case TypeVariable(_) =>
+      Right(AsmType.getDescriptor(classOf[Object]))
+  }
+
+  def asmTypeOf(typ: Type): Either[List[CodegenError], AsmType] = typ match {
+    case TypeConstructor("Int", _) =>
+      Right(AsmType.INT_TYPE)
+    case TypeConstructor("Long", _) =>
+      Right(AsmType.LONG_TYPE)
+    case TypeConstructor("Float", _) =>
+      Right(AsmType.FLOAT_TYPE)
+    case TypeConstructor("Double", _) =>
+      Right(AsmType.DOUBLE_TYPE)
+    case TypeConstructor("Boolean", _) =>
+      Right(AsmType.BOOLEAN_TYPE)
+    case TypeConstructor("Char", _) =>
+      Right(AsmType.CHAR_TYPE)
+    case TypeConstructor("String", _) =>
+      Right(AsmType.getType(classOf[String]))
+    case TypeConstructor(name, _) =>
+      Either.catchOnly[ClassNotFoundException] {
+        AsmType.getType(Class.forName(name))
+      }.leftFlatMap { _ =>
+        CodegenError.singleton(s"Class ${name} could not be found")
+      }
+    case TypeVariable(_) =>
+      Right(AsmType.getType(classOf[Object]))
   }
 
   def newStaticField[A](classWriter: ClassWriter)(fieldName: String, fieldDescriptor: String, initialValue: A): Either[List[CodegenError], Unit] =
@@ -139,10 +197,23 @@ object Codegen {
         _ = methodVisitor.visitLabel(trueLabel)
       } yield ()
     case Reference(ref, nameWithType) =>
-      descriptorFor(nameWithType.typ).map { descriptor =>
-        val internalName = getInternalName(nameWithType.name, enclosingClass = className)
-        methodVisitor.visitFieldInsn(GETSTATIC, internalName, ref, descriptor)
+      for {
+        descriptor <- descriptorFor(nameWithType.typ)
+        asmType <- asmTypeOf(nameWithType.typ.typ)
+        loadIns = loadInstructionFor(asmType)
+        internalName = getInternalName(nameWithType.name, className)
+      } yield {
+        nameWithType.name match {
+          case MemberName(_, _, _) =>
+            methodVisitor.visitFieldInsn(GETSTATIC, internalName, ref, descriptor)
+          case LocalName(_) =>
+            methodVisitor.visitVarInsn(loadIns, 0)
+          case NoName | ModuleName(_, _) =>
+            throw new Exception("wtf")
+        }
       }
+    case Lambda(_, _, _) =>
+      ???
   }
 
   def newTopLevelLet(className: String, classWriter: ClassWriter, staticInitializer: MethodVisitor, let: Let[NameWithType]): Either[List[CodegenError], Unit] = {
@@ -171,11 +242,25 @@ object Codegen {
           val internalName = getInternalName(nameWithType.name, enclosingClass = className)
           newStaticFieldFrom(classWriter, className, staticInitializer)(let.name, descriptor, internalName, ref)
         }
-      case ifExpr @ If(_, thenExpr, _, _) =>
-        descriptorFor(thenExpr.meta.typ).map { descriptor =>
+      case ifExpr @ If(_, _, _, nameWithType) =>
+        descriptorFor(nameWithType.typ).map { descriptor =>
           classWriter.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, let.name, descriptor, null, null).visitEnd()
           newExpr(className, staticInitializer)(ifExpr)
           staticInitializer.visitFieldInsn(PUTSTATIC, className, let.name, descriptor)
+        }
+      case Lambda(variable, body, nameWithType) =>
+        val TypeScheme(_, TypeConstructor("->", List(from, to))) = nameWithType.typ
+
+        val descriptorFor = for {
+          arg <- asmTypeOf(from)
+          ret <- asmTypeOf(to)
+        } yield AsmType.getMethodDescriptor(ret, arg)
+
+        descriptorFor.flatMap { descriptor =>
+          withMethodVisitor(classWriter, let.name, descriptor) { methodVisitor =>
+            methodVisitor.visitParameter(variable, ACC_FINAL)
+            newExpr(className, methodVisitor)(body)
+          }
         }
     }
   }

@@ -5,81 +5,139 @@ import cats.implicits._
 import inc.common._
 
 object Typechecker {
-  type Environment = Map[String, Type]
+  type Environment = Map[String, TypeScheme]
+  type Substitution = Map[TypeVariable, Type]
 
-  def unify(leftExpr: Type, rightExpr: Type, env: Environment): Either[List[TypeError], (Type, Environment)] = {
-    ((leftExpr, rightExpr) match {
-      case (TypeConstructor(l, lvars), TypeConstructor(r, rvars)) =>
-        if (l != r)
-          TypeError.singleton(s"Cannot unify $l with $r")
-        else
-          lvars.zip(rvars).traverse {
-            case (ll, rr) =>
-              unify(ll, rr, env).map(_._1)
-          }.map { vars =>
-            TypeConstructor(l, vars)
-          }
-    }).map { ty => (ty, env) }
+  def trace(name: String, typ: Type) = {
+    println(name + ": " + Printer.print(typ))
   }
 
-  def typecheck(expr: Expr[Name], env: Environment): Either[List[TypeError], (Expr[NameWithType], Environment)] = expr match {
+  def trace(name: String, typ: TypeScheme) = {
+    println(name + ": " + Printer.print(typ))
+  }
+
+  def bind(tyVar: TypeVariable, typ: Type): Either[List[TypeError], Substitution] = typ match {
+    case t @ TypeVariable(_) if tyVar == t =>
+      Right(Map.empty)
+    case t if tyVar.occursIn(t) =>
+      TypeError.singleton("Attempt to construct infinite type")
+    case _ =>
+      Right(Map(tyVar -> typ))
+  }
+
+  def chainSubstitutions(ss: List[Substitution]): Substitution =
+    ss.foldLeft(Map.empty: Substitution)(chainSubstitution)
+
+  def chainSubstitutions(ss: Substitution*): Substitution =
+    chainSubstitutions(ss.toList)
+
+  def substitute(env: Environment, subst: Substitution): Environment =
+    env.mapValues(_.substitute(subst))
+
+  def chainSubstitution(s1: Substitution, s2: Substitution): Substitution =
+    s2 ++ s1.mapValues(_.substitute(s2))
+
+  def unify(left: Type, right: Type): Either[List[TypeError], Substitution] = {
+    (left, right) match {
+      case (TypeConstructor(l, lvars), TypeConstructor(r, rvars)) if l == r =>
+        lvars.zip(rvars).traverse {
+          case (ll, rr) =>
+            unify(ll, rr)
+        }.map(chainSubstitutions)
+       case (tyVar @ TypeVariable(_), typ) =>
+         bind(tyVar, typ)
+       case (typ, tyVar @ TypeVariable(_)) =>
+         bind(tyVar, typ)
+      case (l, r) =>
+        val ll = Printer.print(l)
+        val rr = Printer.print(r)
+        TypeError.singleton(s"Cannot unify $ll with $rr")
+    }
+  }
+
+  def typecheck(expr: Expr[Name], env: Environment): Either[List[TypeError], (Expr[NameWithType], Substitution)] = expr match {
     case int @ LiteralInt(_, _) =>
-      Right((int.copy(meta = NameWithType(int.meta, Type.Int)), env))
+      Right((int.copy(meta = NameWithType(int.meta, TypeScheme(Type.Int))), Map.empty))
     case long @ LiteralLong(_, _) =>
-      Right((long.copy(meta = NameWithType(long.meta, Type.Long)), env))
+      Right((long.copy(meta = NameWithType(long.meta, TypeScheme(Type.Long))), Map.empty))
     case float @ LiteralFloat(_, _) =>
-      Right((float.copy(meta = NameWithType(float.meta, Type.Float)), env))
+      Right((float.copy(meta = NameWithType(float.meta, TypeScheme(Type.Float))), Map.empty))
     case double @ LiteralDouble(_, _) =>
-      Right((double.copy(meta = NameWithType(double.meta, Type.Double)), env))
+      Right((double.copy(meta = NameWithType(double.meta, TypeScheme(Type.Double))), Map.empty))
     case bool @ LiteralBoolean(_, _) =>
-      Right((bool.copy(meta = NameWithType(bool.meta, Type.Boolean)), env))
+      Right((bool.copy(meta = NameWithType(bool.meta, TypeScheme(Type.Boolean))), Map.empty))
     case char @ LiteralChar(_, _) =>
-      Right((char.copy(meta = NameWithType(char.meta, Type.Char)), env))
+      Right((char.copy(meta = NameWithType(char.meta, TypeScheme(Type.Char))), Map.empty))
     case str @ LiteralString(_, _) =>
-      Right((str.copy(meta = NameWithType(str.meta, Type.String)), env))
+      Right((str.copy(meta = NameWithType(str.meta, TypeScheme(Type.String))), Map.empty))
     case unit @ LiteralUnit(_) =>
-      Right((unit.copy(meta = NameWithType(unit.meta, Type.Unit)), env))
+      Right((unit.copy(meta = NameWithType(unit.meta, TypeScheme(Type.Unit))), Map.empty))
     case ref @ Reference(name, _)  =>
       env.get(name).map { typ =>
-        Right((ref.copy(meta = NameWithType(ref.meta, typ)), env))
+        trace(s"reference to $name", typ)
+        Right((ref.copy(meta = NameWithType(ref.meta, typ)), Map.empty: Substitution))
       }.getOrElse(TypeError.singleton(s"Reference to undefined symbol: $name"))
     case If(cond, thenExpr, elseExpr, nm) =>
       for {
         // Typecheck the condition
         r1 <- typecheck(cond, env)
-        (c, _) = r1
-        // Unify it with Boolean
-        _ <- unify(c.meta.typ, Type.Boolean, env)
+        (c, s1) = r1
+
+        _ = trace("if condition", c.meta.typ)
 
         // Typecheck the then expression
         r2 <- typecheck(thenExpr, env)
-        (t, _) = r2
+        (t, s2) = r2
+
+        _ = trace("then expression", t.meta.typ)
 
         // Typecheck the else expression
         r3 <- typecheck(elseExpr, env)
-        (e, _) = r3
+        (e, s3) = r3
+
+        _ = trace("else expression", t.meta.typ)
+
+        // Unify the condition with Boolean
+        s4 <- unify(c.meta.typ.instantiate, Type.Boolean)
 
         // Unify the then expression and the else expression
-        r4 <- unify(t.meta.typ, e.meta.typ, env)
-        (i, e4) = r4
+        s5 <- unify(t.meta.typ.instantiate, e.meta.typ.instantiate)
 
-      } yield (If(c, t, e, NameWithType(nm, i)), e4)
-    // case Lambda(variable, body, name) =>
-    //   for {
-    //     // Typecheck the body with the variable in scope
-    //     r <- typecheck(cond, env)
-    //     (b, e) = r
-    //   } yield (Lambda(), e)
+        // Apply the substitution
+        tp = t.meta.typ.substitute(s5)
+
+        _ = trace("if expression", tp.instantiate)
+
+      } yield (If(c, t, e, NameWithType(nm, tp)), chainSubstitutions(s1, s2, s3, s4, s5))
+    case Lambda(variable, body, nm) =>
+      val tv = TypeVariable()
+
+      trace(variable, tv)
+
+      for {
+        // Typecheck the body with the variable in scope
+        r <- typecheck(body, env + (variable -> TypeScheme(tv)))
+        (b, s) = r
+
+        _ = trace("lambda body", b.meta.typ)
+
+        // Create a new function type
+        tp = Type.Function(tv, b.meta.typ.instantiate)
+
+        // Apply the substitutions from the body
+        ts = TypeScheme.generalize(env, tp.substitute(s))
+
+        _ = trace("lambda expression", ts)
+
+      } yield (Lambda(variable, b, NameWithType(nm, ts)), s)
   }
 
   def typecheck(decl: TopLevelDeclaration[Name], env: Environment): Either[List[TypeError], (TopLevelDeclaration[NameWithType], Environment)] = decl match {
     case Let(name, expr, _) =>
       typecheck(expr, env).flatMap {
-        case (checkedExpr, updatedEnv) =>
-          if (updatedEnv.contains(name))
-            TypeError.singleton(s"Symbol $name is already defined")
-          else
-            Right((Let(name, checkedExpr, NameWithType(decl.meta, checkedExpr.meta.typ)), updatedEnv.updated(name, checkedExpr.meta.typ)))
+        case (checkedExpr, subst) =>
+          trace(name, checkedExpr.meta.typ)
+          Right((Let(name, checkedExpr, NameWithType(decl.meta, checkedExpr.meta.typ)), substitute(env, subst).updated(name, checkedExpr.meta.typ)))
       }
   }
 
@@ -88,7 +146,7 @@ object Typechecker {
     importedMods: Map[(List[String], String), Module[NameWithType]] = Map.empty
   ): Either[List[TypeError], Module[NameWithType]] = module match {
     case Module(_, _, imports, decls, _) =>
-      val initialEnv = imports.foldLeft(Map.empty[String, Type]) {
+      val initialEnv = imports.foldLeft(Map.empty[String, TypeScheme]) {
         case (env, imprt) =>
           val (pkg, nm, syms) = imprt match {
             case ImportModule(pkg, nm) =>
@@ -128,7 +186,7 @@ object Typechecker {
 
       typecheckedDecls.map {
         case (checked, _) =>
-          module.copy(declarations = checked.toList, meta = NameWithType(module.meta, Type.Module))
+          module.copy(declarations = checked.toList, meta = NameWithType(module.meta, TypeScheme(Type.Module)))
       }
   }
 }

@@ -89,7 +89,15 @@ object Parser {
       If(cond, thenExpr, elseExpr, ())
   }
 
-  val expression: Parser[Expr[Unit]] = literal | reference | ifExpr
+  val lambda = P(
+    identifier ~ allWs ~ "->" ~/ allWs ~
+      expression
+  ).map {
+    case (variable, expression) =>
+      Lambda(variable, expression, ())
+  }
+
+  val expression: Parser[Expr[Unit]] = literal | ifExpr | lambda | reference
 
   val letDeclaration = P(
     "let" ~/ allWs ~ identifier ~ allWs ~ "=" ~ allWs ~

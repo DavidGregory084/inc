@@ -36,22 +36,23 @@ object Resolver {
         r3 <- resolve(elseExpr, t2)
         (e, t3) = r3
       } yield (If(c, t, e, NoName), t3)
-    // case Lambda(variable, body, _) =>
-    //   for {
-    //     r <- resolve(body, tbl)
-    //     (b, t1) = r
-    //   } yield (Lambda(variable, b, NoName), t1 + (variable -> LocalName(variable)))
+    case Lambda(variable, body, _) =>
+      for {
+        r <- resolve(body, tbl + (variable -> LocalName(variable)))
+        (b, t1) = r
+      } yield (Lambda(variable, b, NoName), tbl)
   }
 
-  def resolve(decl: TopLevelDeclaration[Unit], tbl: SymbolTable): Either[List[ResolverError], (TopLevelDeclaration[Name], SymbolTable)] = decl match {
+  def resolve(mod: Module[Unit], decl: TopLevelDeclaration[Unit], tbl: SymbolTable): Either[List[ResolverError], (TopLevelDeclaration[Name], SymbolTable)] = decl match {
     case Let(name, expr, _) =>
-      val localName = LocalName(name)
+      val memberName = MemberName(mod.pkg, mod.name, name)
+
       resolve(expr, tbl).flatMap {
         case (resolvedExpr, updatedTbl) =>
           if (updatedTbl.contains(name))
             ResolverError.singleton(s"Symbol $name is already defined as ${updatedTbl(name)}")
           else
-            Right((Let(name, resolvedExpr, localName), updatedTbl.updated(name, localName)))
+            Right((Let(name, resolvedExpr, memberName), updatedTbl.updated(name, memberName)))
       }
   }
 
@@ -93,7 +94,7 @@ object Resolver {
           for {
             r <- resSoFar
             (resolvedSoFar, tblSoFar) = r
-            c <- resolve(nextDecl, tblSoFar)
+            c <- resolve(module, nextDecl, tblSoFar)
             (resolvedDecl, updatedTbl) = c
           } yield (resolvedSoFar :+ resolvedDecl, updatedTbl)
       }

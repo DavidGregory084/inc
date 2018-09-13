@@ -59,6 +59,7 @@ trait ScalaSettingsModule extends ScalaModule {
     def ivyDeps = Agg(
       ivy"org.typelevel::cats-core:1.3.0",
       ivy"io.chrisdavenport::cats-scalacheck:0.1.0",
+      ivy"com.lihaoyi::pprint:0.5.3",
       ivy"org.scalatest::scalatest:3.0.5",
       ivy"org.scalacheck::scalacheck:1.14.0"
     )

@@ -106,4 +106,13 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
     val clazz = loadClassFrom(dir, pkg + classFile.nameWithoutExtension)
     getStatic(clazz, fieldName) shouldBe 41
   }
+
+  it should "compile a lambda expression" in withTmpDir { dir =>
+    val prog = s"module Test.Main.Lambda { let x = 42; let y = 41; let lam = bool -> if bool then x else y }"
+    println(prog)
+    val result = Main.compileProgram(dir, prog)
+    result shouldBe 'right
+    val classFile = result.right.get
+    loadClassFrom(dir, "Test.Main." + classFile.nameWithoutExtension)
+  }
 }

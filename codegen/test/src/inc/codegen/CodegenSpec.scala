@@ -20,14 +20,14 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
     } yield (first +: rest).mkString
 
   val literalGens = List(
-    Arbitrary.arbitrary[Int].map(LiteralInt(_, NameWithType(NoName, Type.Int))),
-    Arbitrary.arbitrary[Long].map(LiteralLong(_, NameWithType(NoName, Type.Long))),
-    Arbitrary.arbitrary[Float].map(LiteralFloat(_, NameWithType(NoName, Type.Float))),
-    Arbitrary.arbitrary[Double].map(LiteralDouble(_, NameWithType(NoName, Type.Double))),
-    Arbitrary.arbitrary[Boolean].map(LiteralBoolean(_, NameWithType(NoName, Type.Boolean))),
-    Arbitrary.arbitrary[Char].map(LiteralChar(_, NameWithType(NoName, Type.Char))),
-    Arbitrary.arbitrary[String].map(LiteralString(_, NameWithType(NoName, Type.String))),
-    Gen.const(LiteralUnit(NameWithType(NoName, Type.Unit)))
+    Arbitrary.arbitrary[Int].map(LiteralInt(_, NameWithType(NoName, TypeScheme(Type.Int)))),
+    Arbitrary.arbitrary[Long].map(LiteralLong(_, NameWithType(NoName, TypeScheme(Type.Long)))),
+    Arbitrary.arbitrary[Float].map(LiteralFloat(_, NameWithType(NoName, TypeScheme(Type.Float)))),
+    Arbitrary.arbitrary[Double].map(LiteralDouble(_, NameWithType(NoName, TypeScheme(Type.Double)))),
+    Arbitrary.arbitrary[Boolean].map(LiteralBoolean(_, NameWithType(NoName, TypeScheme(Type.Boolean)))),
+    Arbitrary.arbitrary[Char].map(LiteralChar(_, NameWithType(NoName, TypeScheme(Type.Char)))),
+    Arbitrary.arbitrary[String].map(LiteralString(_, NameWithType(NoName, TypeScheme(Type.String)))),
+    Gen.const(LiteralUnit(NameWithType(NoName, TypeScheme(Type.Unit))))
   )
 
   def referenceGen(decls: Decls) =
@@ -97,7 +97,7 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
       decls <- declsGen
       impLen <- Gen.choose(0, 5)
       imports <- Gen.resize(impLen, Gen.listOfN(impLen, importGen))
-    } yield Module(pkg, name, imports, decls, NameWithType(ModuleName(pkg, name), Type.Module))
+    } yield Module(pkg, name, imports, decls, NameWithType(ModuleName(pkg, name), TypeScheme(Type.Module)))
   }
 
   def mkModule(name: String, decls: List[TopLevelDeclaration[NameWithType]]) = Module(
@@ -105,13 +105,13 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
     name = name,
     imports = List.empty,
     declarations = decls,
-    meta = NameWithType(ModuleName(List("Test", "Codegen"), name), Type.Module))
+    meta = NameWithType(ModuleName(List("Test", "Codegen"), name), TypeScheme(Type.Module)))
 
   "Codegen" should "generate code for a simple module" in {
     val mod = mkModule("Ref", List(
-      Let("int", LiteralInt(42, NameWithType(NoName, Type.Int)), NameWithType(LocalName("int"), Type.Int)),
-      Let("int2", Reference("int", NameWithType(NoName, Type.Int)), NameWithType(LocalName("int2"), Type.Int)),
-      Let("int3", Reference("int2", NameWithType(NoName, Type.Int)), NameWithType(LocalName("int3"), Type.Int))
+      Let("int", LiteralInt(42, NameWithType(NoName, TypeScheme(Type.Int))), NameWithType(LocalName("int"), TypeScheme(Type.Int))),
+      Let("int2", Reference("int", NameWithType(NoName, TypeScheme(Type.Int))), NameWithType(LocalName("int2"), TypeScheme(Type.Int))),
+      Let("int3", Reference("int2", NameWithType(NoName, TypeScheme(Type.Int))), NameWithType(LocalName("int3"), TypeScheme(Type.Int)))
     ))
     val result = Codegen.generate(mod)
 
@@ -154,8 +154,8 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
 
   it should "generate code for a module with a Unit field reference" in {
     val mod = mkModule("Ref", List(
-      Let("unit", LiteralUnit(NameWithType(NoName, Type.Unit)), NameWithType(LocalName("unit"), Type.Unit)),
-      Let("unit2", Reference("unit", NameWithType(NoName, Type.Unit)), NameWithType(LocalName("unit2"), Type.Unit))
+      Let("unit", LiteralUnit(NameWithType(NoName, TypeScheme(Type.Unit))), NameWithType(LocalName("unit"), TypeScheme(Type.Unit))),
+      Let("unit2", Reference("unit", NameWithType(NoName, TypeScheme(Type.Unit))), NameWithType(LocalName("unit2"), TypeScheme(Type.Unit)))
     ))
     val result = Codegen.generate(mod)
     result shouldBe 'right
@@ -163,9 +163,9 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
 
   it should "parse a module definition from a generated class file" in {
     val mod = mkModule("Ref", List(
-      Let("int", LiteralInt(42, NameWithType(NoName, Type.Int)), NameWithType(LocalName("int"), Type.Int)),
-      Let("int2", Reference("int", NameWithType(NoName, Type.Int)), NameWithType(LocalName("int2"), Type.Int)),
-      Let("int3", Reference("int2", NameWithType(NoName, Type.Int)), NameWithType(LocalName("int3"), Type.Int))
+      Let("int", LiteralInt(42, NameWithType(NoName, TypeScheme(Type.Int))), NameWithType(LocalName("int"), TypeScheme(Type.Int))),
+      Let("int2", Reference("int", NameWithType(NoName, TypeScheme(Type.Int))), NameWithType(LocalName("int2"), TypeScheme(Type.Int))),
+      Let("int3", Reference("int2", NameWithType(NoName, TypeScheme(Type.Int))), NameWithType(LocalName("int3"), TypeScheme(Type.Int)))
     ))
 
     val result = Codegen.generate(mod)

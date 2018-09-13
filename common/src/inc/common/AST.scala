@@ -1,5 +1,7 @@
 package inc.common
 
+import java.util.concurrent.atomic.AtomicInteger
+
 abstract class Error(val msg: String) extends Throwable(msg) with Product with Serializable
 
 sealed trait Tree[A] extends Product with Serializable {
@@ -20,9 +22,6 @@ final case class Module[A](
     declarations = declarations.map(_.toProto),
     nameWithType = Some(eqv(meta).toProto)
   )
-
-  override def toString =
-    Printer.print(this).render(80)
 }
 object Module {
   def fromProto(mod: proto.Module): Module[NameWithType] = Module(
@@ -84,9 +83,9 @@ sealed trait Expr[A] extends Tree[A] {
     case If(cond, thenExpr, elseExpr, meta) =>
       val nameWithType = Some(eqv(meta).toProto)
       proto.Expr(nameWithType, proto.Expr.ExprType.If(proto.If(Some(cond.toProto), Some(thenExpr.toProto), Some(elseExpr.toProto), nameWithType)))
-    // case Lambda(variable, body, meta) =>
-    //   val nameWithType = Some(eqv(meta).toProto)
-    //   proto.Expr(nameWithType, proto.Expr.ExprType.Lambda(proto.Lambda(variable, Some(body.toProto))))
+    case Lambda(variable, body, meta) =>
+      val nameWithType = Some(eqv(meta).toProto)
+      proto.Expr(nameWithType, proto.Expr.ExprType.Lambda(proto.Lambda(variable, Some(body.toProto))))
   }
 }
 object Expr {
@@ -116,12 +115,12 @@ object Expr {
         Expr.fromProto(elseExpr.getOrElse(throw new Exception("No else expression in protobuf"))),
         NameWithType.fromProto(nameWithType.getOrElse(throw new Exception("No type in protobuf")))
       )
-    // case proto.Expr.ExprType.Lambda(proto.Lambda(variable, body, nameWithType)) =>
-    //   Lambda(
-    //     variable,
-    //     Expr.fromProto(body.getOrElse(throw new Exception("No lambda body in protobuf"))),
-    //     NameWithType.fromProto(nameWithType.getOrElse(throw new Exception("No type in protobuf")))
-    //   )
+    case proto.Expr.ExprType.Lambda(proto.Lambda(variable, body, nameWithType)) =>
+      Lambda(
+        variable,
+        Expr.fromProto(body.getOrElse(throw new Exception("No lambda body in protobuf"))),
+        NameWithType.fromProto(nameWithType.getOrElse(throw new Exception("No type in protobuf")))
+      )
     case proto.Expr.ExprType.Empty =>
       throw new Exception("Empty Expr in protobuf")
   }
@@ -134,11 +133,11 @@ final case class If[A](
   meta: A
 ) extends Expr[A]
 
-// final case class Lambda[A](
-//   variable: String,
-//   body: Expr[A],
-//   meta: A
-// ) extends Expr[A]
+final case class Lambda[A](
+  variable: String,
+  body: Expr[A],
+  meta: A
+) extends Expr[A]
 
 sealed trait Literal[A] extends Expr[A]
 
@@ -207,12 +206,76 @@ case class LocalName(name: String) extends Name
 case class ModuleName(pkg: List[String], cls: String) extends Name
 case class MemberName(pkg: List[String], cls: String, name: String) extends Name
 
+case class TypeScheme(bound: List[TypeVariable], typ: Type) {
+  def toProto: proto.TypeScheme = proto.TypeScheme(
+    bound.map(tv => proto.TypeVariable(tv.id)),
+    Some(typ.toProto)
+  )
+
+  def freeTypeVariables: Set[TypeVariable] =
+    typ.freeTypeVariables diff bound.toSet
+
+  def substitute(subst: Map[TypeVariable, Type]) =
+    TypeScheme(bound, typ.substitute(subst -- bound))
+
+  def instantiate: Type = {
+    val freshVars = bound.map(_ => TypeVariable())
+    val subst = bound.zip(freshVars).toMap
+
+    val printed = subst.map {
+      case (tyVar, typ) =>
+        s"${Printer.print(tyVar)} |-> ${Printer.print(typ)}"
+    }.mkString(", ")
+
+    println("instantiate: "+printed)
+
+    typ.substitute(subst)
+  }
+}
+object TypeScheme {
+  def apply(typ: Type): TypeScheme = TypeScheme(List.empty, typ)
+
+  def generalize(env: Map[String, TypeScheme], typ: Type): TypeScheme = {
+    val ftvInEnv = env.values.flatMap(_.freeTypeVariables).toSet
+    println(s"""ftv in env: ${ftvInEnv.map(Printer.print).mkString(", ")}""")
+    val ftv = typ.freeTypeVariables diff ftvInEnv
+    println(s"""ftv in scheme: ${ftv.map(Printer.print).mkString(", ")}""")
+    TypeScheme(ftv.toList, typ)
+  }
+
+  def fromProto(typ: proto.TypeScheme) = typ match {
+    case proto.TypeScheme(bound, t) =>
+      // Instantiate the type scheme with fresh type variables for this compilation run
+      val typ = Type.fromProto(t.getOrElse(throw new Exception("No type in protobuf")))
+      val freshVars = bound.toList.map(_ => TypeVariable())
+      val tyVars = bound.toList.map(TypeVariable.fromProto)
+      val subst = tyVars.zip(freshVars).toMap
+      TypeScheme(tyVars, typ.substitute(subst))
+  }
+}
+
 sealed trait Type {
   def toProto: proto.Type = this match {
-    // case TypeVariable(i, _) =>
-    //   proto.Type(proto.Type.TypeType.TyVar(proto.TypeVariable(i)))
+    case TypeVariable(i) =>
+      proto.Type(proto.Type.TypeType.TyVar(proto.TypeVariable(i)))
     case TypeConstructor(name, tyParams) =>
       proto.Type(proto.Type.TypeType.TyCon(proto.TypeConstructor(name, tyParams.map(_.toProto))))
+  }
+
+  def freeTypeVariables: Set[TypeVariable] = this match {
+    case tyVar @ TypeVariable(_) => Set(tyVar)
+    case TypeConstructor(_, tyParams) =>
+      tyParams.flatMap(_.freeTypeVariables).toSet
+  }
+
+  def substitute(subst: Map[TypeVariable, Type]): Type = this match {
+    case tyVar @ TypeVariable(_) =>
+      val substFor = subst.getOrElse(tyVar, tyVar)
+      if (tyVar != substFor)
+        println(Printer.print(tyVar) + " |-> " + Printer.print(substFor))
+      substFor
+    case TypeConstructor(nm, tyParams) =>
+      TypeConstructor(nm, tyParams.map(_.substitute(subst)))
   }
 }
 
@@ -231,8 +294,8 @@ object Type {
   def Function(from: Type, to: Type) = TypeConstructor("->", List(from, to))
 
   def fromProto(typ: proto.Type): Type = typ.typeType match {
-    // case proto.Type.TypeType.TyVar(proto.TypeVariable(id)) =>
-    //   TypeVariable(id)
+    case proto.Type.TypeType.TyVar(proto.TypeVariable(id)) =>
+      TypeVariable(id)
     case proto.Type.TypeType.TyCon(proto.TypeConstructor(name, typeParams)) =>
       TypeConstructor(name, typeParams.toList.map(Type.fromProto))
     case proto.Type.TypeType.Empty =>
@@ -240,23 +303,19 @@ object Type {
   }
 }
 
-// case class TypeVariable(id: Int, name: String) extends Type
+case class TypeVariable(id: Int) extends Type {
+  def occursIn(typ: Type) = typ.freeTypeVariables.contains(this)
+}
 
-// object TypeVariable {
-//   var nextVariableId = 0
-
-//   def apply(id: Int): TypeVariable = TypeVariable(id, "A" + id)
-
-//   def apply(): TypeVariable = {
-//     val tyVar = TypeVariable(nextVariableId, "A" + nextVariableId)
-//     nextVariableId += 1
-//     tyVar
-//   }
-// }
+object TypeVariable {
+  def fromProto(tyVar: proto.TypeVariable) = TypeVariable(tyVar.id)
+  val nextVariableId = new AtomicInteger(1)
+  def apply(): TypeVariable = TypeVariable(nextVariableId.getAndIncrement)
+}
 
 case class TypeConstructor(name: String, typeParams: List[Type]) extends Type
 
-case class NameWithType(name: Name, typ: Type) {
+case class NameWithType(name: Name, typ: TypeScheme) {
   def toProto = proto.NameWithType(
     name = Some(name.toProto),
     `type` = Some(typ.toProto)
@@ -267,6 +326,6 @@ object NameWithType {
   def fromProto(nameWithType: proto.NameWithType): NameWithType =
     NameWithType(
       Name.fromProto(nameWithType.name.getOrElse(throw new Exception("No name in protobuf"))),
-      Type.fromProto(nameWithType.`type`.getOrElse(throw new Exception("No type in protobuf")))
+      TypeScheme.fromProto(nameWithType.`type`.getOrElse(throw new Exception("No type in protobuf")))
     )
 }

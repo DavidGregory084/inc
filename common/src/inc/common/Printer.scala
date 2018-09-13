@@ -3,6 +3,25 @@ package inc.common
 import org.typelevel.paiges._
 
 object Printer {
+  def print(typ: Type): String = typ match {
+    case TypeVariable(i) =>
+      "T" + i
+    case TypeConstructor(nm, tyParams) =>
+      if (tyParams.isEmpty)
+        nm
+      else if (nm == "->")
+        print(tyParams.head) + " -> " + print(tyParams(1))
+      else
+        nm + tyParams.map(print).mkString("[", ", ", "]")
+  }
+
+  def print(typ: TypeScheme): String = {
+    if (typ.bound.isEmpty)
+      print(typ.typ)
+    else
+      typ.bound.map(print).mkString("[", ", ", "]") + "{ " + print(typ.typ) + " }"
+  }
+
   def print[A](mod: Module[A]) = {
     val Module(pkg, name, imports, declarations @ _, _) = mod
     val prefix = Doc.text("module") & Doc.text((pkg :+ name).mkString(".")) & Doc.char('{')
@@ -41,8 +60,8 @@ object Printer {
         Doc.text("if") & expr(c) /
           (Doc.text("then") & expr(t)).nested(2) /
           (Doc.text("else") & expr(e)).nested(2)
-      // case Lambda(v, b, _) =>
-      //   Doc.text(v) & Doc.text("->") & expr(b).nested(2)
+      case Lambda(v, b, _) =>
+        Doc.text(v) & Doc.text("->") & expr(b).nested(2)
     }
 
     val decls = Doc.intercalate(Doc.char(';') + Doc.line, declarations.map {
