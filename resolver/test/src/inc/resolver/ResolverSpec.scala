@@ -5,22 +5,24 @@ import org.scalatest._
 
 class ResolverSpec extends FlatSpec with Matchers {
   def mkModule(name: String, decls: List[TopLevelDeclaration[Unit]]) = Module(
-    pkg = List("Test", "Typechecker"),
+    pkg = List("Test", "Resolver"),
     name = name,
     imports = List.empty,
     declarations = decls,
     meta = ())
 
   def mkResolvedModule(name: String, decls: List[TopLevelDeclaration[Name]]) = Module(
-    pkg = List("Test", "Typechecker"),
+    pkg = List("Test", "Resolver"),
     name = name,
     imports = List.empty,
     declarations = decls,
-    meta = ModuleName(List("Test", "Typechecker"), name))
+    meta = ModuleName(List("Test", "Resolver"), name))
 
   "Resolver" should "resolve names for local let bindings" in {
     val mod = mkModule("Int", List(Let("int", LiteralInt(42, ()), ())))
-    val expected = mkResolvedModule("Int", List(Let("int", LiteralInt(42, NoName), LocalName("int"))))
+    val expected = mkResolvedModule("Int", List(
+      Let("int", LiteralInt(42, NoName), MemberName(List("Test", "Resolver"), "Int", "int")))
+    )
     val result = Resolver.resolve(mod)
     result shouldBe 'right
     result.right.get shouldBe expected

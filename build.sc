@@ -3,7 +3,7 @@ import mill.scalalib._
 import mill.contrib.scalapblib._
 
 trait ScalaSettingsModule extends ScalaModule {
-  def scalaVersion = "2.12.4"
+  def scalaVersion = "2.12.6"
   def scalacOptions = Seq(
     // Common options
     "-deprecation",                      // Emit warning and location for usages of deprecated APIs.

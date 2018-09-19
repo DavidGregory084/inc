@@ -92,7 +92,6 @@ class TypecheckerSpec extends FlatSpec with Matchers {
 
     val result = Typechecker.typecheck(mod1)
     result shouldBe 'right
-    pprint.pprintln(result.right.get)
 
     val mod2 = mkModule("Lambda", List(
       Let("lam", Lambda("a", Reference("a", LocalName("a")), NoName), LocalName("lam"))
@@ -100,7 +99,5 @@ class TypecheckerSpec extends FlatSpec with Matchers {
 
     val result2 = Typechecker.typecheck(mod2)
     result2 shouldBe 'right
-    println(Printer.print(mod2).render(80))
-    // pprint.pprintln(result2.right.get)
   }
 }

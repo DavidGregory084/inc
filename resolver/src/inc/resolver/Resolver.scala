@@ -30,16 +30,16 @@ object Resolver {
     case If(cond, thenExpr, elseExpr, _) =>
       for {
         r1 <- resolve(cond, tbl)
-        (c, t1) = r1
-        r2 <- resolve(thenExpr, t1)
-        (t, t2) = r2
-        r3 <- resolve(elseExpr, t2)
-        (e, t3) = r3
-      } yield (If(c, t, e, NoName), t3)
+        (c, _) = r1
+        r2 <- resolve(thenExpr, tbl)
+        (t, _) = r2
+        r3 <- resolve(elseExpr, tbl)
+        (e, _) = r3
+      } yield (If(c, t, e, NoName), tbl)
     case Lambda(variable, body, _) =>
       for {
         r <- resolve(body, tbl + (variable -> LocalName(variable)))
-        (b, t1) = r
+        (b, _) = r
       } yield (Lambda(variable, b, NoName), tbl)
   }
 
@@ -58,33 +58,10 @@ object Resolver {
 
   def resolve(
     module: Module[Unit],
-    importedMods: Map[(List[String], String), Module[NameWithType]] = Map.empty
+    importedDecls: Map[String, TopLevelDeclaration[NameWithType]] = Map.empty
   ): Either[List[ResolverError], Module[Name]] = module match {
-    case Module(pkg, name, imports, decls, _) =>
-      val initialTbl = imports.foldLeft(Map.empty[String, Name]) {
-        case (tbl, imprt) =>
-          val (pkg, nm, syms) = imprt match {
-            case ImportModule(pkg, nm) =>
-              (pkg, nm, List.empty[String])
-            case ImportSymbols(pkg, nm, syms) =>
-              (pkg, nm, syms)
-          }
-
-          val updatedTbl = importedMods.get((pkg, nm)).map { mod =>
-            val decls =
-              if (syms.isEmpty)
-                mod.declarations
-              else
-                mod.declarations.filter(d => syms.contains(d.name))
-
-            decls.foldLeft(tbl) {
-              case (tb, dcl) =>
-                tb.updated(dcl.name, dcl.meta.name)
-            }
-          }
-
-          updatedTbl.getOrElse(tbl)
-      }
+    case Module(pkg, name, _, decls, _) =>
+      val initialTbl = importedDecls.mapValues(_.meta.name)
 
       val emptyDecls = Chain.empty[TopLevelDeclaration[Name]]
       val emptyRes: Either[List[ResolverError], (Chain[TopLevelDeclaration[Name]], SymbolTable)] = Right((emptyDecls, initialTbl))

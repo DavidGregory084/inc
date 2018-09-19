@@ -143,11 +143,9 @@ object Parser {
     module.parse(fileContents) match {
       case Parsed.Success(mod, _) =>
         Right(mod)
-      case f: Parsed.Failure =>
-        val traced = f.extra.traced
-        val expected = traced.expected
-        val index = traced.index
-        val input = traced.input
+      case Parsed.Failure(_, index, extra) =>
+        val input = extra.input
+        val expected = extra.traced.expected
         val errorMessage = input.repr.errorMessage(input, expected, index)
         ParserError.singleton(index, errorMessage)
     }

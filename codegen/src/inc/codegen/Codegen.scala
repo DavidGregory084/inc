@@ -88,7 +88,6 @@ object Codegen {
     case AsmType.DOUBLE_TYPE =>
       DLOAD
     case _ =>
-      println("Unknown ASM type "+asmType)
       ALOAD
   }
 

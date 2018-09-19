@@ -90,16 +90,16 @@ object Main {
     } yield out
   }
 
-  def readImports(imports: List[Import], classloader: ClassLoader): Map[(List[String], String), Module[NameWithType]] = {
+  def readEnvironment(imports: List[Import], classloader: ClassLoader): Map[String, TopLevelDeclaration[NameWithType]] = {
     val distinctPrefixes = imports.map {
       case ImportModule(pkg, nm) =>
-        (pkg, nm)
-      case ImportSymbols(pkg, nm, _) =>
-        (pkg, nm)
+        (pkg, nm, List.empty[String])
+      case ImportSymbols(pkg, nm, syms) =>
+        (pkg, nm, syms)
     }.distinct
 
-    val modules = distinctPrefixes.flatMap {
-      case (pkg, nm) =>
+    val importedDecls = distinctPrefixes.flatMap {
+      case (pkg, nm, syms) =>
         val className = pkg.mkString("/") + "/" + nm + ".class"
         val classStream = Option(classloader.getResourceAsStream(className))
         val outputStream = new ByteArrayOutputStream()
@@ -115,10 +115,18 @@ object Main {
 
         maybeInterface
           .toList
-          .map { mod => (pkg, nm) -> mod }
+          .flatMap { mod =>
+            val decls =
+              if (syms.isEmpty)
+                mod.declarations
+              else
+                mod.declarations.filter(d => syms.contains(d.name))
+
+            decls.map(d => d.name -> d)
+          }
     }
 
-    modules.toMap
+    importedDecls.toMap
   }
 
   def parseUrls(classpath: String): Either[List[Throwable], Array[URL]] = {
@@ -140,11 +148,11 @@ object Main {
 
       // _ = println(NL + Printer.print(mod).render(80))
 
-      importedMods = readImports(mod.imports, new URLClassLoader(urls))
+      importedDecls = readEnvironment(mod.imports, new URLClassLoader(urls))
 
-      resolved <- runPhase[Module[Name]]("resolver", config, _.printResolver, Resolver.resolve(mod, importedMods))
+      resolved <- runPhase[Module[Name]]("resolver", config, _.printResolver, Resolver.resolve(mod, importedDecls))
 
-      checked <- runPhase[Module[NameWithType]]("typechecker", config, _.printTyper, Typechecker.typecheck(resolved, importedMods))
+      checked <- runPhase[Module[NameWithType]]("typechecker", config, _.printTyper, Typechecker.typecheck(resolved, importedDecls))
 
       code <- runPhase[Array[Byte]]("codegen", config, _.printCodegen, Codegen.generate(checked), Codegen.print(_))
 

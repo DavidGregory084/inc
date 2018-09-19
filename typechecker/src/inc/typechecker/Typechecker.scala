@@ -143,33 +143,11 @@ object Typechecker {
 
   def typecheck(
     module: Module[Name],
-    importedMods: Map[(List[String], String), Module[NameWithType]] = Map.empty
+    importedDecls: Map[String, TopLevelDeclaration[NameWithType]] = Map.empty
   ): Either[List[TypeError], Module[NameWithType]] = module match {
-    case Module(_, _, imports, decls, _) =>
-      val initialEnv = imports.foldLeft(Map.empty[String, TypeScheme]) {
-        case (env, imprt) =>
-          val (pkg, nm, syms) = imprt match {
-            case ImportModule(pkg, nm) =>
-              (pkg, nm, List.empty[String])
-            case ImportSymbols(pkg, nm, syms) =>
-              (pkg, nm, syms)
-          }
+    case Module(_, _, _, decls, _) =>
 
-          val updatedEnv = importedMods.get((pkg, nm)).map { mod =>
-            val decls =
-              if (syms.isEmpty)
-                mod.declarations
-              else
-                mod.declarations.filter(d => syms.contains(d.name))
-
-            decls.foldLeft(env) {
-              case (e, dcl) =>
-                e.updated(dcl.name, dcl.meta.typ)
-            }
-          }
-
-          updatedEnv.getOrElse(env)
-      }
+      val initialEnv = importedDecls.mapValues(_.meta.typ)
 
       val emptyDecls = Chain.empty[TopLevelDeclaration[NameWithType]]
       val emptyRes: Either[List[TypeError], (Chain[TopLevelDeclaration[NameWithType]], Environment)] = Right((emptyDecls, initialEnv))
