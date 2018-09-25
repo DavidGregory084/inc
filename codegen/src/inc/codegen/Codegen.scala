@@ -211,9 +211,35 @@ object Codegen {
             throw new Exception("wtf")
         }
       }
+    case Apply(fn, args, _) =>
+      val pushArgs = args.reverse.traverse_ { arg =>
+        newExpr(className, methodVisitor)(arg)
+      }
+
+      pushArgs.flatMap { _ =>
+        val TypeScheme(_, TypeConstructor("->", List(from, to))) = fn.meta.typ
+
+        val getMethodName = fn.meta.name match {
+          case LocalName(nm) =>
+            Right(nm)
+          case MemberName(_, _, nm) =>
+            Right(nm)
+          case _ =>
+            CodegenError.singleton("Unable to retrieve name for method")
+        }
+
+        val descriptorFor = for {
+          arg <- asmTypeOf(from)
+          ret <- asmTypeOf(to)
+        } yield AsmType.getMethodDescriptor(ret, arg)
+
+        for {
+          methodName <- getMethodName
+          descriptor <- descriptorFor
+          internalName = getInternalName(fn.meta.name, className)
+        } yield methodVisitor.visitMethodInsn(INVOKESTATIC, internalName, methodName, descriptor, false)
+      }
     case Lambda(_, _, _) =>
-      ???
-    case Apply(_, _, _) =>
       ???
   }
 
@@ -264,8 +290,14 @@ object Codegen {
           }
         }
 
-      case Apply(_, _, _) =>
-        ???
+      case apply @ Apply(_, _, nameWithType) =>
+        descriptorFor(nameWithType.typ).flatMap { descriptor =>
+          classWriter.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, let.name, descriptor, null, null).visitEnd()
+          newExpr(className, staticInitializer)(apply).map { _ =>
+            staticInitializer.visitTypeInsn(CHECKCAST, AsmType.getType(descriptor).getInternalName)
+            staticInitializer.visitFieldInsn(PUTSTATIC, className, let.name, descriptor)
+          }
+        }
     }
   }
 

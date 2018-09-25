@@ -93,11 +93,21 @@ object Parser {
     identifier ~ allWs ~ "->" ~/ allWs ~
       expression
   ).map {
-    case (variable, expression) =>
-      Lambda(variable, expression, ())
+    case (variable, expr) =>
+      Lambda(variable, expr, ())
   }
 
-  val expression: Parser[Expr[Unit]] = literal | ifExpr | lambda | reference
+  val application: Parser[Expr[Unit] => Expr[Unit]] = P(
+    "(" ~/ expression.rep(sep = comma.~/) ~ ")"
+  ).map { args => fn => Apply(fn, args.toList, ()) }
+
+  val expression: Parser[Expr[Unit]] = P( (literal | ifExpr | lambda | reference) ~ application.rep ).map {
+    case (expr, applications) =>
+      applications.foldRight(expr) {
+        case (app, expr) =>
+          app(expr)
+      }
+  }
 
   val letDeclaration = P(
     "let" ~/ allWs ~ identifier ~ allWs ~ "=" ~ allWs ~
@@ -111,7 +121,7 @@ object Parser {
   val decl = P(letDeclaration)
 
   val imports = P {
-    "import" ~/ ws ~ identifier.rep(min = 1, sep = ".") ~ ("." ~ inBraces(identifier.rep(min = 1, sep = comma))).?
+    "import" ~/ ws ~ identifier.rep(min = 1, sep = ".") ~ ("." ~ inBraces(identifier.rep(min = 1, sep = comma.~/))).?
   }.map {
     case (ident, Some(symbols)) =>
       if (ident.length > 1)
