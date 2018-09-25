@@ -108,7 +108,7 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
   }
 
   // TODO: figure out how to push the inferred type back down into the AST efficiently
-  ignore should "compile a lambda expression" in withTmpDir { dir =>
+  it should "compile a lambda expression" in withTmpDir { dir =>
     val prog = s"module Test.Main.Lambda { let x = 42; let y = 41; let lam = bool -> if bool then x else y }"
     println(prog)
     val result = Main.compileProgram(dir, prog)

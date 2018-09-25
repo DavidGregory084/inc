@@ -77,6 +77,7 @@ object Typechecker {
         trace(s"reference to $name", typ)
         Right((ref.copy(meta = NameWithType(ref.meta, typ)), Map.empty: Substitution))
       }.getOrElse(TypeError.singleton(s"Reference to undefined symbol: $name"))
+
     case If(cond, thenExpr, elseExpr, nm) =>
       for {
         // Typecheck the condition
@@ -103,12 +104,14 @@ object Typechecker {
         // Unify the then expression and the else expression
         s5 <- unify(t.meta.typ.instantiate, e.meta.typ.instantiate)
 
-        // Apply the substitution
-        tp = t.meta.typ.substitute(s5)
+        s = chainSubstitutions(s1, s2, s3, s4, s5)
 
-        _ = trace("if expression", tp.instantiate)
+        expr = If(c, t, e, NameWithType(nm, t.meta.typ)).substitute(s)
 
-      } yield (If(c, t, e, NameWithType(nm, tp)), chainSubstitutions(s1, s2, s3, s4, s5))
+        _ = trace("if expression", expr.meta.typ)
+
+      } yield (expr, s)
+
     case Lambda(variable, body, nm) =>
       val tv = TypeVariable()
 
@@ -127,9 +130,11 @@ object Typechecker {
         // Apply the substitutions from the body
         ts = TypeScheme.generalize(env, tp.substitute(s))
 
-        _ = trace("lambda expression", ts)
+        expr = Lambda(variable, b.substitute(s), NameWithType(nm, ts))
 
-      } yield (Lambda(variable, b, NameWithType(nm, ts)), s)
+        _ = trace("lambda expression", expr.meta.typ)
+
+      } yield (expr, s)
   }
 
   def typecheck(decl: TopLevelDeclaration[Name], env: Environment): Either[List[TypeError], (TopLevelDeclaration[NameWithType], Environment)] = decl match {

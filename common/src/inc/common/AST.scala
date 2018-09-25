@@ -22,6 +22,13 @@ final case class Module[A](
     declarations = declarations.map(_.toProto),
     nameWithType = Some(eqv(meta).toProto)
   )
+
+  def substitute(subst: Map[TypeVariable, Type])(implicit eqv: A =:= NameWithType): Module[A] = {
+    val nameWithType = eqv(meta)
+    copy(
+      declarations = declarations.map(_.substitute(subst)),
+      meta = nameWithType.substitute(subst).asInstanceOf[A])
+  }
 }
 object Module {
   def fromProto(mod: proto.Module): Module[NameWithType] = Module(
@@ -86,6 +93,48 @@ sealed trait Expr[A] extends Tree[A] {
     case Lambda(variable, body, meta) =>
       val nameWithType = Some(eqv(meta).toProto)
       proto.Expr(nameWithType, proto.Expr.ExprType.Lambda(proto.Lambda(variable, Some(body.toProto))))
+  }
+
+  def substitute(subst: Map[TypeVariable, Type])(implicit eqv: A =:= NameWithType): Expr[A] = this match {
+    case int @ LiteralInt(_, meta) =>
+      val nameWithType = eqv(meta)
+      int.copy(meta = nameWithType.substitute(subst).asInstanceOf[A])
+    case long @ LiteralLong(_, meta) =>
+      val nameWithType = eqv(meta)
+      long.copy(meta = nameWithType.substitute(subst).asInstanceOf[A])
+    case float @ LiteralFloat(_, meta) =>
+      val nameWithType = eqv(meta)
+      float.copy(meta = nameWithType.substitute(subst).asInstanceOf[A])
+    case double @ LiteralDouble(_, meta) =>
+      val nameWithType = eqv(meta)
+      double.copy(meta = nameWithType.substitute(subst).asInstanceOf[A])
+    case boolean @ LiteralBoolean(_, meta) =>
+      val nameWithType = eqv(meta)
+      boolean.copy(meta = nameWithType.substitute(subst).asInstanceOf[A])
+    case string @ LiteralString(_, meta) =>
+      val nameWithType = eqv(meta)
+      string.copy(meta = nameWithType.substitute(subst).asInstanceOf[A])
+    case char @ LiteralChar(_, meta) =>
+      val nameWithType = eqv(meta)
+      char.copy(meta = nameWithType.substitute(subst).asInstanceOf[A])
+    case unit @ LiteralUnit(meta) =>
+      val nameWithType = eqv(meta)
+      unit.copy(meta = nameWithType.substitute(subst).asInstanceOf[A])
+    case ref @ Reference(_, meta) =>
+      val nameWithType = eqv(meta)
+      ref.copy(meta = nameWithType.substitute(subst).asInstanceOf[A])
+    case ifExpr @ If(cond, thenExpr, elseExpr, meta) =>
+      val nameWithType = eqv(meta)
+      ifExpr.copy(
+        cond = cond.substitute(subst),
+        thenExpr = thenExpr.substitute(subst),
+        elseExpr = elseExpr.substitute(subst),
+        meta = nameWithType.substitute(subst).asInstanceOf[A])
+    case lambda @ Lambda(_, body, meta) =>
+      val nameWithType = eqv(meta)
+      lambda.copy(
+        body = body.substitute(subst),
+        meta = nameWithType.substitute(subst).asInstanceOf[A])
   }
 }
 object Expr {
@@ -160,6 +209,13 @@ sealed trait TopLevelDeclaration[A] extends Declaration[A] {
       val nameWithType = Some(eqv(meta).toProto)
       proto.TopLevelDeclaration(proto.TopLevelDeclaration.DeclarationType.Let(proto.Let(name, Some(expr.toProto), nameWithType)))
   }
+  def substitute(subst: Map[TypeVariable, Type])(implicit eqv: A =:= NameWithType): TopLevelDeclaration[A] = this match {
+    case let @ Let(_, expr, meta) =>
+      val nameWithType = eqv(meta)
+      let.copy(
+        binding = expr.substitute(subst),
+        meta = nameWithType.substitute(subst).asInstanceOf[A])
+  }
 }
 object TopLevelDeclaration {
   def fromProto(decl: proto.TopLevelDeclaration): TopLevelDeclaration[NameWithType] = decl.declarationType match {
@@ -218,7 +274,7 @@ case class TypeScheme(bound: List[TypeVariable], typ: Type) {
   def substitute(subst: Map[TypeVariable, Type]) =
     TypeScheme(bound, typ.substitute(subst -- bound))
 
-  def instantiate: Type = {
+  def instantiate: Type = if (bound.isEmpty) typ else {
     val freshVars = bound.map(_ => TypeVariable())
     val subst = bound.zip(freshVars).toMap
 
@@ -236,11 +292,11 @@ object TypeScheme {
   def apply(typ: Type): TypeScheme = TypeScheme(List.empty, typ)
 
   def generalize(env: Map[String, TypeScheme], typ: Type): TypeScheme = {
-    val ftvInEnv = env.values.flatMap(_.freeTypeVariables).toSet
-    println(s"""ftv in env: ${ftvInEnv.map(Printer.print).mkString(", ")}""")
-    val ftv = typ.freeTypeVariables diff ftvInEnv
-    println(s"""ftv in scheme: ${ftv.map(Printer.print).mkString(", ")}""")
-    TypeScheme(ftv.toList, typ)
+    val freeInEnv = env.values.flatMap(_.freeTypeVariables).toSet
+    val bound = typ.freeTypeVariables diff freeInEnv
+    val scheme = TypeScheme(bound.toList, typ)
+    println("generalize: " + bound.map(Printer.print(_)).mkString("[", ", ", "]"))
+    scheme
   }
 
   def fromProto(typ: proto.TypeScheme) = typ match {
@@ -320,6 +376,9 @@ case class NameWithType(name: Name, typ: TypeScheme) {
     name = Some(name.toProto),
     `type` = Some(typ.toProto)
   )
+
+  def substitute(subst: Map[TypeVariable, Type]): NameWithType =
+    copy(typ = typ.substitute(subst))
 }
 
 object NameWithType {
