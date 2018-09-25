@@ -1,7 +1,6 @@
 package inc.typechecker
 
 import cats.data.Chain
-import cats.implicits._
 import inc.common._
 
 object Typechecker {
@@ -38,28 +37,28 @@ object Typechecker {
     s2 ++ s1.mapValues(_.substitute(s2))
 
   def unify(left: Type, right: Type): Either[List[TypeError], Substitution] = {
+    val ll = Printer.print(left)
+    val rr = Printer.print(right)
+    println(s"unify $ll with $rr")
+
     (left, right) match {
       case (TypeConstructor(l, lvars), TypeConstructor(r, rvars)) if l == r =>
-        val ll = Printer.print(left)
-        val rr = Printer.print(right)
-        println(s"Unify $ll with $rr")
+        val emptyRes: Either[List[TypeError], Substitution] = Right(Map.empty)
 
-        val res = lvars.zip(rvars).traverse {
-          case (ll, rr) =>
-            unify(ll, rr)
-        }.map(chainSubstitutions)
-
-        res.foreach(s => println("Unifying substitution: " + Printer.print(s)))
-
-        res
+        lvars.zip(rvars).foldLeft(emptyRes) {
+          case (res, (ll, rr)) =>
+            res.flatMap { subst =>
+              unify(ll.substitute(subst), rr.substitute(subst)).map(chainSubstitution(subst, _))
+            }
+        }
 
        case (tyVar @ TypeVariable(_), typ) =>
          bind(tyVar, typ)
+
        case (typ, tyVar @ TypeVariable(_)) =>
          bind(tyVar, typ)
-      case (l, r) =>
-        val ll = Printer.print(l)
-        val rr = Printer.print(r)
+
+      case (_, _) =>
         TypeError.singleton(s"Cannot unify $ll with $rr")
     }
   }
@@ -184,11 +183,11 @@ object Typechecker {
             case (arg, funTy) =>
               Type.Function(arg.meta.typ.instantiate, funTy)
           }
-        }.getOrElse(Type.Function(Type.Unit, tv))
+        }.getOrElse(Type.Function(Type.Unit, tv)).substitute(s2)
 
         _ = trace("expected type", tp)
 
-        s3 <- unify(f.meta.typ.instantiate.substitute(s2), tp)
+        s3 <- unify(f.meta.typ.instantiate, tp)
 
         s = chainSubstitutions(s1, s2, s3)
 
