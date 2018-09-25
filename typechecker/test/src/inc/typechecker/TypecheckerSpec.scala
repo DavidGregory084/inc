@@ -100,4 +100,24 @@ class TypecheckerSpec extends FlatSpec with Matchers {
     val result2 = Typechecker.typecheck(mod2)
     result2 shouldBe 'right
   }
+
+  it should "infer the type of lambda application" in {
+    val mod1 = mkModule("Apply", List(
+      Let("lam", Lambda("bool", If(Reference("bool", MemberName(List.empty, "Apply", "bool")), LiteralInt(42, NoName), LiteralInt(41, NoName), NoName), NoName), MemberName(List.empty, "Apply", "lam")),
+      Let("app", Apply(Reference("lam", MemberName(List.empty, "Apply", "bool")), List(LiteralBoolean(true, NoName)), NoName), MemberName(List.empty, "Apply", "app"))
+    ))
+
+    val result1 = Typechecker.typecheck(mod1)
+    result1 shouldBe 'right
+
+    val mod2 = mkModule("Apply", List(
+      Let("lam", Lambda("a", Reference("a", LocalName("a")), NoName), MemberName(List.empty, "Apply", "lam")),
+      Let("app", Apply(Reference("lam", MemberName(List.empty, "Apply", "bool")), List(LiteralBoolean(true, NoName)), NoName), MemberName(List.empty, "Apply", "app"))
+    ))
+
+    println(Printer.print(mod2).render(80))
+
+    val result2 = Typechecker.typecheck(mod2)
+    result2 shouldBe 'right
+  }
 }

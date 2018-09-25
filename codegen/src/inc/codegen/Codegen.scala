@@ -213,6 +213,8 @@ object Codegen {
       }
     case Lambda(_, _, _) =>
       ???
+    case Apply(_, _, _) =>
+      ???
   }
 
   def newTopLevelLet(className: String, classWriter: ClassWriter, staticInitializer: MethodVisitor, let: Let[NameWithType]): Either[List[CodegenError], Unit] = {
@@ -261,6 +263,9 @@ object Codegen {
             newExpr(className, methodVisitor)(body)
           }
         }
+
+      case Apply(_, _, _) =>
+        ???
     }
   }
 

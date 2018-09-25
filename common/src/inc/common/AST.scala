@@ -93,6 +93,9 @@ sealed trait Expr[A] extends Tree[A] {
     case Lambda(variable, body, meta) =>
       val nameWithType = Some(eqv(meta).toProto)
       proto.Expr(nameWithType, proto.Expr.ExprType.Lambda(proto.Lambda(variable, Some(body.toProto))))
+    case Apply(fn, args, meta) =>
+      val nameWithType = Some(eqv(meta).toProto)
+      proto.Expr(nameWithType, proto.Expr.ExprType.Apply(proto.Apply(Some(fn.toProto), args.map(_.toProto))))
   }
 
   def substitute(subst: Map[TypeVariable, Type])(implicit eqv: A =:= NameWithType): Expr[A] = this match {
@@ -135,6 +138,12 @@ sealed trait Expr[A] extends Tree[A] {
       lambda.copy(
         body = body.substitute(subst),
         meta = nameWithType.substitute(subst).asInstanceOf[A])
+    case apply @ Apply(fn, args, meta) =>
+      val nameWithType = eqv(meta)
+      apply.copy(
+        fn = fn.substitute(subst),
+        args = args.map(_.substitute(subst)),
+        meta = nameWithType.substitute(subst).asInstanceOf[A])
   }
 }
 object Expr {
@@ -170,6 +179,12 @@ object Expr {
         Expr.fromProto(body.getOrElse(throw new Exception("No lambda body in protobuf"))),
         NameWithType.fromProto(nameWithType.getOrElse(throw new Exception("No type in protobuf")))
       )
+    case proto.Expr.ExprType.Apply(proto.Apply(fn, args, nameWithType)) =>
+      Apply(
+        Expr.fromProto(fn.getOrElse(throw new Exception("No functiont to apply in protobuf"))),
+        args.toList.map(Expr.fromProto),
+        NameWithType.fromProto(nameWithType.getOrElse(throw new Exception("No type in protobuf")))
+      )
     case proto.Expr.ExprType.Empty =>
       throw new Exception("Empty Expr in protobuf")
   }
@@ -185,6 +200,12 @@ final case class If[A](
 final case class Lambda[A](
   variable: String,
   body: Expr[A],
+  meta: A
+) extends Expr[A]
+
+final case class Apply[A](
+  fn: Expr[A],
+  args: List[Expr[A]],
   meta: A
 ) extends Expr[A]
 

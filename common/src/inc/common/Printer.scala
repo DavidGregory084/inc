@@ -3,6 +3,14 @@ package inc.common
 import org.typelevel.paiges._
 
 object Printer {
+
+  def print(subst: Map[TypeVariable, Type]): String = {
+    subst.map {
+      case (tyVar, typ) =>
+        print(tyVar) + " |-> " + print(typ)
+    }.mkString(", ")
+  }
+
   def print(typ: Type): String = typ match {
     case TypeVariable(i) =>
       "T" + i
@@ -47,6 +55,11 @@ object Printer {
         (Doc.text("else") & print(e)).nested(2)
     case Lambda(v, b, _) =>
       Doc.text(v) & Doc.text("->") & print(b).nested(2)
+    case Apply(fn, args, _) =>
+      val prefix = print(fn) + Doc.char('(')
+      val suffix = Doc.char(')')
+      val argsList = Doc.intercalate(Doc.char(',') + Doc.line, args.map(print(_)))
+      argsList.tightBracketBy(prefix, suffix)
   }
 
   def print[A](decl: TopLevelDeclaration[A]): Doc = decl match {

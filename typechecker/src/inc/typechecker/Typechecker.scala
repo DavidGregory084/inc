@@ -40,10 +40,19 @@ object Typechecker {
   def unify(left: Type, right: Type): Either[List[TypeError], Substitution] = {
     (left, right) match {
       case (TypeConstructor(l, lvars), TypeConstructor(r, rvars)) if l == r =>
-        lvars.zip(rvars).traverse {
+        val ll = Printer.print(left)
+        val rr = Printer.print(right)
+        println(s"Unify $ll with $rr")
+
+        val res = lvars.zip(rvars).traverse {
           case (ll, rr) =>
             unify(ll, rr)
         }.map(chainSubstitutions)
+
+        res.foreach(s => println("Unifying substitution: " + Printer.print(s)))
+
+        res
+
        case (tyVar @ TypeVariable(_), typ) =>
          bind(tyVar, typ)
        case (typ, tyVar @ TypeVariable(_)) =>
@@ -135,6 +144,57 @@ object Typechecker {
         _ = trace("lambda expression", expr.meta.typ)
 
       } yield (expr, s)
+
+    case Apply(fn, args, nm) =>
+      val tv = TypeVariable()
+
+      trace("function application", tv)
+
+      for {
+        // Typecheck the function
+        rf <- typecheck(fn, env)
+        (f, s1) = rf
+
+        _ = trace("function to apply", f.meta.typ)
+
+        emptyRes: Either[List[TypeError], (Chain[Expr[NameWithType]], Substitution)] = Right((Chain.empty, Map.empty))
+
+        // Typecheck the arg expressions
+        ra <- args.zipWithIndex.foldLeft(emptyRes) {
+          case (resSoFar, (nextArg, idx)) =>
+            for {
+              r <- resSoFar
+              (typedSoFar, substSoFar) = r
+
+              a <- typecheck(nextArg, substitute(env, s1))
+              (typedArg, newSubst) = a
+
+              _ = trace(s"argument ${idx + 1}", typedArg.meta.typ)
+
+            } yield (typedSoFar :+ typedArg, chainSubstitution(substSoFar, newSubst))
+        }
+
+        (as, s2) = ra
+
+        argsList = as.toList
+
+        // Create a new function type
+        tp = argsList.lastOption.map { t =>
+          argsList.init.foldRight(Type.Function(t.meta.typ.instantiate, tv)) {
+            case (arg, funTy) =>
+              Type.Function(arg.meta.typ.instantiate, funTy)
+          }
+        }.getOrElse(Type.Function(Type.Unit, tv))
+
+        _ = trace("expected type", tp)
+
+        s3 <- unify(f.meta.typ.instantiate.substitute(s2), tp)
+
+        s = chainSubstitutions(s1, s2, s3)
+
+        expr = Apply(f.substitute(s), argsList.map(_.substitute(s)), NameWithType(nm, TypeScheme(tv.substitute(s))))
+
+      } yield (expr, s2)
   }
 
   def typecheck(decl: TopLevelDeclaration[Name], env: Environment): Either[List[TypeError], (TopLevelDeclaration[NameWithType], Environment)] = decl match {

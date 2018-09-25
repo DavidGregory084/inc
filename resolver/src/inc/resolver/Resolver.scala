@@ -41,6 +41,23 @@ object Resolver {
         r <- resolve(body, tbl + (variable -> LocalName(variable)))
         (b, _) = r
       } yield (Lambda(variable, b, NoName), tbl)
+    case Apply(fn, args, _) =>
+      for {
+        rf <- resolve(fn, tbl)
+        (f, _) = rf
+
+        emptyRes: Either[List[ResolverError], Chain[Expr[Name]]] = Right(Chain.empty)
+
+        ra <- args.foldLeft(emptyRes) {
+          case (resSoFar, nextArg) =>
+            for {
+              rs <- resSoFar
+              a <- resolve(nextArg, tbl)
+              (r, _) = a
+            } yield rs :+ r
+        }
+
+      } yield (Apply(f, ra.toList, NoName), tbl)
   }
 
   def resolve(mod: Module[Unit], decl: TopLevelDeclaration[Unit], tbl: SymbolTable): Either[List[ResolverError], (TopLevelDeclaration[Name], SymbolTable)] = decl match {

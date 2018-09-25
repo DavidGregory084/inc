@@ -66,46 +66,46 @@ message NameWithType {
 
 message Reference {
   string name = 1;
-  NameWithType namewithType = 2;
+  NameWithType nameWithType = 2;
 }
 
 message LiteralInt {
   int32 int = 1;
-  NameWithType namewithType = 2;
+  NameWithType nameWithType = 2;
 }
 
 message LiteralLong {
   int64 long = 1;
-  NameWithType namewithType = 2;
+  NameWithType nameWithType = 2;
 }
 
 message LiteralFloat {
   float flt = 1;
-  NameWithType namewithType = 2;
+  NameWithType nameWithType = 2;
 }
 
 message LiteralDouble {
   double flt = 1;
-  NameWithType namewithType = 2;
+  NameWithType nameWithType = 2;
 }
 
 message LiteralBoolean {
   bool boolean = 1;
-  NameWithType namewithType = 2;
+  NameWithType nameWithType = 2;
 }
 
 message LiteralString {
   string str = 1;
-  NameWithType namewithType = 2;
+  NameWithType nameWithType = 2;
 }
 
 message LiteralChar {
   string char = 1;
-  NameWithType namewithType = 2;
+  NameWithType nameWithType = 2;
 }
 
 message LiteralUnit {
-  NameWithType namewithType = 1;
+  NameWithType nameWithType = 1;
 }
 
 message If {
@@ -118,7 +118,13 @@ message If {
 message Lambda {
   string variable = 1;
   Expr body = 2;
-  NameWithType namewithtype = 3;
+  NameWithType nameWithType = 3;
+}
+
+message Apply {
+  Expr fn = 1;
+  repeated Expr args = 2;
+  NameWithType nameWithType = 3;
 }
 
 message Expr {
@@ -134,6 +140,7 @@ message Expr {
     LiteralUnit unit = 10;
     If if = 11;
     Lambda lambda = 12;
+    Apply apply = 13;
   }
   NameWithType nameWithType = 20;
 }
