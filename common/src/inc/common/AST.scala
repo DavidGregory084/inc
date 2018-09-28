@@ -329,6 +329,13 @@ sealed trait Type {
     case TypeConstructor(name, tyParams) => proto.TypeConstructor(name, tyParams.map(_.toProto))
   }
 
+  def isPrimitive = this match {
+    case TypeConstructor(name, _) if Type.primitives.contains(name) =>
+      true
+    case _ =>
+      false
+  }
+
   def freeTypeVariables: Set[TypeVariable] = this match {
     case tyVar @ TypeVariable(_) => Set(tyVar)
     case TypeConstructor(_, tyParams) =>
@@ -348,6 +355,8 @@ sealed trait Type {
 
 object Type {
   val UnitClass = "inc.rts.Unit"
+
+  val primitives = Set("Int", "Long", "Float", "Double", "Boolean", "Char")
 
   val Int = TypeConstructor("Int", List.empty)
   val Long = TypeConstructor("Long", List.empty)
