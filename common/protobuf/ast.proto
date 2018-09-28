@@ -22,7 +22,7 @@ message TypeConstructor {
 }
 
 message Type {
-  oneof typeType {
+  oneof sealed_value {
     TypeVariable tyVar = 1;
     TypeConstructor tyCon = 2;
   }
@@ -51,7 +51,7 @@ message MemberName {
 }
 
 message Name {
-  oneof nameType {
+  oneof sealed_value {
     NoName noName = 1;
     LocalName localName = 2;
     ModuleName moduleName = 3;
@@ -128,7 +128,7 @@ message Apply {
 }
 
 message Expr {
-  oneof exprType {
+  oneof sealed_value {
     Reference ref = 2;
     LiteralInt int = 3;
     LiteralLong long = 4;
@@ -142,7 +142,6 @@ message Expr {
     Lambda lambda = 12;
     Apply apply = 13;
   }
-  NameWithType nameWithType = 20;
 }
 
 message Let {
@@ -152,7 +151,7 @@ message Let {
 }
 
 message TopLevelDeclaration {
-  oneof declarationType {
+  oneof sealed_value {
     Let let = 1;
   }
 }

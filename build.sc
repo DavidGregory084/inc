@@ -3,7 +3,7 @@ import mill.scalalib._
 import mill.contrib.scalapblib._
 
 trait ScalaSettingsModule extends ScalaModule {
-  def scalaVersion = "2.12.6"
+  def scalaVersion = "2.12.7"
   def scalacOptions = Seq(
     // Common options
     "-deprecation",                      // Emit warning and location for usages of deprecated APIs.
@@ -70,7 +70,7 @@ trait ScalaSettingsModule extends ScalaModule {
 object decompiled extends JavaModule
 
 object common extends ScalaPBModule with ScalaSettingsModule {
-  def scalaPBVersion = "0.8.0-RC1"
+  def scalaPBVersion = "0.8.0"
   def scalaPBFlatPackage = true
   def scalaPBGrpc = false
   def ivyDeps = T {
@@ -99,9 +99,11 @@ object typechecker extends ScalaSettingsModule {
 
 object codegen extends ScalaSettingsModule {
   def moduleDeps = Seq(common, rts)
+  def asmVersion = T { "6.2" }
   def ivyDeps = Agg(
-    ivy"org.ow2.asm:asm:6.2",
-    ivy"org.ow2.asm:asm-util:6.2"
+    ivy"org.ow2.asm:asm:${asmVersion()}",
+    ivy"org.ow2.asm:asm-commons:${asmVersion()}",
+    ivy"org.ow2.asm:asm-util:${asmVersion()}"
   )
 }
 

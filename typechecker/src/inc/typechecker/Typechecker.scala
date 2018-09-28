@@ -46,10 +46,11 @@ object Typechecker {
         val emptyRes: Either[List[TypeError], Substitution] = Right(Map.empty)
 
         lvars.zip(rvars).foldLeft(emptyRes) {
-          case (res, (ll, rr)) =>
-            res.flatMap { subst =>
-              unify(ll.substitute(subst), rr.substitute(subst)).map(chainSubstitution(subst, _))
-            }
+          case (substSoFar, (ll, rr)) =>
+            for {
+              subst <- substSoFar
+              newSubst <- unify(ll.substitute(subst), rr.substitute(subst))
+            } yield chainSubstitution(subst, newSubst)
         }
 
        case (tyVar @ TypeVariable(_), typ) =>
