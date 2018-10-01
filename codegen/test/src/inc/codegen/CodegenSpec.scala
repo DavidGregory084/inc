@@ -10,6 +10,7 @@ import org.scalatest._
 import org.scalatest.prop._
 import org.scalacheck._
 import org.scalacheck.cats.implicits._
+import scala.util.control.NonFatal
 
 class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks {
   type Decl = TopLevelDeclaration[NameWithType]
@@ -90,6 +91,21 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
 
     } yield Apply(Reference(nm, lambdaMeta), List(arg), NameWithType(NoName, TypeScheme(to)))
 
+  def ifGen(decls: Decls): Gen[Expr[NameWithType]] = {
+    val condDecls: List[Gen[Expr[NameWithType]]] = boolGen :: decls.collect {
+      case Let(nm, _, condMeta @ NameWithType(_, TypeScheme(_, Type.Boolean))) =>
+        Reference(nm, condMeta)
+    }.map(Gen.const)
+
+    val condGen = Gen.oneOf(condDecls).flatMap(identity)
+
+    for {
+      condExpr <- condGen
+      thenExpr <- exprGen(decls, generateFunctions = false)
+      elseExpr <- exprGen(decls, generateFunctions = false).suchThat(_.meta.typ == thenExpr.meta.typ)
+    } yield If(condExpr, thenExpr, elseExpr, NameWithType(NoName, thenExpr.meta.typ))
+  }
+
   def exprGen(decls: Decls, generateFunctions: Boolean = true): Gen[Expr[NameWithType]] = {
     val lambdaGens =
       if (generateFunctions) List(lambdaGen(decls)) else List.empty
@@ -105,10 +121,10 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
 
     val exprGens =
       if (nonLambdaDecls.isEmpty)
-        literalGens ++ lambdaGens ++ applyGens
+        literalGens ++ lambdaGens ++ applyGens :+ ifGen(decls)
       else
         // Don't generate reference to lambda because because we can't do first class functions yet
-        literalGens ++ lambdaGens ++ applyGens :+ referenceGen(nonLambdaDecls)
+        literalGens ++ lambdaGens ++ applyGens :+ referenceGen(nonLambdaDecls) :+ ifGen(decls)
 
     Gen.oneOf(exprGens)
       .flatMap(identity)
@@ -251,7 +267,7 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
     finally dir.delete()
   }
 
-  it should "round trip arbitrary module files" in forAll { mod: Module[NameWithType] =>
+  it should "round trip arbitrary module files" in forAll(minSuccessful(1000)) { mod: Module[NameWithType] =>
     println(Printer.print(mod).render(80))
 
     withTmpDir { dir =>
@@ -259,8 +275,6 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
       result shouldBe 'right
 
       Codegen.readInterface(result.right.get) shouldBe Some(mod)
-
-      Codegen.print(result.right.get)
 
       val outDir = mod.pkg.foldLeft(dir) {
         case (path, next) => path / next
@@ -278,7 +292,13 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
 
       val pkg = if (mod.pkg.isEmpty) "" else mod.pkg.mkString(".") + "."
 
-      Class.forName(s"${pkg + out.nameWithoutExtension}", true, childLoader)
+      try {
+        Class.forName(s"${pkg + out.nameWithoutExtension}", true, childLoader)
+      } catch {
+        case NonFatal(e) =>
+          Codegen.print(result.right.get)
+          fail("Exception during classloading", e)
+      }
     }
   }
 }

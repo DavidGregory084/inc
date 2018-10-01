@@ -86,7 +86,7 @@ object Printer {
 
     val body =
       if (imps.isEmpty) decls
-      else imps + Doc.lineBreak + decls
+      else imps + Doc.char(';') + Doc.line + decls
 
     body.bracketBy(prefix, suffix, indent = 2)
   }
