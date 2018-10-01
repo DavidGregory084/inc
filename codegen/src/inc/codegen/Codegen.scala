@@ -317,13 +317,16 @@ object Codegen {
   def getInternalName(name: Name, enclosingClass: String) = name match {
     case NoName => enclosingClass
     case LocalName(_) => enclosingClass
-    case ModuleName(pkg, declaringClass) => pkg.mkString("/") + "/" + declaringClass
-    case MemberName(pkg, declaringClass, _) => pkg.mkString("/") + "/" + declaringClass
+    case ModuleName(pkg, declaringClass) =>
+      val pkgName = if (pkg.isEmpty) "" else pkg.mkString("/") + "/"
+      pkgName + declaringClass
+    case MemberName(pkg, declaringClass, _) =>
+      val pkgName = if (pkg.isEmpty) "" else pkg.mkString("/") + "/"
+      pkgName + declaringClass
   }
 
   def generate(mod: Module[NameWithType]): Either[List[CodegenError], Array[Byte]] = {
-    val packageName = if (mod.pkg.isEmpty) "" else mod.pkg.mkString("", "/", "/")
-    val className = packageName + mod.name
+    val className = getInternalName(mod.meta.name, mod.name)
 
     withClassWriter(className) { classWriter =>
       // Persist the AST to protobuf

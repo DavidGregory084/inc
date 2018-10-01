@@ -2,8 +2,10 @@ package inc.codegen
 
 import java.io.ByteArrayOutputStream
 
+import better.files._
 import cats.data.StateT
 import inc.common._
+import java.net.URLClassLoader
 import org.scalatest._
 import org.scalatest.prop._
 import org.scalacheck._
@@ -15,60 +17,127 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
 
   val nameGen: Gen[String] =
     for {
+      len <- Gen.choose(0, 5)
       first <- Gen.alphaChar
-      rest <- Gen.alphaNumStr
+      rest <- Gen.resize(len, Gen.alphaNumStr)
     } yield (first +: rest).mkString
 
-  val literalGens = List(
-    Arbitrary.arbitrary[Int].map(LiteralInt(_, NameWithType(NoName, TypeScheme(Type.Int)))),
-    Arbitrary.arbitrary[Long].map(LiteralLong(_, NameWithType(NoName, TypeScheme(Type.Long)))),
-    Arbitrary.arbitrary[Float].map(LiteralFloat(_, NameWithType(NoName, TypeScheme(Type.Float)))),
-    Arbitrary.arbitrary[Double].map(LiteralDouble(_, NameWithType(NoName, TypeScheme(Type.Double)))),
-    Arbitrary.arbitrary[Boolean].map(LiteralBoolean(_, NameWithType(NoName, TypeScheme(Type.Boolean)))),
-    Arbitrary.arbitrary[Char].map(LiteralChar(_, NameWithType(NoName, TypeScheme(Type.Char)))),
-    Arbitrary.arbitrary[String].map(LiteralString(_, NameWithType(NoName, TypeScheme(Type.String)))),
-    Gen.const(LiteralUnit(NameWithType(NoName, TypeScheme(Type.Unit))))
-  )
+  val intGen: Gen[Expr[NameWithType]] = Arbitrary.arbitrary[Int].map(LiteralInt(_, NameWithType(NoName, TypeScheme(Type.Int))))
+  val longGen: Gen[Expr[NameWithType]] = Arbitrary.arbitrary[Long].map(LiteralLong(_, NameWithType(NoName, TypeScheme(Type.Long))))
+  val fltGen: Gen[Expr[NameWithType]] = Arbitrary.arbitrary[Float].map(LiteralFloat(_, NameWithType(NoName, TypeScheme(Type.Float))))
+  val dblGen: Gen[Expr[NameWithType]] = Arbitrary.arbitrary[Double].map(LiteralDouble(_, NameWithType(NoName, TypeScheme(Type.Double))))
+  val boolGen: Gen[Expr[NameWithType]] = Arbitrary.arbitrary[Boolean].map(LiteralBoolean(_, NameWithType(NoName, TypeScheme(Type.Boolean))))
+  val charGen: Gen[Expr[NameWithType]] = Arbitrary.arbitrary[Char].map(LiteralChar(_, NameWithType(NoName, TypeScheme(Type.Char))))
+  val strGen: Gen[Expr[NameWithType]] = Arbitrary.arbitrary[String].map(LiteralString(_, NameWithType(NoName, TypeScheme(Type.String))))
+  val unitGen: Gen[Expr[NameWithType]] = Gen.const(LiteralUnit(NameWithType(NoName, TypeScheme(Type.Unit))))
 
-  def referenceGen(decls: Decls) =
+  val literalGens: List[Gen[Expr[NameWithType]]] = List(intGen, longGen, fltGen, dblGen, boolGen, charGen, strGen, unitGen)
+
+  def referenceGen(decls: Decls): Gen[Expr[NameWithType]] =
     Gen.oneOf(decls).map { existing =>
-      Reference(existing.name, NameWithType(NoName, existing.meta.typ))
+      Reference(existing.name, NameWithType(existing.meta.name, existing.meta.typ))
     }
 
-  def exprGen(decls: Decls) = {
+  def lambdaGen(decls: Decls): Gen[Expr[NameWithType]] =
+    for {
+      v <- nameGen
+      vTp <- Gen.oneOf(
+        TypeScheme(Type.Int),
+        TypeScheme(Type.Long),
+        TypeScheme(Type.Float),
+        TypeScheme(Type.Double),
+        TypeScheme(Type.Boolean),
+        TypeScheme(Type.Char),
+        TypeScheme(Type.String),
+        TypeScheme(Type.Unit))
+      body <- exprGen(
+        // Unpleasant trick to allow later generators to refer to v
+        decls :+ Let(v, Reference(v, NameWithType(LocalName(v), vTp)), NameWithType(LocalName(v), vTp)),
+        // Don't generate lambda because because we can't do first class functions yet
+        generateFunctions = false
+      )
+      lam <- Gen.const(Lambda(v, body, NameWithType(NoName, TypeScheme(Type.Function(vTp.typ, body.meta.typ.typ)))))
+    } yield lam
+
+  def applyGen(lambdaDecls: Decls)(decls: Decls): Gen[Expr[NameWithType]] =
+    for {
+      lam <- Gen.oneOf(lambdaDecls)
+
+      Let(nm, Lambda(_, _, _), lambdaMeta) = lam
+
+      TypeScheme(_, TypeConstructor("->", List(from, to))) = lam.meta.typ
+
+      candidateDecls = decls.collect {
+        case Let(nm, _, candidateMeta @ NameWithType(_, TypeScheme(_, `from`))) =>
+          Reference(nm, candidateMeta)
+      }
+
+      litGen = from match {
+        case Type.Int => intGen
+        case Type.Long => longGen
+        case Type.Float => fltGen
+        case Type.Double => dblGen
+        case Type.Boolean => boolGen
+        case Type.Char => charGen
+        case Type.String => strGen
+        case Type.Unit => unitGen
+        case _ => fail("Unknown argument type")
+      }
+
+      argGen <- if (candidateDecls.nonEmpty) Gen.oneOf(candidateDecls.map(Gen.const)) else Gen.const(litGen)
+
+      arg <- argGen
+
+    } yield Apply(Reference(nm, lambdaMeta), List(arg), NameWithType(NoName, TypeScheme(to)))
+
+  def exprGen(decls: Decls, generateFunctions: Boolean = true): Gen[Expr[NameWithType]] = {
+    val lambdaGens =
+      if (generateFunctions) List(lambdaGen(decls)) else List.empty
+
+    val lambdaDecls = decls.collect {
+      case lambdaDecl @ Let(_, Lambda(_, _, _), _) => lambdaDecl
+    }
+
+    val nonLambdaDecls = decls.filterNot(lambdaDecls.contains)
+
+    val applyGens =
+      if (lambdaDecls.nonEmpty) List(applyGen(lambdaDecls)(nonLambdaDecls)) else List.empty
+
     val exprGens =
-      if (decls.isEmpty)
-        literalGens
+      if (nonLambdaDecls.isEmpty)
+        literalGens ++ lambdaGens ++ applyGens
       else
-        literalGens :+ referenceGen(decls)
+        // Don't generate reference to lambda because because we can't do first class functions yet
+        literalGens ++ lambdaGens ++ applyGens :+ referenceGen(nonLambdaDecls)
 
     Gen.oneOf(exprGens)
       .flatMap(identity)
   }
 
-  def letGen(decls: Decls) =
+  def letGen(modName: ModuleName, decls: Decls) =
     for {
-      name <- nameGen
+      // Make sure we don't generate duplicate names
+      name <- nameGen.suchThat(nm => !decls.map(_.name).contains(nm))
       expr <- exprGen(decls)
-    } yield Let(name, expr, NameWithType(LocalName(name), expr.meta.typ))
+    } yield Let(name, expr, NameWithType(MemberName(modName.pkg, modName.cls, name), expr.meta.typ))
 
-  val declGen =
+  def declGen(modName: ModuleName) =
     StateT.modifyF[Gen, (Decls, Int)] {
       case (decls, remaining) =>
-        letGen(decls).map { decl =>
+        letGen(modName, decls).map { decl =>
           (decls :+ decl, remaining - 1)
         }
     }
 
-  val declsGen: Gen[Decls] =
+  def declsGen(modName: ModuleName): Gen[Decls] =
     for {
       size <- Gen.choose(0, 9)
-      decls <- declGen.get.flatMap {
+      decls <- declGen(modName).get.flatMap {
         case (existingDecls, remaining) =>
           if (remaining < 0)
             StateT.pure[Gen, (Decls, Int), Decls](existingDecls)
           else
-            declGen.get.map(_._1)
+            declGen(modName).get.map(_._1)
       }.runA((List.empty, size))
     } yield decls
 
@@ -94,10 +163,11 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
       pkgLen <- Gen.choose(0, 5)
       pkg <- Gen.resize(pkgLen, Gen.listOfN(pkgLen, nameGen))
       name <- nameGen
-      decls <- declsGen
+      modName = ModuleName(pkg, name)
+      decls <- declsGen(modName)
       impLen <- Gen.choose(0, 5)
       imports <- Gen.resize(impLen, Gen.listOfN(impLen, importGen))
-    } yield Module(pkg, name, imports, decls, NameWithType(ModuleName(pkg, name), TypeScheme(Type.Module)))
+    } yield Module(pkg, name, imports, decls, NameWithType(modName, TypeScheme(Type.Module)))
   }
 
   def mkModule(name: String, decls: List[TopLevelDeclaration[NameWithType]]) = Module(
@@ -175,9 +245,40 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
     Codegen.readInterface(result.right.get) shouldBe Some(mod)
   }
 
+  def withTmpDir[A](test: File => A) = {
+    val dir = File.newTemporaryDirectory()
+    try test(dir)
+    finally dir.delete()
+  }
+
   it should "round trip arbitrary module files" in forAll { mod: Module[NameWithType] =>
-    val result = Codegen.generate(mod)
-    result shouldBe 'right
-    Codegen.readInterface(result.right.get) shouldBe Some(mod)
+    println(Printer.print(mod).render(80))
+
+    withTmpDir { dir =>
+      val result = Codegen.generate(mod)
+      result shouldBe 'right
+
+      Codegen.readInterface(result.right.get) shouldBe Some(mod)
+
+      Codegen.print(result.right.get)
+
+      val outDir = mod.pkg.foldLeft(dir) {
+        case (path, next) => path / next
+      }
+
+      val out = outDir / s"${mod.name}.class"
+
+      out
+        .createIfNotExists(createParents = true)
+        .writeByteArray(result.right.get)
+
+      val classLoader = Thread.currentThread.getContextClassLoader.asInstanceOf[URLClassLoader]
+
+      val childLoader = URLClassLoader.newInstance(Array(dir.url), classLoader)
+
+      val pkg = if (mod.pkg.isEmpty) "" else mod.pkg.mkString(".") + "."
+
+      Class.forName(s"${pkg + out.nameWithoutExtension}", true, childLoader)
+    }
   }
 }
