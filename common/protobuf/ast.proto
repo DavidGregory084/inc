@@ -116,7 +116,7 @@ message If {
 }
 
 message Lambda {
-  string variable = 1;
+  repeated string variable = 1;
   Expr body = 2;
   NameWithType nameWithType = 3;
 }

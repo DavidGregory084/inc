@@ -42,6 +42,8 @@ object Typechecker {
     println(s"unify $ll with $rr")
 
     (left, right) match {
+      case (TypeConstructor(_, lvars), TypeConstructor(_, rvars)) if lvars.length != rvars.length =>
+        TypeError.singleton(s"Cannot unify $ll with $rr")
       case (TypeConstructor(l, lvars), TypeConstructor(r, rvars)) if l == r =>
         val emptyRes: Either[List[TypeError], Substitution] = Right(Map.empty)
 
@@ -121,25 +123,29 @@ object Typechecker {
 
       } yield (expr, s)
 
-    case Lambda(variable, body, nm) =>
-      val tv = TypeVariable()
+    case Lambda(variables, body, nm) =>
+      val tvs = variables.map(_ => TypeVariable())
+      val tvMappings = variables.zip(tvs.map(TypeScheme(_)))
 
-      trace(variable, tv)
+      tvMappings.foreach {
+        case (v, tv) =>
+          trace(v, tv)
+      }
 
       for {
-        // Typecheck the body with the variable in scope
-        r <- typecheck(body, env + (variable -> TypeScheme(tv)))
+        // Typecheck the body with the variables in scope
+        r <- typecheck(body, env ++ tvMappings)
         (b, s) = r
 
         _ = trace("lambda body", b.meta.typ)
 
         // Create a new function type
-        tp = Type.Function(tv, b.meta.typ.instantiate)
+        tp = Type.Function(tvs, b.meta.typ.instantiate)
 
         // Apply the substitutions from the body
         ts = TypeScheme.generalize(env, tp.substitute(s))
 
-        expr = Lambda(variable, b.substitute(s), NameWithType(nm, ts))
+        expr = Lambda(variables, b.substitute(s), NameWithType(nm, ts))
 
         _ = trace("lambda expression", expr.meta.typ)
 
@@ -179,12 +185,7 @@ object Typechecker {
         argsList = as.toList
 
         // Create a new function type
-        tp = argsList.lastOption.map { t =>
-          argsList.init.foldRight(Type.Function(t.meta.typ.instantiate, tv)) {
-            case (arg, funTy) =>
-              Type.Function(arg.meta.typ.instantiate, funTy)
-          }
-        }.getOrElse(Type.Function(Type.Unit, tv)).substitute(s2)
+        tp = Type.Function(argsList.map(_.meta.typ.instantiate), tv).substitute(s2)
 
         _ = trace("expected type", tp)
 

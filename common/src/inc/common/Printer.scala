@@ -17,9 +17,16 @@ object Printer {
     case TypeConstructor(nm, tyParams) =>
       if (tyParams.isEmpty)
         nm
-      else if (nm == "->")
-        print(tyParams.head) + " -> " + print(tyParams(1))
-      else
+      else if (nm == "->") {
+        val args =
+          if (tyParams.length == 2)
+            print(tyParams.head)
+          else
+            tyParams.init.map(print).mkString("(", ", ", ")")
+
+        args + " -> " + print(tyParams.last)
+
+      } else
         nm + tyParams.map(print).mkString("[", ", ", "]")
   }
 
@@ -34,9 +41,9 @@ object Printer {
     case LiteralInt(i, _) =>
       Doc.str(i)
     case LiteralLong(l, _) =>
-      Doc.str(l)
+      Doc.str(l + 'L')
     case LiteralFloat(f, _) =>
-      Doc.str(f)
+      Doc.str(f + 'F')
     case LiteralDouble(d, _) =>
       Doc.str(d)
     case LiteralBoolean(b, _) =>
@@ -53,8 +60,15 @@ object Printer {
       Doc.text("if") & print(c) /
         (Doc.text("then") & print(t)).nested(2) /
         (Doc.text("else") & print(e)).nested(2)
-    case Lambda(v, b, _) =>
-      Doc.text(v) & Doc.text("->") & print(b).nested(2)
+    case Lambda(vs, b, _) =>
+      val args =
+        if (vs.length == 1)
+          Doc.text(vs.head)
+        else
+          Doc.intercalate(Doc.char(',') + Doc.space, vs.map(Doc.text)).tightBracketBy(Doc.char('('), Doc.char(')'))
+
+      args & Doc.text("->") & print(b).nested(2)
+
     case Apply(fn, args, _) =>
       val prefix = print(fn) + Doc.char('(')
       val suffix = Doc.char(')')

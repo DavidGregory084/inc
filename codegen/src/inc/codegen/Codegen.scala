@@ -162,7 +162,7 @@ object Codegen {
       staticInitializer.visitFieldInsn(PUTSTATIC, enclosingClass, fieldName, fieldDescriptor)
     }
 
-  def newExpr(className: String, generator: GeneratorAdapter)(expr: Expr[NameWithType]): Either[List[CodegenError], Unit] = expr match {
+  def newExpr(className: String, generator: GeneratorAdapter, locals: Map[String, Int])(expr: Expr[NameWithType]): Either[List[CodegenError], Unit] = expr match {
     case LiteralInt(i, _) =>
       Right(generator.visitLdcInsn(i))
     case LiteralLong(l, _) =>
@@ -186,12 +186,12 @@ object Codegen {
       val trueLabel = new Label
       val falseLabel = new Label
       for {
-        _ <- newExpr(className, generator)(cond)
+        _ <- newExpr(className, generator, locals)(cond)
         _ = generator.visitJumpInsn(IFEQ, falseLabel)
-        _ <- newExpr(className, generator)(thenExpr)
+        _ <- newExpr(className, generator, locals)(thenExpr)
         _ = generator.visitJumpInsn(GOTO, trueLabel)
         _ = generator.visitLabel(falseLabel)
-        _ <- newExpr(className, generator)(elseExpr)
+        _ <- newExpr(className, generator, locals)(elseExpr)
         _ = generator.visitLabel(trueLabel)
       } yield ()
     case Reference(ref, nameWithType) =>
@@ -204,14 +204,14 @@ object Codegen {
         nameWithType.name match {
           case MemberName(_, _, _) =>
             generator.visitFieldInsn(GETSTATIC, internalName, ref, descriptor)
-          case LocalName(_) =>
-            generator.visitVarInsn(loadIns, 0)
+          case LocalName(nm) =>
+            generator.loadArg(locals(nm))
           case NoName | ModuleName(_, _) =>
             throw new Exception("wtf")
         }
       }
     case Apply(fn, args, _) =>
-      val TypeScheme(_, TypeConstructor("->", List(from, to))) = fn.meta.typ
+      val TypeScheme(_, TypeConstructor("->", tpArgs)) = fn.meta.typ
 
       val getMethodName = fn.meta.name match {
         case LocalName(nm) =>
@@ -225,19 +225,21 @@ object Codegen {
       for {
         methodName <- getMethodName
 
-        argTp <- asmTypeOf(from)
-        retTp <- asmTypeOf(to)
-        descriptor = AsmType.getMethodDescriptor(retTp, argTp)
+        argTps <- tpArgs.init.traverse(asmTypeOf)
+        retTp <- asmTypeOf(tpArgs.last)
+
+        descriptor = AsmType.getMethodDescriptor(retTp, argTps: _*)
 
         internalName = getInternalName(fn.meta.name, className)
 
-        _ <- args.reverse.traverse_ { arg =>
-          for {
-            actualArgTp <- asmTypeOf(arg.meta.typ.typ)
-            _ <- newExpr(className, generator)(arg)
-          } yield {
-            if (arg.meta.typ.typ.isPrimitive && !from.isPrimitive) generator.box(actualArgTp)
-          }
+        _ <- args.zip(tpArgs).traverse_ {
+          case (arg, argTp) =>
+            for {
+              actualArgTp <- asmTypeOf(arg.meta.typ.typ)
+              _ <- newExpr(className, generator, locals)(arg)
+            } yield {
+              if (arg.meta.typ.typ.isPrimitive && !argTp.isPrimitive) generator.box(actualArgTp)
+            }
         }
       } yield generator.visitMethodInsn(INVOKESTATIC, internalName, methodName, descriptor, false)
 
@@ -274,36 +276,36 @@ object Codegen {
       case ifExpr @ If(_, _, _, nameWithType) =>
         descriptorFor(nameWithType.typ).map { descriptor =>
           classWriter.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, let.name, descriptor, null, null).visitEnd()
-          newExpr(className, staticInitializer)(ifExpr)
+          newExpr(className, staticInitializer, Map.empty)(ifExpr)
           staticInitializer.visitFieldInsn(PUTSTATIC, className, let.name, descriptor)
         }
-      case Lambda(variable, body, nameWithType) =>
-        val TypeScheme(_, TypeConstructor("->", List(from, to))) = nameWithType.typ
+      case Lambda(variables, body, nameWithType) =>
+        val TypeScheme(_, TypeConstructor("->", tpArgs)) = nameWithType.typ
 
-        val descriptorFor = for {
-          arg <- asmTypeOf(from)
-          ret <- asmTypeOf(to)
-        } yield AsmType.getMethodDescriptor(ret, arg)
+        val descriptorFor = tpArgs.traverse(asmTypeOf).map { args =>
+          AsmType.getMethodDescriptor(args.last, args.init: _*)
+        }
 
         descriptorFor.flatMap { descriptor =>
-          withGeneratorAdapter(classWriter, let.name, descriptor) { generator =>
-            generator.visitParameter(variable, ACC_FINAL)
-            newExpr(className, generator)(body)
+withGeneratorAdapter(classWriter, let.name, descriptor) { generator =>
+            variables.foreach(v => generator.visitParameter(v, ACC_FINAL))
+            newExpr(className, generator, variables.zipWithIndex.toMap)(body)
           }
         }
 
       case apply @ Apply(fn, _, nameWithType) =>
-        val TypeScheme(_, TypeConstructor("->", List(_, to))) = fn.meta.typ
+        val TypeScheme(_, TypeConstructor("->", tpArgs)) = fn.meta.typ
+        val to = tpArgs.last
 
         for {
           descriptor <- descriptorFor(nameWithType.typ)
           asmType <- asmTypeOf(let.meta.typ.typ)
           _ = classWriter.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, let.name, descriptor, null, null).visitEnd()
-          _ <- newExpr(className, staticInitializer)(apply)
+          _ <- newExpr(className, staticInitializer, Map.empty)(apply)
         } yield {
-            if (nameWithType.typ.typ.isPrimitive && !to.isPrimitive) staticInitializer.unbox(asmType)
-            if (!nameWithType.typ.typ.isPrimitive) staticInitializer.visitTypeInsn(CHECKCAST, AsmType.getType(descriptor).getInternalName)
-            staticInitializer.visitFieldInsn(PUTSTATIC, className, let.name, descriptor)
+          if (nameWithType.typ.typ.isPrimitive && !to.isPrimitive) staticInitializer.unbox(asmType)
+          if (!nameWithType.typ.typ.isPrimitive) staticInitializer.visitTypeInsn(CHECKCAST, AsmType.getType(descriptor).getInternalName)
+          staticInitializer.visitFieldInsn(PUTSTATIC, className, let.name, descriptor)
         }
     }
   }

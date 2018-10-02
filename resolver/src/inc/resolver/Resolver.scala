@@ -36,11 +36,11 @@ object Resolver {
         r3 <- resolve(elseExpr, tbl)
         (e, _) = r3
       } yield (If(c, t, e, NoName), tbl)
-    case Lambda(variable, body, _) =>
+    case Lambda(variables, body, _) =>
       for {
-        r <- resolve(body, tbl + (variable -> LocalName(variable)))
+        r <- resolve(body, tbl ++ variables.map(v => v -> LocalName(v)))
         (b, _) = r
-      } yield (Lambda(variable, b, NoName), tbl)
+      } yield (Lambda(variables, b, NoName), tbl)
     case Apply(fn, args, _) =>
       for {
         rf <- resolve(fn, tbl)

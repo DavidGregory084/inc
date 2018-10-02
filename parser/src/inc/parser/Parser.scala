@@ -77,6 +77,7 @@ object Parser {
 
   // Blocks
   def inBraces[A](p: Parser[A]) = P("{" ~/ allWs ~ p ~ allWs ~ "}")
+  def inParens[A](p: Parser[A]) = P("(" ~/ allWs ~ p ~ allWs ~ ")")
 
   val reference = identifier.map(id => Reference(id, ()))
 
@@ -90,15 +91,15 @@ object Parser {
   }
 
   val lambda = P(
-    identifier ~ allWs ~ "->" ~/ allWs ~
+    (inParens(identifier.rep(min = 1, sep = comma.~/)) | identifier.map(Seq(_))) ~ allWs ~ "->" ~/ allWs ~
       expression
   ).map {
-    case (variable, expr) =>
-      Lambda(variable, expr, ())
+    case (variables, expr) =>
+      Lambda(variables.toList, expr, ())
   }
 
   val application: Parser[Expr[Unit] => Expr[Unit]] = P(
-    "(" ~/ expression.rep(sep = comma.~/) ~ ")"
+    inParens(expression.rep(sep = comma.~/))
   ).map { args => fn => Apply(fn, args.toList, ()) }
 
   val expression: Parser[Expr[Unit]] = P( (literal | ifExpr | lambda | reference) ~ application.rep ).map {

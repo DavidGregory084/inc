@@ -59,6 +59,24 @@ case class ImportModule(pkg: List[String], name: String) extends Import
 case class ImportSymbols(pkg: List[String], name: String, symbols: List[String]) extends Import
 
 sealed trait Expr[A] extends Tree[A] {
+  def capturedVariables(implicit eqv: A =:= NameWithType): Set[Name] = this match {
+    case LiteralInt(_, _) => Set.empty
+    case LiteralLong(_, _) => Set.empty
+    case LiteralFloat(_, _) => Set.empty
+    case LiteralDouble(_, _) => Set.empty
+    case LiteralBoolean(_, _) => Set.empty
+    case LiteralString(_, _) => Set.empty
+    case LiteralChar(_, _) => Set.empty
+    case LiteralUnit(_) => Set.empty
+    case Reference(_, meta) => Set(eqv(meta).name)
+    case If(cond, thenExpr, elseExpr, _) =>
+      cond.capturedVariables ++ thenExpr.capturedVariables ++ elseExpr.capturedVariables
+    case Lambda(variables, body, _) =>
+      body.capturedVariables -- variables.map(LocalName.apply)
+    case Apply(fn, args, _) =>
+      fn.capturedVariables ++ args.flatMap(_.capturedVariables)
+  }
+
   def toProto(implicit eqv: A =:= NameWithType): proto.Expr = this match {
     case LiteralInt(i, meta) =>
       val nameWithType = Some(eqv(meta).toProto)
@@ -90,9 +108,9 @@ sealed trait Expr[A] extends Tree[A] {
     case If(cond, thenExpr, elseExpr, meta) =>
       val nameWithType = Some(eqv(meta).toProto)
       proto.If(cond.toProto, thenExpr.toProto, elseExpr.toProto, nameWithType)
-    case Lambda(variable, body, meta) =>
+    case Lambda(variables, body, meta) =>
       val nameWithType = Some(eqv(meta).toProto)
-      proto.Lambda(variable, body.toProto, nameWithType)
+      proto.Lambda(variables, body.toProto, nameWithType)
     case Apply(fn, args, meta) =>
       val nameWithType = Some(eqv(meta).toProto)
       proto.Apply(fn.toProto, args.map(_.toProto), nameWithType)
@@ -173,9 +191,9 @@ object Expr {
         Expr.fromProto(elseExpr),
         NameWithType.fromProto(ifExpr.getNameWithType)
       )
-    case lambda @ proto.Lambda(variable, body, _) =>
+    case lambda @ proto.Lambda(variables, body, _) =>
       Lambda(
-        variable,
+        variables.toList,
         Expr.fromProto(body),
         NameWithType.fromProto(lambda.getNameWithType)
       )
@@ -198,7 +216,7 @@ final case class If[A](
 ) extends Expr[A]
 
 final case class Lambda[A](
-  variable: String,
+  variables: List[String],
   body: Expr[A],
   meta: A
 ) extends Expr[A]
@@ -367,7 +385,7 @@ object Type {
   val String = TypeConstructor("String", List.empty)
   val Module = TypeConstructor("Module", List.empty)
   val Unit = TypeConstructor(UnitClass, List.empty)
-  def Function(from: Type, to: Type) = TypeConstructor("->", List(from, to))
+  def Function(from: List[Type], to: Type) = TypeConstructor("->", from ++ List(to))
 
   def fromProto(typ: proto.Type): Type = typ match {
     case proto.TypeVariable(id) =>

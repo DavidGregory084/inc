@@ -87,14 +87,14 @@ class TypecheckerSpec extends FlatSpec with Matchers {
 
   it should "infer the parameter and return type of lambda expressions" in {
     val mod1 = mkModule("If", List(
-      Let("lam", Lambda("bool", If(Reference("bool", LocalName("bool")), LiteralInt(42, NoName), LiteralInt(41, NoName), NoName), NoName), LocalName("lam"))
+      Let("lam", Lambda(List("bool"), If(Reference("bool", LocalName("bool")), LiteralInt(42, NoName), LiteralInt(41, NoName), NoName), NoName), LocalName("lam"))
     ))
 
     val result = Typechecker.typecheck(mod1)
     result shouldBe 'right
 
     val mod2 = mkModule("Lambda", List(
-      Let("lam", Lambda("a", Reference("a", LocalName("a")), NoName), LocalName("lam"))
+      Let("lam", Lambda(List("a"), Reference("a", LocalName("a")), NoName), LocalName("lam"))
     ))
 
     val result2 = Typechecker.typecheck(mod2)
@@ -103,7 +103,7 @@ class TypecheckerSpec extends FlatSpec with Matchers {
 
   it should "infer the type of lambda application" in {
     val mod1 = mkModule("Apply", List(
-      Let("lam", Lambda("bool", If(Reference("bool", MemberName(List.empty, "Apply", "bool")), LiteralInt(42, NoName), LiteralInt(41, NoName), NoName), NoName), MemberName(List.empty, "Apply", "lam")),
+      Let("lam", Lambda(List("bool"), If(Reference("bool", MemberName(List.empty, "Apply", "bool")), LiteralInt(42, NoName), LiteralInt(41, NoName), NoName), NoName), MemberName(List.empty, "Apply", "lam")),
       Let("app", Apply(Reference("lam", MemberName(List.empty, "Apply", "bool")), List(LiteralBoolean(true, NoName)), NoName), MemberName(List.empty, "Apply", "app"))
     ))
 
@@ -111,7 +111,7 @@ class TypecheckerSpec extends FlatSpec with Matchers {
     result1 shouldBe 'right
 
     val mod2 = mkModule("Apply", List(
-      Let("lam", Lambda("a", Reference("a", LocalName("a")), NoName), MemberName(List.empty, "Apply", "lam")),
+      Let("lam", Lambda(List("a"), Reference("a", LocalName("a")), NoName), MemberName(List.empty, "Apply", "lam")),
       Let("app", Apply(Reference("lam", MemberName(List.empty, "Apply", "bool")), List(LiteralBoolean(true, NoName)), NoName), MemberName(List.empty, "Apply", "app"))
     ))
 

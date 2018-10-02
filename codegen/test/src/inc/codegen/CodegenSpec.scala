@@ -4,13 +4,13 @@ import java.io.ByteArrayOutputStream
 
 import better.files._
 import cats.data.StateT
+import cats.implicits._
 import inc.common._
 import java.net.URLClassLoader
 import org.scalatest._
 import org.scalatest.prop._
 import org.scalacheck._
 import org.scalacheck.cats.implicits._
-import scala.util.control.NonFatal
 
 class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks {
   type Decl = TopLevelDeclaration[NameWithType]
@@ -41,8 +41,10 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
 
   def lambdaGen(decls: Decls): Gen[Expr[NameWithType]] =
     for {
-      v <- nameGen
-      vTp <- Gen.oneOf(
+      numArgs <- Gen.choose(1, 4)
+      // Don't generate duplicate variable names
+      vs <- Gen.listOfN(numArgs, nameGen).suchThat(vs => vs.distinct.length == vs.length)
+      vTps <- Gen.listOfN(numArgs, Gen.oneOf(
         TypeScheme(Type.Int),
         TypeScheme(Type.Long),
         TypeScheme(Type.Float),
@@ -50,15 +52,42 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
         TypeScheme(Type.Boolean),
         TypeScheme(Type.Char),
         TypeScheme(Type.String),
-        TypeScheme(Type.Unit))
+        TypeScheme(Type.Unit)))
       body <- exprGen(
         // Unpleasant trick to allow later generators to refer to v
-        decls :+ Let(v, Reference(v, NameWithType(LocalName(v), vTp)), NameWithType(LocalName(v), vTp)),
+        decls ++ vs.zip(vTps).map {
+          case (v, vTp) =>
+            Let(v, Reference(v, NameWithType(LocalName(v), vTp)), NameWithType(LocalName(v), vTp))
+        },
         // Don't generate lambda because because we can't do first class functions yet
         generateFunctions = false
       )
-      lam <- Gen.const(Lambda(v, body, NameWithType(NoName, TypeScheme(Type.Function(vTp.typ, body.meta.typ.typ)))))
+      lam <- Gen.const(Lambda(vs, body, NameWithType(NoName, TypeScheme(Type.Function(vTps.map(_.typ), body.meta.typ.typ)))))
     } yield lam
+
+  def genArg(tp: Type)(decls: Decls): Gen[Expr[NameWithType]] = {
+    val candidateDecls = decls.collect {
+      case Let(nm, _, candidateMeta @ NameWithType(_, TypeScheme(_, `tp`))) =>
+        Reference(nm, candidateMeta)
+    }
+
+    val litGen = tp match {
+      case Type.Int => intGen
+      case Type.Long => longGen
+      case Type.Float => fltGen
+      case Type.Double => dblGen
+      case Type.Boolean => boolGen
+      case Type.Char => charGen
+      case Type.String => strGen
+      case Type.Unit => unitGen
+      case _ => fail("Unknown argument type")
+    }
+
+    if (candidateDecls.isEmpty)
+      litGen
+    else
+      Gen.oneOf(candidateDecls)
+  }
 
   def applyGen(lambdaDecls: Decls)(decls: Decls): Gen[Expr[NameWithType]] =
     for {
@@ -66,30 +95,11 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
 
       Let(nm, Lambda(_, _, _), lambdaMeta) = lam
 
-      TypeScheme(_, TypeConstructor("->", List(from, to))) = lam.meta.typ
+      TypeScheme(_, TypeConstructor("->", tpArgs)) = lambdaMeta.typ
 
-      candidateDecls = decls.collect {
-        case Let(nm, _, candidateMeta @ NameWithType(_, TypeScheme(_, `from`))) =>
-          Reference(nm, candidateMeta)
-      }
+      args <- tpArgs.init.traverse(tp => genArg(tp)(decls))
 
-      litGen = from match {
-        case Type.Int => intGen
-        case Type.Long => longGen
-        case Type.Float => fltGen
-        case Type.Double => dblGen
-        case Type.Boolean => boolGen
-        case Type.Char => charGen
-        case Type.String => strGen
-        case Type.Unit => unitGen
-        case _ => fail("Unknown argument type")
-      }
-
-      argGen <- if (candidateDecls.nonEmpty) Gen.oneOf(candidateDecls.map(Gen.const)) else Gen.const(litGen)
-
-      arg <- argGen
-
-    } yield Apply(Reference(nm, lambdaMeta), List(arg), NameWithType(NoName, TypeScheme(to)))
+    } yield Apply(Reference(nm, lambdaMeta), args, NameWithType(NoName, TypeScheme(tpArgs.last)))
 
   def ifGen(decls: Decls): Gen[Expr[NameWithType]] = {
     val condDecls: List[Gen[Expr[NameWithType]]] = boolGen :: decls.collect {
@@ -295,9 +305,9 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
       try {
         Class.forName(s"${pkg + out.nameWithoutExtension}", true, childLoader)
       } catch {
-        case NonFatal(e) =>
+        case e: Throwable =>
           Codegen.print(result.right.get)
-          fail("Exception during classloading", e)
+          throw e
       }
     }
   }
