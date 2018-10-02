@@ -67,29 +67,29 @@ object Typechecker {
   }
 
   def typecheck(expr: Expr[Name], env: Environment): Either[List[TypeError], (Expr[NameWithType], Substitution)] = expr match {
-    case int @ LiteralInt(_, _) =>
+    case int @ LiteralInt(_, _, _) =>
       Right((int.copy(meta = NameWithType(int.meta, TypeScheme(Type.Int))), Map.empty))
-    case long @ LiteralLong(_, _) =>
+    case long @ LiteralLong(_, _, _) =>
       Right((long.copy(meta = NameWithType(long.meta, TypeScheme(Type.Long))), Map.empty))
-    case float @ LiteralFloat(_, _) =>
+    case float @ LiteralFloat(_, _, _) =>
       Right((float.copy(meta = NameWithType(float.meta, TypeScheme(Type.Float))), Map.empty))
-    case double @ LiteralDouble(_, _) =>
+    case double @ LiteralDouble(_, _, _) =>
       Right((double.copy(meta = NameWithType(double.meta, TypeScheme(Type.Double))), Map.empty))
-    case bool @ LiteralBoolean(_, _) =>
+    case bool @ LiteralBoolean(_, _, _) =>
       Right((bool.copy(meta = NameWithType(bool.meta, TypeScheme(Type.Boolean))), Map.empty))
-    case char @ LiteralChar(_, _) =>
+    case char @ LiteralChar(_, _, _) =>
       Right((char.copy(meta = NameWithType(char.meta, TypeScheme(Type.Char))), Map.empty))
-    case str @ LiteralString(_, _) =>
+    case str @ LiteralString(_, _, _) =>
       Right((str.copy(meta = NameWithType(str.meta, TypeScheme(Type.String))), Map.empty))
-    case unit @ LiteralUnit(_) =>
+    case unit @ LiteralUnit(_, _) =>
       Right((unit.copy(meta = NameWithType(unit.meta, TypeScheme(Type.Unit))), Map.empty))
-    case ref @ Reference(name, _)  =>
+    case ref @ Reference(name, _, _)  =>
       env.get(name).map { typ =>
         trace(s"reference to $name", typ)
         Right((ref.copy(meta = NameWithType(ref.meta, typ)), Map.empty: Substitution))
       }.getOrElse(TypeError.singleton(s"Reference to undefined symbol: $name"))
 
-    case If(cond, thenExpr, elseExpr, nm) =>
+    case If(cond, thenExpr, elseExpr, nm, pos) =>
       for {
         // Typecheck the condition
         r1 <- typecheck(cond, env)
@@ -117,13 +117,13 @@ object Typechecker {
 
         s = chainSubstitutions(s1, s2, s3, s4, s5)
 
-        expr = If(c, t, e, NameWithType(nm, t.meta.typ)).substitute(s)
+        expr = If(c, t, e, NameWithType(nm, t.meta.typ), pos).substitute(s)
 
         _ = trace("if expression", expr.meta.typ)
 
       } yield (expr, s)
 
-    case Lambda(variables, body, nm) =>
+    case Lambda(variables, body, nm, pos) =>
       val tvs = variables.map(_ => TypeVariable())
       val tvMappings = variables.zip(tvs.map(TypeScheme(_)))
 
@@ -145,13 +145,13 @@ object Typechecker {
         // Apply the substitutions from the body
         ts = TypeScheme.generalize(env, tp.substitute(s))
 
-        expr = Lambda(variables, b.substitute(s), NameWithType(nm, ts))
+        expr = Lambda(variables, b.substitute(s), NameWithType(nm, ts), pos)
 
         _ = trace("lambda expression", expr.meta.typ)
 
       } yield (expr, s)
 
-    case Apply(fn, args, nm) =>
+    case Apply(fn, args, nm, pos) =>
       val tv = TypeVariable()
 
       trace("function application", tv)
@@ -193,17 +193,17 @@ object Typechecker {
 
         s = chainSubstitutions(s1, s2, s3)
 
-        expr = Apply(f.substitute(s), argsList.map(_.substitute(s)), NameWithType(nm, TypeScheme(tv.substitute(s))))
+        expr = Apply(f.substitute(s), argsList.map(_.substitute(s)), NameWithType(nm, TypeScheme(tv.substitute(s))), pos)
 
       } yield (expr, s2)
   }
 
   def typecheck(decl: TopLevelDeclaration[Name], env: Environment): Either[List[TypeError], (TopLevelDeclaration[NameWithType], Environment)] = decl match {
-    case Let(name, expr, _) =>
+    case Let(name, expr, _, pos) =>
       typecheck(expr, env).flatMap {
         case (checkedExpr, subst) =>
           trace(name, checkedExpr.meta.typ)
-          Right((Let(name, checkedExpr, NameWithType(decl.meta, checkedExpr.meta.typ)), substitute(env, subst).updated(name, checkedExpr.meta.typ)))
+          Right((Let(name, checkedExpr, NameWithType(decl.meta, checkedExpr.meta.typ), pos), substitute(env, subst).updated(name, checkedExpr.meta.typ)))
       }
   }
 
@@ -211,7 +211,7 @@ object Typechecker {
     module: Module[Name],
     importedDecls: Map[String, TopLevelDeclaration[NameWithType]] = Map.empty
   ): Either[List[TypeError], Module[NameWithType]] = module match {
-    case Module(_, _, _, decls, _) =>
+    case Module(_, _, _, decls, _, _) =>
 
       val initialEnv = importedDecls.mapValues(_.meta.typ)
 

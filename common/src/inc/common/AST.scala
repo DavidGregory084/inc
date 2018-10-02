@@ -6,6 +6,7 @@ abstract class Error(val msg: String) extends Throwable(msg) with Product with S
 
 sealed trait Tree[A] extends Product with Serializable {
   def meta: A
+  def pos: Option[(Int, Int)]
 }
 
 final case class Module[A](
@@ -13,7 +14,8 @@ final case class Module[A](
   name: String,
   imports: List[Import],
   declarations: List[TopLevelDeclaration[A]],
-  meta: A
+  meta: A,
+  pos: Option[(Int, Int)]
 ) extends Tree[A] {
   def toProto(implicit eqv: A =:= NameWithType): proto.Module = proto.Module(
     pkg = pkg,
@@ -36,7 +38,8 @@ object Module {
     name = mod.name,
     imports = mod.imports.toList.map(Import.fromProto),
     declarations = mod.declarations.toList.map(TopLevelDeclaration.fromProto),
-    meta = NameWithType.fromProto(mod.getNameWithType)
+    meta = NameWithType.fromProto(mod.getNameWithType),
+    pos = None
   )
 }
 
@@ -60,103 +63,103 @@ case class ImportSymbols(pkg: List[String], name: String, symbols: List[String])
 
 sealed trait Expr[A] extends Tree[A] {
   def capturedVariables(implicit eqv: A =:= NameWithType): Set[Name] = this match {
-    case LiteralInt(_, _) => Set.empty
-    case LiteralLong(_, _) => Set.empty
-    case LiteralFloat(_, _) => Set.empty
-    case LiteralDouble(_, _) => Set.empty
-    case LiteralBoolean(_, _) => Set.empty
-    case LiteralString(_, _) => Set.empty
-    case LiteralChar(_, _) => Set.empty
-    case LiteralUnit(_) => Set.empty
-    case Reference(_, meta) => Set(eqv(meta).name)
-    case If(cond, thenExpr, elseExpr, _) =>
+    case LiteralInt(_, _, _) => Set.empty
+    case LiteralLong(_, _, _) => Set.empty
+    case LiteralFloat(_, _, _) => Set.empty
+    case LiteralDouble(_, _, _) => Set.empty
+    case LiteralBoolean(_, _, _) => Set.empty
+    case LiteralString(_, _, _) => Set.empty
+    case LiteralChar(_, _, _) => Set.empty
+    case LiteralUnit(_, _) => Set.empty
+    case Reference(_, meta, _) => Set(eqv(meta).name)
+    case If(cond, thenExpr, elseExpr, _, _) =>
       cond.capturedVariables ++ thenExpr.capturedVariables ++ elseExpr.capturedVariables
-    case Lambda(variables, body, _) =>
+    case Lambda(variables, body, _, _) =>
       body.capturedVariables -- variables.map(LocalName.apply)
-    case Apply(fn, args, _) =>
+    case Apply(fn, args, _, _) =>
       fn.capturedVariables ++ args.flatMap(_.capturedVariables)
   }
 
   def toProto(implicit eqv: A =:= NameWithType): proto.Expr = this match {
-    case LiteralInt(i, meta) =>
+    case LiteralInt(i, meta, _) =>
       val nameWithType = Some(eqv(meta).toProto)
       proto.LiteralInt(i, nameWithType)
-    case LiteralLong(l, meta) =>
+    case LiteralLong(l, meta, _) =>
       val nameWithType = Some(eqv(meta).toProto)
       proto.LiteralLong(l, nameWithType)
-    case LiteralFloat(f, meta) =>
+    case LiteralFloat(f, meta, _) =>
       val nameWithType = Some(eqv(meta).toProto)
       proto.LiteralFloat(f, nameWithType)
-    case LiteralDouble(d, meta) =>
+    case LiteralDouble(d, meta, _) =>
       val nameWithType = Some(eqv(meta).toProto)
       proto.LiteralDouble(d, nameWithType)
-    case LiteralBoolean(b, meta) =>
+    case LiteralBoolean(b, meta, _) =>
       val nameWithType = Some(eqv(meta).toProto)
       proto.LiteralBoolean(b, nameWithType)
-    case LiteralString(s, meta) =>
+    case LiteralString(s, meta, _) =>
       val nameWithType = Some(eqv(meta).toProto)
       proto.LiteralString(s, nameWithType)
-    case LiteralChar(c, meta) =>
+    case LiteralChar(c, meta, _) =>
       val nameWithType = Some(eqv(meta).toProto)
       proto.LiteralChar(c.toString, nameWithType)
-    case LiteralUnit(meta) =>
+    case LiteralUnit(meta, _) =>
       val nameWithType = Some(eqv(meta).toProto)
       proto.LiteralUnit(nameWithType)
-    case Reference(name, meta) =>
+    case Reference(name, meta, _) =>
       val nameWithType = Some(eqv(meta).toProto)
       proto.Reference(name, nameWithType)
-    case If(cond, thenExpr, elseExpr, meta) =>
+    case If(cond, thenExpr, elseExpr, meta, _) =>
       val nameWithType = Some(eqv(meta).toProto)
       proto.If(cond.toProto, thenExpr.toProto, elseExpr.toProto, nameWithType)
-    case Lambda(variables, body, meta) =>
+    case Lambda(variables, body, meta, _) =>
       val nameWithType = Some(eqv(meta).toProto)
       proto.Lambda(variables, body.toProto, nameWithType)
-    case Apply(fn, args, meta) =>
+    case Apply(fn, args, meta, _) =>
       val nameWithType = Some(eqv(meta).toProto)
       proto.Apply(fn.toProto, args.map(_.toProto), nameWithType)
   }
 
   def substitute(subst: Map[TypeVariable, Type])(implicit eqv: A =:= NameWithType): Expr[A] = this match {
-    case int @ LiteralInt(_, meta) =>
+    case int @ LiteralInt(_, meta, _) =>
       val nameWithType = eqv(meta)
       int.copy(meta = nameWithType.substitute(subst).asInstanceOf[A])
-    case long @ LiteralLong(_, meta) =>
+    case long @ LiteralLong(_, meta, _) =>
       val nameWithType = eqv(meta)
       long.copy(meta = nameWithType.substitute(subst).asInstanceOf[A])
-    case float @ LiteralFloat(_, meta) =>
+    case float @ LiteralFloat(_, meta, _) =>
       val nameWithType = eqv(meta)
       float.copy(meta = nameWithType.substitute(subst).asInstanceOf[A])
-    case double @ LiteralDouble(_, meta) =>
+    case double @ LiteralDouble(_, meta, _) =>
       val nameWithType = eqv(meta)
       double.copy(meta = nameWithType.substitute(subst).asInstanceOf[A])
-    case boolean @ LiteralBoolean(_, meta) =>
+    case boolean @ LiteralBoolean(_, meta, _) =>
       val nameWithType = eqv(meta)
       boolean.copy(meta = nameWithType.substitute(subst).asInstanceOf[A])
-    case string @ LiteralString(_, meta) =>
+    case string @ LiteralString(_, meta, _) =>
       val nameWithType = eqv(meta)
       string.copy(meta = nameWithType.substitute(subst).asInstanceOf[A])
-    case char @ LiteralChar(_, meta) =>
+    case char @ LiteralChar(_, meta, _) =>
       val nameWithType = eqv(meta)
       char.copy(meta = nameWithType.substitute(subst).asInstanceOf[A])
-    case unit @ LiteralUnit(meta) =>
+    case unit @ LiteralUnit(meta, _) =>
       val nameWithType = eqv(meta)
       unit.copy(meta = nameWithType.substitute(subst).asInstanceOf[A])
-    case ref @ Reference(_, meta) =>
+    case ref @ Reference(_, meta, _) =>
       val nameWithType = eqv(meta)
       ref.copy(meta = nameWithType.substitute(subst).asInstanceOf[A])
-    case ifExpr @ If(cond, thenExpr, elseExpr, meta) =>
+    case ifExpr @ If(cond, thenExpr, elseExpr, meta, _) =>
       val nameWithType = eqv(meta)
       ifExpr.copy(
         cond = cond.substitute(subst),
         thenExpr = thenExpr.substitute(subst),
         elseExpr = elseExpr.substitute(subst),
         meta = nameWithType.substitute(subst).asInstanceOf[A])
-    case lambda @ Lambda(_, body, meta) =>
+    case lambda @ Lambda(_, body, meta, _) =>
       val nameWithType = eqv(meta)
       lambda.copy(
         body = body.substitute(subst),
         meta = nameWithType.substitute(subst).asInstanceOf[A])
-    case apply @ Apply(fn, args, meta) =>
+    case apply @ Apply(fn, args, meta, _) =>
       val nameWithType = eqv(meta)
       apply.copy(
         fn = fn.substitute(subst),
@@ -167,41 +170,44 @@ sealed trait Expr[A] extends Tree[A] {
 object Expr {
   def fromProto(expr: proto.Expr): Expr[NameWithType] = expr match {
     case int @ proto.LiteralInt(i, _) =>
-      LiteralInt(i, NameWithType.fromProto(int.getNameWithType))
+      LiteralInt(i, NameWithType.fromProto(int.getNameWithType), None)
     case long @ proto.LiteralLong(l, _) =>
-      LiteralLong(l, NameWithType.fromProto(long.getNameWithType))
+      LiteralLong(l, NameWithType.fromProto(long.getNameWithType), None)
     case flt @ proto.LiteralFloat(f, _) =>
-      LiteralFloat(f, NameWithType.fromProto(flt.getNameWithType))
+      LiteralFloat(f, NameWithType.fromProto(flt.getNameWithType), None)
     case dbl @ proto.LiteralDouble(d, _) =>
-      LiteralDouble(d, NameWithType.fromProto(dbl.getNameWithType))
+      LiteralDouble(d, NameWithType.fromProto(dbl.getNameWithType), None)
     case bool @ proto.LiteralBoolean(b, _) =>
-      LiteralBoolean(b, NameWithType.fromProto(bool.getNameWithType))
+      LiteralBoolean(b, NameWithType.fromProto(bool.getNameWithType), None)
     case str @ proto.LiteralString(s, _) =>
-      LiteralString(s, NameWithType.fromProto(str.getNameWithType))
+      LiteralString(s, NameWithType.fromProto(str.getNameWithType), None)
     case char @ proto.LiteralChar(c, _) =>
-      LiteralChar(c.charAt(0), NameWithType.fromProto(char.getNameWithType))
+      LiteralChar(c.charAt(0), NameWithType.fromProto(char.getNameWithType), None)
     case unit @ proto.LiteralUnit(_) =>
-      LiteralUnit(NameWithType.fromProto(unit.getNameWithType))
+      LiteralUnit(NameWithType.fromProto(unit.getNameWithType), None)
     case ref @ proto.Reference(name, _) =>
-      Reference(name, NameWithType.fromProto(ref.getNameWithType))
+      Reference(name, NameWithType.fromProto(ref.getNameWithType), None)
     case ifExpr @ proto.If(cond, thenExpr, elseExpr, _) =>
       If(
         Expr.fromProto(cond),
         Expr.fromProto(thenExpr),
         Expr.fromProto(elseExpr),
-        NameWithType.fromProto(ifExpr.getNameWithType)
+        NameWithType.fromProto(ifExpr.getNameWithType),
+        None
       )
     case lambda @ proto.Lambda(variables, body, _) =>
       Lambda(
         variables.toList,
         Expr.fromProto(body),
-        NameWithType.fromProto(lambda.getNameWithType)
+        NameWithType.fromProto(lambda.getNameWithType),
+        None
       )
     case app @ proto.Apply(fn, args, _) =>
       Apply(
         Expr.fromProto(fn),
         args.toList.map(Expr.fromProto),
-        NameWithType.fromProto(app.getNameWithType)
+        NameWithType.fromProto(app.getNameWithType),
+        None
       )
     case proto.Expr.Empty =>
       throw new Exception("Empty Expr in protobuf")
@@ -212,44 +218,47 @@ final case class If[A](
   cond: Expr[A],
   thenExpr: Expr[A],
   elseExpr: Expr[A],
-  meta: A
+  meta: A,
+  pos: Option[(Int, Int)]
 ) extends Expr[A]
 
 final case class Lambda[A](
   variables: List[String],
   body: Expr[A],
-  meta: A
+  meta: A,
+  pos: Option[(Int, Int)]
 ) extends Expr[A]
 
 final case class Apply[A](
   fn: Expr[A],
   args: List[Expr[A]],
-  meta: A
+  meta: A,
+  pos: Option[(Int, Int)]
 ) extends Expr[A]
 
 sealed trait Literal[A] extends Expr[A]
 
-final case class LiteralInt[A](i: Int, meta: A) extends Literal[A]
-final case class LiteralLong[A](l: Long, meta: A) extends Literal[A]
-final case class LiteralFloat[A](f: Float, meta: A) extends Literal[A]
-final case class LiteralDouble[A](d: Double, meta: A) extends Literal[A]
-final case class LiteralBoolean[A](b: Boolean, meta: A) extends Literal[A]
-final case class LiteralChar[A](c: Char, meta: A) extends Literal[A]
-final case class LiteralString[A](s: String, meta: A) extends Literal[A]
-final case class LiteralUnit[A](meta: A) extends Literal[A]
+final case class LiteralInt[A](i: Int, meta: A, pos: Option[(Int, Int)]) extends Literal[A]
+final case class LiteralLong[A](l: Long, meta: A, pos: Option[(Int, Int)]) extends Literal[A]
+final case class LiteralFloat[A](f: Float, meta: A, pos: Option[(Int, Int)]) extends Literal[A]
+final case class LiteralDouble[A](d: Double, meta: A, pos: Option[(Int, Int)]) extends Literal[A]
+final case class LiteralBoolean[A](b: Boolean, meta: A, pos: Option[(Int, Int)]) extends Literal[A]
+final case class LiteralChar[A](c: Char, meta: A, pos: Option[(Int, Int)]) extends Literal[A]
+final case class LiteralString[A](s: String, meta: A, pos: Option[(Int, Int)]) extends Literal[A]
+final case class LiteralUnit[A](meta: A, pos: Option[(Int, Int)]) extends Literal[A]
 
-final case class Reference[A](name: String, meta: A) extends Expr[A]
+final case class Reference[A](name: String, meta: A, pos: Option[(Int, Int)]) extends Expr[A]
 
 sealed trait Declaration[A] extends Tree[A]
 sealed trait TopLevelDeclaration[A] extends Declaration[A] {
   def name: String
   def toProto(implicit eqv: A =:= NameWithType): proto.TopLevelDeclaration = this match {
-    case Let(name, expr, meta) =>
+    case Let(name, expr, meta, _) =>
       val nameWithType = Some(eqv(meta).toProto)
       proto.Let(name, expr.toProto, nameWithType)
   }
   def substitute(subst: Map[TypeVariable, Type])(implicit eqv: A =:= NameWithType): TopLevelDeclaration[A] = this match {
-    case let @ Let(_, expr, meta) =>
+    case let @ Let(_, expr, meta, _) =>
       val nameWithType = eqv(meta)
       let.copy(
         binding = expr.substitute(subst),
@@ -262,7 +271,8 @@ object TopLevelDeclaration {
       Let(
         name,
         Expr.fromProto(binding),
-        NameWithType.fromProto(let.getNameWithType)
+        NameWithType.fromProto(let.getNameWithType),
+        None
       )
     case proto.TopLevelDeclaration.Empty =>
       throw new Exception("Empty TopLevelDeclaration in protobuf")
@@ -270,7 +280,7 @@ object TopLevelDeclaration {
 }
 sealed trait LocalDeclaration[A] extends Declaration[A]
 
-final case class Let[A](name: String, binding: Expr[A], meta: A) extends TopLevelDeclaration[A] with LocalDeclaration[A]
+final case class Let[A](name: String, binding: Expr[A], meta: A, pos: Option[(Int, Int)]) extends TopLevelDeclaration[A] with LocalDeclaration[A]
 
 sealed trait Name {
   def toProto: proto.Name = this match {

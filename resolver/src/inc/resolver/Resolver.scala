@@ -7,27 +7,27 @@ object Resolver {
   type SymbolTable = Map[String, Name]
 
   def resolve(expr: Expr[Unit], tbl: SymbolTable): Either[List[ResolverError], (Expr[Name], SymbolTable)] = expr match {
-    case int @ LiteralInt(_, _) =>
+    case int @ LiteralInt(_, _, _) =>
       Right((int.copy(meta = NoName), tbl))
-    case long @ LiteralLong(_, _) =>
+    case long @ LiteralLong(_, _, _) =>
       Right((long.copy(meta = NoName), tbl))
-    case float @ LiteralFloat(_, _) =>
+    case float @ LiteralFloat(_, _, _) =>
       Right((float.copy(meta = NoName), tbl))
-    case double @ LiteralDouble(_, _) =>
+    case double @ LiteralDouble(_, _, _) =>
       Right((double.copy(meta = NoName), tbl))
-    case bool @ LiteralBoolean(_, _) =>
+    case bool @ LiteralBoolean(_, _, _) =>
       Right((bool.copy(meta = NoName), tbl))
-    case char @ LiteralChar(_, _) =>
+    case char @ LiteralChar(_, _, _) =>
       Right((char.copy(meta = NoName), tbl))
-    case str @ LiteralString(_, _) =>
+    case str @ LiteralString(_, _, _) =>
       Right((str.copy(meta = NoName), tbl))
-    case unit @ LiteralUnit(_) =>
+    case unit @ LiteralUnit(_, _) =>
       Right((unit.copy(meta = NoName), tbl))
-    case ref @ Reference(name, _)  =>
+    case ref @ Reference(name, _, _)  =>
       tbl.get(name).map { nm =>
         Right((ref.copy(meta = nm), tbl))
       }.getOrElse(ResolverError.singleton(s"Reference to undefined symbol: $name"))
-    case If(cond, thenExpr, elseExpr, _) =>
+    case If(cond, thenExpr, elseExpr, _, pos) =>
       for {
         r1 <- resolve(cond, tbl)
         (c, _) = r1
@@ -35,13 +35,13 @@ object Resolver {
         (t, _) = r2
         r3 <- resolve(elseExpr, tbl)
         (e, _) = r3
-      } yield (If(c, t, e, NoName), tbl)
-    case Lambda(variables, body, _) =>
+      } yield (If(c, t, e, NoName, pos), tbl)
+    case Lambda(variables, body, _, pos) =>
       for {
         r <- resolve(body, tbl ++ variables.map(v => v -> LocalName(v)))
         (b, _) = r
-      } yield (Lambda(variables, b, NoName), tbl)
-    case Apply(fn, args, _) =>
+      } yield (Lambda(variables, b, NoName, pos), tbl)
+    case Apply(fn, args, _, pos) =>
       for {
         rf <- resolve(fn, tbl)
         (f, _) = rf
@@ -57,11 +57,11 @@ object Resolver {
             } yield rs :+ r
         }
 
-      } yield (Apply(f, ra.toList, NoName), tbl)
+      } yield (Apply(f, ra.toList, NoName, pos), tbl)
   }
 
   def resolve(mod: Module[Unit], decl: TopLevelDeclaration[Unit], tbl: SymbolTable): Either[List[ResolverError], (TopLevelDeclaration[Name], SymbolTable)] = decl match {
-    case Let(name, expr, _) =>
+    case Let(name, expr, _, pos) =>
       val memberName = MemberName(mod.pkg, mod.name, name)
 
       resolve(expr, tbl).flatMap {
@@ -69,7 +69,7 @@ object Resolver {
           if (updatedTbl.contains(name))
             ResolverError.singleton(s"Symbol $name is already defined as ${updatedTbl(name)}")
           else
-            Right((Let(name, resolvedExpr, memberName), updatedTbl.updated(name, memberName)))
+            Right((Let(name, resolvedExpr, memberName, pos), updatedTbl.updated(name, memberName)))
       }
   }
 
@@ -77,7 +77,7 @@ object Resolver {
     module: Module[Unit],
     importedDecls: Map[String, TopLevelDeclaration[NameWithType]] = Map.empty
   ): Either[List[ResolverError], Module[Name]] = module match {
-    case Module(pkg, name, _, decls, _) =>
+    case Module(pkg, name, _, decls, _, _) =>
       val initialTbl = importedDecls.mapValues(_.meta.name)
 
       val emptyDecls = Chain.empty[TopLevelDeclaration[Name]]

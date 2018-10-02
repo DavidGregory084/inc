@@ -9,20 +9,22 @@ class ResolverSpec extends FlatSpec with Matchers {
     name = name,
     imports = List.empty,
     declarations = decls,
-    meta = ())
+    meta = (),
+    pos = None)
 
   def mkResolvedModule(name: String, decls: List[TopLevelDeclaration[Name]]) = Module(
     pkg = List("Test", "Resolver"),
     name = name,
     imports = List.empty,
     declarations = decls,
-    meta = ModuleName(List("Test", "Resolver"), name))
+    meta = ModuleName(List("Test", "Resolver"), name),
+    pos = None)
 
   "Resolver" should "resolve names for local let bindings" in {
-    val mod = mkModule("Int", List(Let("int", LiteralInt(42, ()), ())))
+    val mod = mkModule("Int", List(Let("int", LiteralInt(42, (), None), (), None)))
     val expected = mkResolvedModule("Int", List(
-      Let("int", LiteralInt(42, NoName), MemberName(List("Test", "Resolver"), "Int", "int")))
-    )
+      Let("int", LiteralInt(42, NoName, None), MemberName(List("Test", "Resolver"), "Int", "int"), None)
+    ))
     val result = Resolver.resolve(mod)
     result shouldBe 'right
     result.right.get shouldBe expected
@@ -30,8 +32,8 @@ class ResolverSpec extends FlatSpec with Matchers {
 
   it should "return an error when there is a reference to a field which doesn't exist" in {
     val mod = mkModule("Ref", List(
-      Let("int", LiteralInt(42, ()), ()),
-      Let("int2", Reference("int3", ()), ())
+      Let("int", LiteralInt(42, (), None), (), None),
+      Let("int2", Reference("int3", (), None), (), None)
     ))
     val result = Resolver.resolve(mod)
     result shouldBe 'left
@@ -39,8 +41,8 @@ class ResolverSpec extends FlatSpec with Matchers {
 
   it should "return an error when there is a field which is defined twice" in {
     val mod = mkModule("Ref", List(
-      Let("int", LiteralInt(42, ()), ()),
-      Let("int", LiteralInt(43, ()), ())
+      Let("int", LiteralInt(42, (), None), (), None),
+      Let("int", LiteralInt(43, (), None), (), None)
     ))
     val result = Resolver.resolve(mod)
     result shouldBe 'left
