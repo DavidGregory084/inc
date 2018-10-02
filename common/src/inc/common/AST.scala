@@ -299,10 +299,7 @@ case class TypeScheme(bound: List[TypeVariable], typ: Type) {
     val freshVars = bound.map(_ => TypeVariable())
     val subst = bound.zip(freshVars).toMap
 
-    val printed = subst.map {
-      case (tyVar, typ) =>
-        s"${Printer.print(tyVar)} |-> ${Printer.print(typ)}"
-    }.mkString(", ")
+    val printed = Printer.print(subst)
 
     println("instantiate: "+printed)
 

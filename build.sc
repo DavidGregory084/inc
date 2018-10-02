@@ -76,6 +76,7 @@ object common extends ScalaPBModule with ScalaSettingsModule {
   def ivyDeps = T {
     super.ivyDeps() ++ Agg(
       ivy"org.typelevel::cats-core:1.3.0",
+      ivy"com.lihaoyi::fansi:0.2.5",
       ivy"org.typelevel::paiges-core:0.2.1",
       ivy"com.github.pathikrit::better-files:3.6.0"
     )

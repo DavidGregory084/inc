@@ -1,26 +1,38 @@
 package inc.common
 
 import org.typelevel.paiges._
+import org.typelevel.paiges.Document.ops._
 
 object Printer {
+  implicit val fansiStrDocument: Document[fansi.Str] =
+    Document.instance(str => Doc.text(str.render))
+
+  def Keyword(s: String) = fansi.Color.True(249, 38, 114)(s).doc
+  def Constant[A](a: A) = fansi.Color.True(190, 132, 255)(a.toString).doc
+  def String(s: String) = fansi.Color.True(230, 219, 116)('"' + s + '"').doc
+  def Definition(s: String) = fansi.Color.True(166, 226, 46)(s).doc
+  def Type(s: String) = fansi.Color.True(102, 217, 239)(s).doc
 
   def print(subst: Map[TypeVariable, Type]): String = {
     subst.map {
-      case (tyVar, typ) =>
-        print(tyVar) + " |-> " + print(typ)
+      case (tyVar, typ) => (
+        fansi.Color.Red(print(tyVar)).doc &
+          fansi.Color.Green(" |-> ").doc &
+          fansi.Color.Green(print(typ)).doc
+      ).render(80)
     }.mkString(", ")
   }
 
   def print(typ: Type): String = typ match {
     case TypeVariable(i) =>
-      "T" + i
+      Type("T" + i).render(2)
     case TypeConstructor(nm, tyParams) =>
       if (tyParams.isEmpty)
-        nm
+        Definition(nm).render(nm.length)
       else if (nm == "->")
-        print(tyParams.head) + " -> " + print(tyParams(1))
+        print(tyParams.head) + Keyword(" -> ").render(4) + print(tyParams(1))
       else
-        nm + tyParams.map(print).mkString("[", ", ", "]")
+        Definition(nm).render(nm.length) + tyParams.map(print).mkString("[", ", ", "]")
   }
 
   def print(typ: TypeScheme): String = {
@@ -31,30 +43,22 @@ object Printer {
   }
 
   def print[A](e: Expr[A]): Doc = e match {
-    case LiteralInt(i, _) =>
-      Doc.str(i)
-    case LiteralLong(l, _) =>
-      Doc.str(l)
-    case LiteralFloat(f, _) =>
-      Doc.str(f)
-    case LiteralDouble(d, _) =>
-      Doc.str(d)
-    case LiteralBoolean(b, _) =>
-      Doc.str(b)
-    case LiteralChar(c, _) =>
-      Doc.char('\'') + Doc.str(c) + Doc.char('\'')
-    case LiteralString(s, _) =>
-      Doc.char('"') + Doc.str(s) + Doc.char('"')
-    case LiteralUnit(_) =>
-      Doc.text("()")
+    case LiteralInt(i, _) => Constant(i)
+    case LiteralLong(l, _) => Constant(l)
+    case LiteralFloat(f, _) => Constant(f)
+    case LiteralDouble(d, _) => Constant(d)
+    case LiteralBoolean(b, _) => Constant(b)
+    case LiteralChar(c, _) => Constant(c)
+    case LiteralString(s, _) => String(s)
+    case LiteralUnit(_) => Constant("()")
     case Reference(ref, _) =>
       Doc.text(ref)
     case If(c, t, e, _) =>
-      Doc.text("if") & print(c) /
-        (Doc.text("then") & print(t)).nested(2) /
-        (Doc.text("else") & print(e)).nested(2)
+      Keyword("if") & print(c) /
+        (Keyword("then") & print(t)).nested(2) /
+        (Keyword("else") & print(e)).nested(2)
     case Lambda(v, b, _) =>
-      Doc.text(v) & Doc.text("->") & print(b).nested(2)
+      Doc.text(v) & Keyword("->") & print(b).nested(2)
     case Apply(fn, args, _) =>
       val prefix = print(fn) + Doc.char('(')
       val suffix = Doc.char(')')
@@ -64,19 +68,21 @@ object Printer {
 
   def print[A](decl: TopLevelDeclaration[A]): Doc = decl match {
     case Let(name, binding, _) =>
-      Doc.text("let") & Doc.text(name) & Doc.char('=') & print(binding).nested(2)
+      Keyword("let") & Definition(name) & Doc.char('=') & print(binding).nested(2)
   }
 
   def print[A](mod: Module[A]): Doc = {
     val Module(pkg, name, imports, declarations @ _, _) = mod
-    val prefix = Doc.text("module") & Doc.text((pkg :+ name).mkString(".")) & Doc.char('{')
+    val prefix = Keyword("module") &
+      Definition((pkg :+ name).mkString(".")) &
+      Doc.char('{')
     val suffix = Doc.char('}')
 
     val imps = Doc.intercalate(Doc.char(';') + Doc.line, imports.map {
       case ImportModule(pkg, name) =>
-        Doc.text("import") & Doc.text((pkg :+ name).mkString("."))
+        Keyword("import") & Doc.text((pkg :+ name).mkString("."))
       case ImportSymbols(pkg, name, syms) =>
-        val impPrefix = Doc.text("import") & Doc.text((pkg :+ name).mkString(".")) + Doc.char('.') + Doc.char('{')
+        val impPrefix = Keyword("import") & Doc.text((pkg :+ name).mkString(".")) + Doc.char('.') + Doc.char('{')
         val impSuffix = Doc.char('}')
         val impBody = Doc.intercalate(Doc.comma + Doc.line, syms.map(Doc.text))
         impBody.bracketBy(impPrefix, impSuffix)
