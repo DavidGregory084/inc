@@ -102,6 +102,33 @@ object Codegen {
     }
   }
 
+  def functionClass(typ: TypeConstructor): Either[List[CodegenError], Class[_]] =
+    (typ.typeParams.length - 1) match {
+      case 1 => Right(classOf[inc.rts.Function1[_, _]])
+      case 2 => Right(classOf[inc.rts.Function2[_, _, _]])
+      case 3 => Right(classOf[inc.rts.Function3[_, _, _, _]])
+      case 4 => Right(classOf[inc.rts.Function4[_, _, _, _, _]])
+      case 5 => Right(classOf[inc.rts.Function5[_, _, _, _, _, _]])
+      case 6 => Right(classOf[inc.rts.Function6[_, _, _, _, _, _, _]])
+      case 7 => Right(classOf[inc.rts.Function7[_, _, _, _, _, _, _, _]])
+      case 8 => Right(classOf[inc.rts.Function8[_, _, _, _, _, _, _, _, _]])
+      case 9 => Right(classOf[inc.rts.Function9[_, _, _, _, _, _, _, _, _, _]])
+      case 10 => Right(classOf[inc.rts.Function10[_, _, _, _, _, _, _, _, _, _, _]])
+      case 11 => Right(classOf[inc.rts.Function11[_, _, _, _, _, _, _, _, _, _, _, _]])
+      case 12 => Right(classOf[inc.rts.Function12[_, _, _, _, _, _, _, _, _, _, _, _, _]])
+      case 13 => Right(classOf[inc.rts.Function13[_, _, _, _, _, _, _, _, _, _, _, _, _, _]])
+      case 14 => Right(classOf[inc.rts.Function14[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _]])
+      case 15 => Right(classOf[inc.rts.Function15[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]])
+      case 16 => Right(classOf[inc.rts.Function16[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]])
+      case 17 => Right(classOf[inc.rts.Function17[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]])
+      case 18 => Right(classOf[inc.rts.Function18[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]])
+      case 19 => Right(classOf[inc.rts.Function19[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]])
+      case 20 => Right(classOf[inc.rts.Function20[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]])
+      case 21 => Right(classOf[inc.rts.Function21[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]])
+      case 22 => Right(classOf[inc.rts.Function22[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]])
+      case _ => CodegenError.singleton(s"Error determining function class for ${Printer.print(typ)}")
+    }
+
   def descriptorFor(typ: TypeScheme): Either[List[CodegenError], String] = typ.typ match {
     case TypeConstructor("Int", _) =>
       Right(AsmType.INT_TYPE.getDescriptor)
@@ -117,6 +144,8 @@ object Codegen {
       Right(AsmType.CHAR_TYPE.getDescriptor)
     case TypeConstructor("String", _) =>
       Right(AsmType.getDescriptor(classOf[String]))
+    case tyCon @ TypeConstructor("->", _) =>
+      functionClass(tyCon).map(AsmType.getDescriptor)
     case TypeConstructor(name, _) =>
       Either.catchOnly[ClassNotFoundException] {
         AsmType.getDescriptor(Class.forName(name))
@@ -142,6 +171,8 @@ object Codegen {
       Right(AsmType.CHAR_TYPE)
     case TypeConstructor("String", _) =>
       Right(AsmType.getType(classOf[String]))
+    case tyCon @ TypeConstructor("->", _) =>
+      functionClass(tyCon).map(AsmType.getType)
     case TypeConstructor(name, _) =>
       Either.catchOnly[ClassNotFoundException] {
         AsmType.getType(Class.forName(name))
