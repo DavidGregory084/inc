@@ -7,13 +7,14 @@ import inc.typechecker.Typechecker
 import inc.codegen.Codegen
 
 import better.files._
-import cats.data.Chain
-import cats.data.Validated
+import cats.data.{ Chain, Validated }
 import cats.implicits._
 import java.net.URLClassLoader
 import java.io.{File => JavaFile, ByteArrayOutputStream}
 import java.net.URL
 import java.nio.file.Paths
+
+case class ConfigError(private val position: Pos, private val message: String) extends Error(position, message)
 
 object Main {
   val NL = System.lineSeparator
@@ -51,10 +52,25 @@ object Main {
       }
     }
 
+    def sourceContext(msg: String, prog: String, pos: Pos) = {
+      val highlighted = fansi.Str(prog).overlay(fansi.Color.Red, pos.from, pos.to)
+
+      val (highlightedLines, _) = highlighted.render.split('\n').foldLeft(Chain.empty[String] -> 0) {
+        case ((lines, idx), line) =>
+          val nextIdx = idx + 1 + fansi.Str(line).length
+          (lines :+ (idx.toString.padTo(String.valueOf(highlighted.length).length + 1, ' ') + '|' + line), nextIdx)
+      }
+
+
+      NL + msg + ":" + NL + NL + highlightedLines.toList.mkString(System.lineSeparator)
+    }
+
     parser.parse(args, Configuration()) foreach { config =>
       compileProgram(dir, prog, config) match {
         case Left(errors) =>
-          errors.map(e => NL + e.getMessage).foreach(println)
+          errors.map { e =>
+            sourceContext(e.getMessage, prog, e.pos)
+          }.foreach(println)
         case Right(_) =>
           println(NL + "Success")
       }
@@ -129,30 +145,28 @@ object Main {
     importedDecls.toMap
   }
 
-  def parseUrls(classpath: String): Either[List[Throwable], Array[URL]] = {
+  def parseUrls(classpath: String): Either[List[Error], Array[URL]] = {
     val urlStrings = classpath.split(JavaFile.pathSeparator)
     Chain.fromSeq(urlStrings).traverse { p =>
       val path = Validated.catchNonFatal(Paths.get(p))
       val url = path.map(_.toUri.toURL)
-      url.leftMap(t => List(t))
+      url.leftMap(t => List(ConfigError(Pos.Empty, t.getMessage)))
     }.map(_.iterator.toArray).toEither
   }
 
-  def compileProgram(dest: File, prog: String, config: Configuration = Configuration.default): Either[List[Throwable], File] = {
+  def compileProgram(dest: File, prog: String, config: Configuration = Configuration.default): Either[List[Error], File] = {
     val beforeAll = System.nanoTime
 
     for {
       urls <- parseUrls(config.classpath)
 
-      mod <- runPhase[Module[Unit]]("parser", config, _.printParser, Parser.parse(prog))
-
-      // _ = println(NL + Printer.print(mod).render(80))
+      mod <- runPhase[Module[Pos]]("parser", config, _.printParser, Parser.parse(prog))
 
       importedDecls = readEnvironment(mod.imports, new URLClassLoader(urls))
 
-      resolved <- runPhase[Module[Name]]("resolver", config, _.printResolver, Resolver.resolve(mod, importedDecls))
+      resolved <- runPhase[Module[NameWithPos]]("resolver", config, _.printResolver, Resolver.resolve(mod, importedDecls))
 
-      checked <- runPhase[Module[NameWithType]]("typechecker", config, _.printTyper, Typechecker.typecheck(resolved, importedDecls))
+      checked <- runPhase[Module[NamePosType]]("typechecker", config, _.printTyper, Typechecker.typecheck(resolved, importedDecls))
 
       code <- runPhase[Array[Byte]]("codegen", config, _.printCodegen, Codegen.generate(checked), Codegen.print(_))
 

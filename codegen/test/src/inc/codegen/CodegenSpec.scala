@@ -13,8 +13,8 @@ import org.scalacheck._
 import org.scalacheck.cats.implicits._
 
 class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks {
-  type Decl = TopLevelDeclaration[NameWithType]
-  type Decls = List[TopLevelDeclaration[NameWithType]]
+  type Decl = TopLevelDeclaration[NamePosType]
+  type Decls = List[TopLevelDeclaration[NamePosType]]
 
   val nameGen: Gen[String] =
     for {
@@ -23,23 +23,23 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
       rest <- Gen.resize(len, Gen.alphaNumStr)
     } yield (first +: rest).mkString
 
-  val intGen: Gen[Expr[NameWithType]] = Arbitrary.arbitrary[Int].map(LiteralInt(_, NameWithType(NoName, TypeScheme(Type.Int)), None))
-  val longGen: Gen[Expr[NameWithType]] = Arbitrary.arbitrary[Long].map(LiteralLong(_, NameWithType(NoName, TypeScheme(Type.Long)), None))
-  val fltGen: Gen[Expr[NameWithType]] = Arbitrary.arbitrary[Float].map(LiteralFloat(_, NameWithType(NoName, TypeScheme(Type.Float)), None))
-  val dblGen: Gen[Expr[NameWithType]] = Arbitrary.arbitrary[Double].map(LiteralDouble(_, NameWithType(NoName, TypeScheme(Type.Double)), None))
-  val boolGen: Gen[Expr[NameWithType]] = Arbitrary.arbitrary[Boolean].map(LiteralBoolean(_, NameWithType(NoName, TypeScheme(Type.Boolean)), None))
-  val charGen: Gen[Expr[NameWithType]] = Arbitrary.arbitrary[Char].map(LiteralChar(_, NameWithType(NoName, TypeScheme(Type.Char)), None))
-  val strGen: Gen[Expr[NameWithType]] = Arbitrary.arbitrary[String].map(LiteralString(_, NameWithType(NoName, TypeScheme(Type.String)), None))
-  val unitGen: Gen[Expr[NameWithType]] = Gen.const(LiteralUnit(NameWithType(NoName, TypeScheme(Type.Unit)), None))
+  val intGen: Gen[Expr[NamePosType]] = Arbitrary.arbitrary[Int].map(LiteralInt(_, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Int))))
+  val longGen: Gen[Expr[NamePosType]] = Arbitrary.arbitrary[Long].map(LiteralLong(_, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Long))))
+  val fltGen: Gen[Expr[NamePosType]] = Arbitrary.arbitrary[Float].map(LiteralFloat(_, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Float))))
+  val dblGen: Gen[Expr[NamePosType]] = Arbitrary.arbitrary[Double].map(LiteralDouble(_, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Double))))
+  val boolGen: Gen[Expr[NamePosType]] = Arbitrary.arbitrary[Boolean].map(LiteralBoolean(_, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Boolean))))
+  val charGen: Gen[Expr[NamePosType]] = Arbitrary.arbitrary[Char].map(LiteralChar(_, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Char))))
+  val strGen: Gen[Expr[NamePosType]] = Arbitrary.arbitrary[String].map(LiteralString(_, NamePosType(NoName, Pos.Empty, TypeScheme(Type.String))))
+  val unitGen: Gen[Expr[NamePosType]] = Gen.const(LiteralUnit(NamePosType(NoName, Pos.Empty, TypeScheme(Type.Unit))))
 
-  val literalGens: List[Gen[Expr[NameWithType]]] = List(intGen, longGen, fltGen, dblGen, boolGen, charGen, strGen, unitGen)
+  val literalGens: List[Gen[Expr[NamePosType]]] = List(intGen, longGen, fltGen, dblGen, boolGen, charGen, strGen, unitGen)
 
-  def referenceGen(decls: Decls): Gen[Expr[NameWithType]] =
+  def referenceGen(decls: Decls): Gen[Expr[NamePosType]] =
     Gen.oneOf(decls).map { existing =>
-      Reference(existing.name, NameWithType(existing.meta.name, existing.meta.typ), None)
+      Reference(existing.name, NamePosType(existing.meta.name, Pos.Empty, existing.meta.typ))
     }
 
-  def lambdaGen(decls: Decls): Gen[Expr[NameWithType]] =
+  def lambdaGen(decls: Decls): Gen[Expr[NamePosType]] =
     for {
       numArgs <- Gen.choose(1, 4)
       // Don't generate duplicate variable names
@@ -57,18 +57,18 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
         // Unpleasant trick to allow later generators to refer to v
         decls ++ vs.zip(vTps).map {
           case (v, vTp) =>
-            Let(v, Reference(v, NameWithType(LocalName(v), vTp), None), NameWithType(LocalName(v), vTp), None)
+            Let(v, Reference(v, NamePosType(LocalName(v), Pos.Empty, vTp)), NamePosType(LocalName(v), Pos.Empty, vTp))
         },
         // Don't generate lambda because because we can't do first class functions yet
         generateFunctions = false
       )
-      lam <- Gen.const(Lambda(vs, body, NameWithType(NoName, TypeScheme(Type.Function(vTps.map(_.typ), body.meta.typ.typ))), None))
+      lam <- Gen.const(Lambda(vs, body, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Function(vTps.map(_.typ), body.meta.typ.typ)))))
     } yield lam
 
-  def genArg(tp: Type)(decls: Decls): Gen[Expr[NameWithType]] = {
+  def genArg(tp: Type)(decls: Decls): Gen[Expr[NamePosType]] = {
     val candidateDecls = decls.collect {
-      case Let(nm, _, candidateMeta @ NameWithType(_, TypeScheme(_, `tp`)), _) =>
-        Reference(nm, candidateMeta, None)
+      case Let(nm, _, candidateMeta @ NamePosType(_, _, TypeScheme(_, `tp`))) =>
+        Reference(nm, candidateMeta)
     }
 
     val litGen = tp match {
@@ -89,22 +89,22 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
       Gen.oneOf(candidateDecls)
   }
 
-  def applyGen(lambdaDecls: Decls)(decls: Decls): Gen[Expr[NameWithType]] =
+  def applyGen(lambdaDecls: Decls)(decls: Decls): Gen[Expr[NamePosType]] =
     for {
       lam <- Gen.oneOf(lambdaDecls)
 
-      Let(nm, Lambda(_, _, _, _), lambdaMeta, _) = lam
+      Let(nm, Lambda(_, _, _), lambdaMeta) = lam
 
       TypeScheme(_, TypeConstructor("->", tpArgs)) = lambdaMeta.typ
 
       args <- tpArgs.init.traverse(tp => genArg(tp)(decls))
 
-    } yield Apply(Reference(nm, lambdaMeta, None), args, NameWithType(NoName, TypeScheme(tpArgs.last)), None)
+    } yield Apply(Reference(nm, lambdaMeta), args, NamePosType(NoName, Pos.Empty, TypeScheme(tpArgs.last)))
 
-  def ifGen(decls: Decls): Gen[Expr[NameWithType]] = {
-    val condDecls: List[Gen[Expr[NameWithType]]] = boolGen :: decls.collect {
-      case Let(nm, _, condMeta @ NameWithType(_, TypeScheme(_, Type.Boolean)), _) =>
-        Reference(nm, condMeta, None)
+  def ifGen(decls: Decls): Gen[Expr[NamePosType]] = {
+    val condDecls: List[Gen[Expr[NamePosType]]] = boolGen :: decls.collect {
+      case Let(nm, _, condMeta @ NamePosType(_, _, TypeScheme(_, Type.Boolean))) =>
+        Reference(nm, condMeta)
     }.map(Gen.const)
 
     val condGen = Gen.oneOf(condDecls).flatMap(identity)
@@ -113,15 +113,15 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
       condExpr <- condGen
       thenExpr <- exprGen(decls, generateFunctions = false)
       elseExpr <- exprGen(decls, generateFunctions = false).suchThat(_.meta.typ == thenExpr.meta.typ)
-    } yield If(condExpr, thenExpr, elseExpr, NameWithType(NoName, thenExpr.meta.typ), None)
+    } yield If(condExpr, thenExpr, elseExpr, NamePosType(NoName, Pos.Empty, thenExpr.meta.typ))
   }
 
-  def exprGen(decls: Decls, generateFunctions: Boolean = true): Gen[Expr[NameWithType]] = {
+  def exprGen(decls: Decls, generateFunctions: Boolean = true): Gen[Expr[NamePosType]] = {
     val lambdaGens =
       if (generateFunctions) List(lambdaGen(decls)) else List.empty
 
     val lambdaDecls = decls.collect {
-      case lambdaDecl @ Let(_, Lambda(_, _, _, _), _, _) => lambdaDecl
+      case lambdaDecl @ Let(_, Lambda(_, _, _), _) => lambdaDecl
     }
 
     val nonLambdaDecls = decls.filterNot(lambdaDecls.contains)
@@ -145,7 +145,7 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
       // Make sure we don't generate duplicate names
       name <- nameGen.suchThat(nm => !decls.map(_.name).contains(nm))
       expr <- exprGen(decls)
-    } yield Let(name, expr, NameWithType(MemberName(modName.pkg, modName.cls, name), expr.meta.typ), None)
+    } yield Let(name, expr, NamePosType(MemberName(modName.pkg, modName.cls, name), Pos.Empty, expr.meta.typ))
 
   def declGen(modName: ModuleName) =
     StateT.modifyF[Gen, (Decls, Int)] {
@@ -184,7 +184,7 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
       }
     } yield imp
 
-  implicit val arbitraryModule: Arbitrary[Module[NameWithType]] = Arbitrary {
+  implicit val arbitraryModule: Arbitrary[Module[NamePosType]] = Arbitrary {
     for {
       pkgLen <- Gen.choose(0, 5)
       pkg <- Gen.resize(pkgLen, Gen.listOfN(pkgLen, nameGen))
@@ -193,22 +193,28 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
       decls <- declsGen(modName)
       impLen <- Gen.choose(0, 5)
       imports <- Gen.resize(impLen, Gen.listOfN(impLen, importGen))
-    } yield Module(pkg, name, imports, decls, NameWithType(modName, TypeScheme(Type.Module)), None)
+    } yield Module(pkg, name, imports, decls, NamePosType(modName, Pos.Empty, TypeScheme(Type.Module)))
   }
 
-  def mkModule(name: String, decls: List[TopLevelDeclaration[NameWithType]]) = Module(
+  def mkModule(name: String, decls: List[TopLevelDeclaration[NamePosType]]) = Module(
     pkg = List("Test", "Codegen"),
     name = name,
     imports = List.empty,
     declarations = decls,
-    meta = NameWithType(ModuleName(List("Test", "Codegen"), name), TypeScheme(Type.Module)),
-    pos = None)
+    meta = NamePosType(ModuleName(List("Test", "Codegen"), name), Pos.Empty, TypeScheme(Type.Module)))
+
+  def mkLet(name: String, binding: Expr[NamePosType]) =
+    Let(name, binding, NamePosType(LocalName(name), Pos.Empty, binding.meta.typ))
+
+  def mkInt(i: Int) = LiteralInt(i, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Int)))
+  def mkRef(r: String, typ: TypeScheme) = Reference(r, NamePosType(NoName, Pos.Empty, typ))
+  def mkUnit() = LiteralUnit(NamePosType(NoName, Pos.Empty, TypeScheme(Type.Unit)))
 
   "Codegen" should "generate code for a simple module" in {
     val mod = mkModule("Ref", List(
-      Let("int", LiteralInt(42, NameWithType(NoName, TypeScheme(Type.Int)), None), NameWithType(LocalName("int"), TypeScheme(Type.Int)), None),
-      Let("int2", Reference("int", NameWithType(NoName, TypeScheme(Type.Int)), None), NameWithType(LocalName("int2"), TypeScheme(Type.Int)), None),
-      Let("int3", Reference("int2", NameWithType(NoName, TypeScheme(Type.Int)), None), NameWithType(LocalName("int3"), TypeScheme(Type.Int)), None)
+      mkLet("int", mkInt(42)),
+      mkLet("int2", mkRef("int", TypeScheme(Type.Int))),
+      mkLet("int3", mkRef("int2", TypeScheme(Type.Int)))
     ))
     val result = Codegen.generate(mod)
 
@@ -251,8 +257,8 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
 
   it should "generate code for a module with a Unit field reference" in {
     val mod = mkModule("Ref", List(
-      Let("unit", LiteralUnit(NameWithType(NoName, TypeScheme(Type.Unit)), None), NameWithType(LocalName("unit"), TypeScheme(Type.Unit)), None),
-      Let("unit2", Reference("unit", NameWithType(NoName, TypeScheme(Type.Unit)), None), NameWithType(LocalName("unit2"), TypeScheme(Type.Unit)), None)
+      mkLet("unit", mkUnit()),
+      mkLet("unit2", mkRef("unit", TypeScheme(Type.Unit)))
     ))
     val result = Codegen.generate(mod)
     result shouldBe 'right
@@ -260,16 +266,16 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
 
   it should "parse a module definition from a generated class file" in {
     val mod = mkModule("Ref", List(
-      Let("int", LiteralInt(42, NameWithType(NoName, TypeScheme(Type.Int)), None), NameWithType(LocalName("int"), TypeScheme(Type.Int)), None),
-      Let("int2", Reference("int", NameWithType(NoName, TypeScheme(Type.Int)), None), NameWithType(LocalName("int2"), TypeScheme(Type.Int)), None),
-      Let("int3", Reference("int2", NameWithType(NoName, TypeScheme(Type.Int)), None), NameWithType(LocalName("int3"), TypeScheme(Type.Int)), None)
+      mkLet("int", mkInt(42)),
+      mkLet("int2", mkRef("int", TypeScheme(Type.Int))),
+      mkLet("int3", mkRef("int2", TypeScheme(Type.Int)))
     ))
 
     val result = Codegen.generate(mod)
 
     result shouldBe 'right
 
-    Codegen.readInterface(result.right.get) shouldBe Some(mod)
+    Codegen.readInterface(result.right.get) shouldBe Some(mod.map(_.forgetPos))
   }
 
   def withTmpDir[A](test: File => A) = {
@@ -278,14 +284,14 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
     finally dir.delete()
   }
 
-  it should "round trip arbitrary module files" in forAll(minSuccessful(1000)) { mod: Module[NameWithType] =>
+  it should "round trip arbitrary module files" in forAll(minSuccessful(1000)) { mod: Module[NamePosType] =>
     println(Printer.print(mod).render(80))
 
     withTmpDir { dir =>
       val result = Codegen.generate(mod)
       result shouldBe 'right
 
-      Codegen.readInterface(result.right.get) shouldBe Some(mod)
+      Codegen.readInterface(result.right.get) shouldBe Some(mod.map(_.forgetPos))
 
       val outDir = mod.pkg.foldLeft(dir) {
         case (path, next) => path / next

@@ -38,29 +38,29 @@ object Printer {
   }
 
   def print[A](e: Expr[A]): Doc = e match {
-    case LiteralInt(i, _, _) =>
+    case LiteralInt(i, _) =>
       Doc.str(i)
-    case LiteralLong(l, _, _) =>
+    case LiteralLong(l, _) =>
       Doc.str(l + 'L')
-    case LiteralFloat(f, _, _) =>
+    case LiteralFloat(f, _) =>
       Doc.str(f + 'F')
-    case LiteralDouble(d, _, _) =>
+    case LiteralDouble(d, _) =>
       Doc.str(d)
-    case LiteralBoolean(b, _, _) =>
+    case LiteralBoolean(b, _) =>
       Doc.str(b)
-    case LiteralChar(c, _, _) =>
+    case LiteralChar(c, _) =>
       Doc.char('\'') + Doc.str(c) + Doc.char('\'')
-    case LiteralString(s, _, _) =>
+    case LiteralString(s, _) =>
       Doc.char('"') + Doc.str(s) + Doc.char('"')
-    case LiteralUnit(_, _) =>
+    case LiteralUnit(_) =>
       Doc.text("()")
-    case Reference(ref, _, _) =>
+    case Reference(ref, _) =>
       Doc.text(ref)
-    case If(c, t, e, _, _) =>
+    case If(c, t, e, _) =>
       Doc.text("if") & print(c) /
         (Doc.text("then") & print(t)).nested(2) /
         (Doc.text("else") & print(e)).nested(2)
-    case Lambda(vs, b, _, _) =>
+    case Lambda(vs, b, _) =>
       val args =
         if (vs.length == 1)
           Doc.text(vs.head)
@@ -69,7 +69,7 @@ object Printer {
 
       args & Doc.text("->") & print(b).nested(2)
 
-    case Apply(fn, args, _, _) =>
+    case Apply(fn, args, _) =>
       val prefix = print(fn) + Doc.char('(')
       val suffix = Doc.char(')')
       val argsList = Doc.intercalate(Doc.char(',') + Doc.line, args.map(print(_)))
@@ -77,12 +77,12 @@ object Printer {
   }
 
   def print[A](decl: TopLevelDeclaration[A]): Doc = decl match {
-    case Let(name, binding, _, _) =>
+    case Let(name, binding, _) =>
       Doc.text("let") & Doc.text(name) & Doc.char('=') & print(binding).nested(2)
   }
 
   def print[A](mod: Module[A]): Doc = {
-    val Module(pkg, name, imports, declarations, _, _) = mod
+    val Module(pkg, name, imports, declarations @ _, _) = mod
     val prefix = Doc.text("module") & Doc.text((pkg :+ name).mkString(".")) & Doc.char('{')
     val suffix = Doc.char('}')
 

@@ -4,26 +4,35 @@ import inc.common._
 import org.scalatest._
 
 class ResolverSpec extends FlatSpec with Matchers {
-  def mkModule(name: String, decls: List[TopLevelDeclaration[Unit]]) = Module(
+  def mkModule(name: String, decls: List[TopLevelDeclaration[Pos]]) = Module(
     pkg = List("Test", "Resolver"),
     name = name,
     imports = List.empty,
     declarations = decls,
-    meta = (),
-    pos = None)
+    meta = Pos.Empty)
 
-  def mkResolvedModule(name: String, decls: List[TopLevelDeclaration[Name]]) = Module(
+  def mkLet(name: String, binding: Expr[Pos]) =
+    Let(name, binding, Pos.Empty)
+
+  def mkInt(i: Int) = LiteralInt(i, Pos.Empty)
+  def mkRef(r: String) = Reference(r, Pos.Empty)
+
+  def mkResolvedModule(name: String, decls: List[TopLevelDeclaration[NameWithPos]]) = Module(
     pkg = List("Test", "Resolver"),
     name = name,
     imports = List.empty,
     declarations = decls,
-    meta = ModuleName(List("Test", "Resolver"), name),
-    pos = None)
+    meta = NameWithPos(ModuleName(List("Test", "Resolver"), name), Pos.Empty))
+
+  def mkResolvedLet(modName: String, name: String, binding: Expr[NameWithPos]) =
+    Let(name, binding, NameWithPos(MemberName(List("Test", "Resolver"), modName, name), Pos.Empty))
+
+  def mkResolvedInt(i: Int) = LiteralInt(i, NameWithPos(NoName, Pos.Empty))
 
   "Resolver" should "resolve names for local let bindings" in {
-    val mod = mkModule("Int", List(Let("int", LiteralInt(42, (), None), (), None)))
+    val mod = mkModule("Int", List(mkLet("int", mkInt(42))))
     val expected = mkResolvedModule("Int", List(
-      Let("int", LiteralInt(42, NoName, None), MemberName(List("Test", "Resolver"), "Int", "int"), None)
+      mkResolvedLet("Int", "int", mkResolvedInt(42))
     ))
     val result = Resolver.resolve(mod)
     result shouldBe 'right
@@ -32,8 +41,8 @@ class ResolverSpec extends FlatSpec with Matchers {
 
   it should "return an error when there is a reference to a field which doesn't exist" in {
     val mod = mkModule("Ref", List(
-      Let("int", LiteralInt(42, (), None), (), None),
-      Let("int2", Reference("int3", (), None), (), None)
+      mkLet("int", mkInt(42)),
+      mkLet("int2", mkRef("int3"))
     ))
     val result = Resolver.resolve(mod)
     result shouldBe 'left
@@ -41,8 +50,8 @@ class ResolverSpec extends FlatSpec with Matchers {
 
   it should "return an error when there is a field which is defined twice" in {
     val mod = mkModule("Ref", List(
-      Let("int", LiteralInt(42, (), None), (), None),
-      Let("int", LiteralInt(43, (), None), (), None)
+      mkLet("int", mkInt(42)),
+      mkLet("int", mkInt(43))
     ))
     val result = Resolver.resolve(mod)
     result shouldBe 'left

@@ -4,27 +4,46 @@ import inc.common._
 import org.scalatest._
 
 class TypecheckerSpec extends FlatSpec with Matchers {
-  def mkModule(name: String, decls: List[TopLevelDeclaration[Name]]) = Module(
+  def mkModule(name: String, decls: List[TopLevelDeclaration[NameWithPos]]) = Module(
     pkg = List("Test", "Typechecker"),
     name = name,
     imports = List.empty,
     declarations = decls,
-    meta = ModuleName(List("Test", "Typechecker"), name),
-    pos = None)
+    meta = NameWithPos(ModuleName(List("Test", "Typechecker"), name), Pos.Empty))
 
-  def mkCheckedModule(name: String, decls: List[TopLevelDeclaration[NameWithType]]) = Module(
+  def mkLet(name: String, binding: Expr[NameWithPos]) =
+    Let(name, binding, NameWithPos(LocalName(name), Pos.Empty))
+
+  def mkInt(i: Int) = LiteralInt(i, NameWithPos(NoName, Pos.Empty))
+  def mkDbl(d: Double) = LiteralDouble(d, NameWithPos(NoName, Pos.Empty))
+  def mkBool(b: Boolean) = LiteralBoolean(b, NameWithPos(NoName, Pos.Empty))
+  def mkRef(r: String) = Reference(r, NameWithPos(NoName, Pos.Empty))
+
+  def mkIf(cond: Expr[NameWithPos], thenExpr: Expr[NameWithPos], elseExpr: Expr[NameWithPos]) =
+    If(cond, thenExpr, elseExpr, NameWithPos(NoName, Pos.Empty))
+
+  def mkLam(vars: List[String], body: Expr[NameWithPos]) =
+    Lambda(vars, body, NameWithPos(NoName, Pos.Empty))
+
+  def mkApp(fn: Expr[NameWithPos], args: List[Expr[NameWithPos]]) =
+    Apply(fn, args, NameWithPos(NoName, Pos.Empty))
+
+  def mkCheckedModule(name: String, decls: List[TopLevelDeclaration[NamePosType]]) = Module(
     pkg = List("Test", "Typechecker"),
     name = name,
     imports = List.empty,
     declarations = decls,
-    meta = NameWithType(ModuleName(List("Test", "Typechecker"), name), TypeScheme(Type.Module)),
-    pos = None)
+    meta = NamePosType(ModuleName(List("Test", "Typechecker"), name), Pos.Empty, TypeScheme(Type.Module)))
+
+  def mkCheckedLet(name: String, binding: Expr[NamePosType]) =
+    Let(name, binding, NamePosType(LocalName(name), Pos.Empty, binding.meta.typ))
+
+  def mkCheckedInt(i: Int) = LiteralInt(i, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Int)))
+  def mkCheckedRef(r: String, typ: TypeScheme) = Reference(r, NamePosType(NoName, Pos.Empty, typ))
 
   "Typechecker" should "typecheck let bound literals successfully" in {
-    val mod = mkModule("Int", List(Let("int", LiteralInt(42, NoName, None), LocalName("int"), None)))
-    val expected = mkCheckedModule("Int", List(
-      Let("int", LiteralInt(42, NameWithType(NoName, TypeScheme(Type.Int)), None), NameWithType(LocalName("int"), TypeScheme(Type.Int)), None)
-    ))
+    val mod = mkModule("Int", List(mkLet("int", mkInt(42))))
+    val expected = mkCheckedModule("Int", List(mkCheckedLet("int", mkCheckedInt(42))))
     val result = Typechecker.typecheck(mod)
     result shouldBe 'right
     result.right.get shouldBe expected
@@ -32,12 +51,12 @@ class TypecheckerSpec extends FlatSpec with Matchers {
 
   it should "typecheck let bound field references successfully" in {
     val mod = mkModule("Ref", List(
-      Let("int", LiteralInt(42, NoName, None), LocalName("int"), None),
-      Let("int2", Reference("int", NoName, None), LocalName("int2"), None)
+      mkLet("int", mkInt(42)),
+      mkLet("int2", mkRef("int"))
     ))
     val expected = mkCheckedModule("Ref", List(
-      Let("int", LiteralInt(42, NameWithType(NoName, TypeScheme(Type.Int)), None), NameWithType(LocalName("int"), TypeScheme(Type.Int)), None),
-      Let("int2", Reference("int", NameWithType(NoName, TypeScheme(Type.Int)), None), NameWithType(LocalName("int2"), TypeScheme(Type.Int)), None)
+      mkCheckedLet("int", mkCheckedInt(42)),
+      mkCheckedLet("int2", mkCheckedRef("int", TypeScheme(Type.Int)))
     ))
     val result = Typechecker.typecheck(mod)
     result shouldBe 'right
@@ -46,8 +65,8 @@ class TypecheckerSpec extends FlatSpec with Matchers {
 
   it should "return an error when there is a reference to a field which doesn't exist" in {
     val mod = mkModule("Ref", List(
-      Let("int", LiteralInt(42, NoName, None), LocalName("int"), None),
-      Let("int2", Reference("int3", NoName, None), LocalName("int2"), None)
+      mkLet("int", mkInt(42)),
+      mkLet("int2", mkRef("int3"))
     ))
     val result = Typechecker.typecheck(mod)
     result shouldBe 'left
@@ -55,75 +74,48 @@ class TypecheckerSpec extends FlatSpec with Matchers {
 
   it should "ensure the expression provided to if is a Boolean" in {
     val mod1 = mkModule("If", List(
-      Let("integer", If(
-        LiteralBoolean(true, NoName, None),
-        LiteralInt(42, NoName, None),
-        LiteralInt(41, NoName, None),
-        NoName, None
-      ), LocalName("integer"), None)
+      mkLet("integer", mkIf(mkBool(true), mkInt(42), mkInt(41)))
     ))
 
     val result1 = Typechecker.typecheck(mod1)
     result1 shouldBe 'right
 
     val mod2 = mkModule("If", List(
-      Let("integer", If(
-        LiteralInt(1, NoName, None),
-        LiteralInt(42, NoName, None),
-        LiteralInt(41, NoName, None),
-        NoName, None
-      ), LocalName("integer"), None)
+      mkLet("integer", mkIf(mkInt(1), mkInt(42), mkInt(41)))
     ))
 
     val result2 = Typechecker.typecheck(mod2)
     result2 shouldBe 'left
-    result2.left.get.head shouldBe TypeError("Cannot unify Int with Boolean")
+    result2.left.get.head shouldBe TypeError(Pos.Empty, "Cannot unify Int with Boolean")
   }
 
   it should "ensure the expressions provided to both branches of an if are compatible" in {
     val mod1 = mkModule("If", List(
-      Let("integer", If(
-        LiteralBoolean(true, NoName, None),
-        LiteralInt(42, NoName, None),
-        LiteralInt(41, NoName, None),
-        NoName, None
-      ), LocalName("integer"), None)
+      mkLet("integer", mkIf(mkBool(true), mkInt(42), mkInt(41)))
     ))
 
     val result1 = Typechecker.typecheck(mod1)
     result1 shouldBe 'right
 
     val mod2 = mkModule("If", List(
-      Let("integer", If(
-        LiteralBoolean(true, NoName, None),
-        LiteralInt(42, NoName, None),
-        LiteralDouble(41.0, NoName, None),
-        NoName, None
-      ), LocalName("integer"), None)
+      mkLet("integer", mkIf(mkBool(true), mkInt(42), mkDbl(41.0)))
     ))
 
     val result2 = Typechecker.typecheck(mod2)
     result2 shouldBe 'left
-    result2.left.get.head shouldBe TypeError("Cannot unify Int with Double")
+    result2.left.get.head shouldBe TypeError(Pos.Empty, "Cannot unify Int with Double")
   }
 
   it should "infer the parameter and return type of lambda expressions" in {
     val mod1 = mkModule("If", List(
-      Let("lam", Lambda(List("bool"), If(
-        Reference("bool", LocalName("bool"), None),
-        LiteralInt(42, NoName, None),
-        LiteralInt(41, NoName, None),
-        NoName, None
-      ), NoName, None), LocalName("lam"), None)
+      mkLet("lam", mkLam(List("bool"), mkIf(mkRef("bool"), mkInt(42), mkInt(41))))
     ))
 
     val result = Typechecker.typecheck(mod1)
     result shouldBe 'right
 
     val mod2 = mkModule("Lambda", List(
-      Let("lam", Lambda(List("a"),
-        Reference("a", LocalName("a"), None), NoName, None
-      ), LocalName("lam"), None)
+      mkLet("lam", mkLam(List("a"), mkRef("a")))
     ))
 
     val result2 = Typechecker.typecheck(mod2)
@@ -132,32 +124,16 @@ class TypecheckerSpec extends FlatSpec with Matchers {
 
   it should "infer the type of lambda application" in {
     val mod1 = mkModule("Apply", List(
-      Let("lam", Lambda(List("bool"),
-        If(
-          Reference("bool", MemberName(List.empty, "Apply", "bool"), None),
-          LiteralInt(42, NoName, None),
-          LiteralInt(41, NoName, None),
-          NoName, None
-        ), NoName, None), MemberName(List.empty, "Apply", "lam"), None),
-      Let("app", Apply(
-        Reference("lam", MemberName(List.empty, "Apply", "bool"), None),
-        List(LiteralBoolean(true, NoName, None)),
-        NoName, None
-      ), MemberName(List.empty, "Apply", "app"), None)
+      mkLet("lam", mkLam(List("bool"), mkIf(mkRef("bool"), mkInt(42), mkInt(41)))),
+      mkLet("app", mkApp(mkRef("lam"), List(mkBool(true))))
     ))
 
     val result1 = Typechecker.typecheck(mod1)
     result1 shouldBe 'right
 
     val mod2 = mkModule("Apply", List(
-      Let("lam", Lambda(List("a"),
-        Reference("a", LocalName("a"), None), NoName, None
-      ), MemberName(List.empty, "Apply", "lam"), None),
-      Let("app", Apply(
-        Reference("lam", MemberName(List.empty, "Apply", "bool"), None),
-        List(LiteralBoolean(true, NoName, None)),
-        NoName, None
-      ), MemberName(List.empty, "Apply", "app"), None)
+      mkLet("lam", mkLam(List("a"), mkRef("a"))),
+      mkLet("app", mkApp(mkRef("lam"), List(mkBool(true))))
     ))
 
     println(Printer.print(mod2).render(80))
