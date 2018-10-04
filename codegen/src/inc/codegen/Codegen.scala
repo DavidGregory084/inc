@@ -287,7 +287,7 @@ object Codegen {
         }
 
         descriptorFor.flatMap { descriptor =>
-withGeneratorAdapter(classWriter, let.name, descriptor) { generator =>
+          withGeneratorAdapter(classWriter, let.name, descriptor) { generator =>
             variables.foreach(v => generator.visitParameter(v, ACC_FINAL))
             newExpr(className, generator, variables.zipWithIndex.toMap)(body)
           }
