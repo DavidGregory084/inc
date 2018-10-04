@@ -115,8 +115,13 @@ message If {
   NameWithType nameWithType = 4;
 }
 
+message Param {
+  string name = 1;
+  NameWithType nameWithType = 2;
+}
+
 message Lambda {
-  repeated string variable = 1;
+  repeated Param params = 1;
   Expr body = 2;
   NameWithType nameWithType = 3;
 }

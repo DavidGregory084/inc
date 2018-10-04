@@ -80,7 +80,7 @@ case class ImportModule(pkg: List[String], name: String) extends Import
 case class ImportSymbols(pkg: List[String], name: String, symbols: List[String]) extends Import
 
 sealed trait Expr[A] extends Tree[A] {
-  def capturedVariables(implicit eqv: A =:= NamePosType): Set[Name] = this match {
+  def capturedVariables(implicit eqv: A =:= NamePosType): Set[NamePosType] = this match {
     case LiteralInt(_, _) => Set.empty
     case LiteralLong(_, _) => Set.empty
     case LiteralFloat(_, _) => Set.empty
@@ -89,11 +89,11 @@ sealed trait Expr[A] extends Tree[A] {
     case LiteralString(_, _) => Set.empty
     case LiteralChar(_, _) => Set.empty
     case LiteralUnit(_) => Set.empty
-    case Reference(_, meta) => Set(eqv(meta).name)
+    case Reference(_, meta) => Set(eqv(meta))
     case If(cond, thenExpr, elseExpr, _) =>
       cond.capturedVariables ++ thenExpr.capturedVariables ++ elseExpr.capturedVariables
-    case Lambda(variables, body, _) =>
-      body.capturedVariables -- variables.map(LocalName.apply)
+    case Lambda(params, body, _) =>
+      body.capturedVariables -- params.map(p => eqv(p.meta))
     case Apply(fn, args, _) =>
       fn.capturedVariables ++ args.flatMap(_.capturedVariables)
   }
@@ -129,9 +129,9 @@ sealed trait Expr[A] extends Tree[A] {
     case If(cond, thenExpr, elseExpr, meta) =>
       val nameWithType = Some(eqv(meta).toProto)
       proto.If(cond.toProto, thenExpr.toProto, elseExpr.toProto, nameWithType)
-    case Lambda(variables, body, meta) =>
+    case Lambda(params, body, meta) =>
       val nameWithType = Some(eqv(meta).toProto)
-      proto.Lambda(variables, body.toProto, nameWithType)
+      proto.Lambda(params.map(_.toProto), body.toProto, nameWithType)
     case Apply(fn, args, meta) =>
       val nameWithType = Some(eqv(meta).toProto)
       proto.Apply(fn.toProto, args.map(_.toProto), nameWithType)
@@ -166,9 +166,9 @@ object Expr {
         Expr.fromProto(thenExpr),
         Expr.fromProto(elseExpr),
         NameWithType.fromProto(ifExpr.getNameWithType))
-    case lambda @ proto.Lambda(variables, body, _) =>
+    case lambda @ proto.Lambda(params, body, _) =>
       Lambda(
-        variables.toList,
+        params.map(Param.fromProto).toList,
         Expr.fromProto(body),
         NameWithType.fromProto(lambda.getNameWithType))
     case app @ proto.Apply(fn, args, _) =>
@@ -208,6 +208,7 @@ object Expr {
           meta = f(ifExpr.meta))
       case lambda @ Lambda(_, _, _) =>
         lambda.copy(
+          params = lambda.params.map(_.map(f)),
           body = map(lambda.body)(f),
           meta = f(lambda.meta))
       case app @ Apply(_, _, _) =>
@@ -226,8 +227,28 @@ final case class If[A](
   meta: A
 ) extends Expr[A]
 
+final case class Param[A](name: String, meta: A) {
+  def substitute(subst: Map[TypeVariable, Type])(implicit eqv: A =:= NamePosType) =
+    Param(name, eqv(meta).substitute(subst).asInstanceOf[A])
+
+  def toProto(implicit eqv: A =:= NamePosType): proto.Param = {
+    val nameWithType = Some(eqv(meta).toProto)
+    proto.Param(name, nameWithType)
+  }
+}
+
+object Param {
+  def fromProto(param: proto.Param): Param[NameWithType] =
+    Param(param.name, NameWithType.fromProto(param.getNameWithType))
+
+  implicit val paramFunctor: Functor[Param] = new Functor[Param] {
+    def map[A, B](pa: Param[A])(f: A => B): Param[B] =
+      pa.copy(meta = f(pa.meta))
+  }
+}
+
 final case class Lambda[A](
-  variables: List[String],
+  params: List[Param[A]],
   body: Expr[A],
   meta: A
 ) extends Expr[A]

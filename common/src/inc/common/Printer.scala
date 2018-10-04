@@ -60,12 +60,15 @@ object Printer {
       Doc.text("if") & print(c) /
         (Doc.text("then") & print(t)).nested(2) /
         (Doc.text("else") & print(e)).nested(2)
-    case Lambda(vs, b, _) =>
+    case Lambda(params, b, _) =>
       val args =
-        if (vs.length == 1)
-          Doc.text(vs.head)
+        if (params.length == 1)
+          Doc.text(params.head.name)
         else
-          Doc.intercalate(Doc.char(',') + Doc.space, vs.map(Doc.text)).tightBracketBy(Doc.char('('), Doc.char(')'))
+          Doc.intercalate(
+            Doc.char(',') + Doc.space,
+            params.map(p => Doc.text(p.name))
+          ).tightBracketBy(Doc.char('('), Doc.char(')'))
 
       args & Doc.text("->") & print(b).nested(2)
 

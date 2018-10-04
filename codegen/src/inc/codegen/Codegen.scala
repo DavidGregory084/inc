@@ -279,7 +279,7 @@ object Codegen {
           newExpr(className, staticInitializer, Map.empty)(ifExpr)
           staticInitializer.visitFieldInsn(PUTSTATIC, className, let.name, descriptor)
         }
-      case Lambda(variables, body, nameWithType) =>
+      case Lambda(params, body, nameWithType) =>
         val TypeScheme(_, TypeConstructor("->", tpArgs)) = nameWithType.typ
 
         val descriptorFor = tpArgs.traverse(asmTypeOf).map { args =>
@@ -288,8 +288,8 @@ object Codegen {
 
         descriptorFor.flatMap { descriptor =>
           withGeneratorAdapter(classWriter, let.name, descriptor) { generator =>
-            variables.foreach(v => generator.visitParameter(v, ACC_FINAL))
-            newExpr(className, generator, variables.zipWithIndex.toMap)(body)
+            params.foreach(p => generator.visitParameter(p.name, ACC_FINAL))
+            newExpr(className, generator, params.map(_.name).zipWithIndex.toMap)(body)
           }
         }
 

@@ -43,8 +43,8 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
     for {
       numArgs <- Gen.choose(1, 4)
       // Don't generate duplicate variable names
-      vs <- Gen.listOfN(numArgs, nameGen).suchThat(vs => vs.distinct.length == vs.length)
-      vTps <- Gen.listOfN(numArgs, Gen.oneOf(
+      pNms <- Gen.listOfN(numArgs, nameGen).suchThat(vs => vs.distinct.length == vs.length)
+      pTps <- Gen.listOfN(numArgs, Gen.oneOf(
         TypeScheme(Type.Int),
         TypeScheme(Type.Long),
         TypeScheme(Type.Float),
@@ -53,16 +53,19 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
         TypeScheme(Type.Char),
         TypeScheme(Type.String),
         TypeScheme(Type.Unit)))
+      ps = pNms.zip(pTps).map {
+        case (nm, tp) =>
+          Param(nm, NamePosType(LocalName(nm), Pos.Empty, tp))
+      }
       body <- exprGen(
         // Unpleasant trick to allow later generators to refer to v
-        decls ++ vs.zip(vTps).map {
-          case (v, vTp) =>
-            Let(v, Reference(v, NamePosType(LocalName(v), Pos.Empty, vTp)), NamePosType(LocalName(v), Pos.Empty, vTp))
+        decls ++ ps.map { p =>
+          Let(p.name, Reference(p.name, p.meta), p.meta)
         },
         // Don't generate lambda because because we can't do first class functions yet
         generateFunctions = false
       )
-      lam <- Gen.const(Lambda(vs, body, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Function(vTps.map(_.typ), body.meta.typ.typ)))))
+      lam <- Gen.const(Lambda(ps, body, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Function(pTps.map(_.typ), body.meta.typ.typ)))))
     } yield lam
 
   def genArg(tp: Type)(decls: Decls): Gen[Expr[NamePosType]] = {

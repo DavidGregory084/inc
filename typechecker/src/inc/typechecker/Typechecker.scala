@@ -150,29 +150,33 @@ object Typechecker {
 
       } yield (expr, s)
 
-    case Lambda(variables, body, meta) =>
-      val tvs = variables.map(_ => TypeVariable())
-      val tvMappings = variables.zip(tvs.map(TypeScheme(_)))
+    case Lambda(params, body, meta) =>
+      val typedParams = params.map {
+        case Param(name, meta) =>
+          Param(name, meta.withSimpleType(TypeVariable()))
+      }
 
-      tvMappings.foreach {
+      val paramMappings = typedParams.map(p => p.name -> p.meta.typ)
+
+      paramMappings.foreach {
         case (v, tv) =>
           trace(v, tv)
       }
 
       for {
-        // Typecheck the body with the variables in scope
-        r <- typecheck(body, env ++ tvMappings)
+        // Typecheck the body with the params in scope
+        r <- typecheck(body, env ++ paramMappings)
         (b, s) = r
 
         _ = trace("lambda body", b.meta.typ)
 
         // Create a new function type
-        tp = Type.Function(tvs, b.meta.typ.instantiate)
+        tp = Type.Function(typedParams.map(_.meta.typ.typ), b.meta.typ.instantiate)
 
         // Apply the substitutions from the body
         ts = TypeScheme.generalize(env, tp.substitute(s))
 
-        expr = Lambda(variables, b.substitute(s), meta.withType(ts))
+        expr = Lambda(typedParams.map(_.substitute(s)), b.substitute(s), meta.withType(ts))
 
         _ = trace("lambda expression", expr.meta.typ)
 

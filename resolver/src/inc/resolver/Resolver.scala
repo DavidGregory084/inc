@@ -53,11 +53,16 @@ object Resolver {
         (e, _) = r3
       } yield (If(c, t, e, NameWithPos(NoName, pos)), tbl)
 
-    case Lambda(variables, body, pos) =>
+    case Lambda(params, body, pos) =>
+      val resolvedParams = params.map {
+        case Param(name, pos) =>
+          Param(name, NameWithPos(LocalName(name), pos))
+      }
+
       for {
-        r <- resolve(body, tbl ++ variables.map(v => v -> LocalName(v)))
+        r <- resolve(body, tbl ++ resolvedParams.map(p => p.name -> p.meta.name))
         (b, _) = r
-      } yield (Lambda(variables, b, NameWithPos(NoName, pos)), tbl)
+      } yield (Lambda(resolvedParams, b, NameWithPos(NoName, pos)), tbl)
 
     case Apply(fn, args, pos) =>
       for {

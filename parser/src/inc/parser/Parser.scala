@@ -111,14 +111,21 @@ object Parser {
       If(cond, thenExpr, elseExpr, Pos(from, to))
   }
 
+  val param = P(
+    (Index ~ identifier ~ Index)
+  ).map {
+    case (from, name, to) =>
+      Param(name, Pos(from, to))
+  }
+
   val lambda = P(
     Index ~
-    (inParens(identifier.rep(sep = comma.~/)) | identifier.map(Seq(_))) ~ allWs ~ "->" ~/ allWs ~
+    (inParens(param.rep(sep = comma.~/)) | param.map(Seq(_))) ~ allWs ~ "->" ~/ allWs ~
       expression ~
       Index
   ).map {
-    case (from, variables, expr, to) =>
-      Lambda(variables.toList, expr, Pos(from, to))
+    case (from, params, expr, to) =>
+      Lambda(params.toList, expr, Pos(from, to))
   }
 
   val application: Parser[Expr[Pos] => Expr[Pos]] = P(
