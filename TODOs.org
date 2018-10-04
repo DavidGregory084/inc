@@ -8,7 +8,8 @@
 ** type system choice
 *** Essence of ML Type Inference
 *** Raising ML to the Power of System F
-*** Practical Type Inference for Arbitrary-rank Types
+*** HMF: Simple type inference for first-class polymorphism
+*** Practical type inference for arbitrary-rank types
 *** Complete and Decidable Type Inference for GADTs
 ** recursive definitions
 *** letrec
