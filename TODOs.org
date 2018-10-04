@@ -1,0 +1,36 @@
+* Major
+** code generation for first class functions
+** foreign function interface
+*** add `java` primitive?
+*** java code splices with parameter interpolation?
+** datatype declarations
+** pattern matching
+** type system choice
+*** Essence of ML Type Inference
+*** Raising ML to the Power of System F
+*** Practical Type Inference for Arbitrary-rank Types
+*** Complete and Decidable Type Inference for GADTs
+** recursive definitions
+*** letrec
+*** add `fix` primitive?
+** test coverage
+*** parser: tests for new kinds of syntax
+*** codegen: tests for polymorphic definitions
+** error messages
+*** use an ADT
+*** printing of source code context
+*** highlighting of relevant subexpressions
+*** syntax highlighting of context?
+*** type inference tracing
+** metaprogramming
+*** MetaML
+** REPL / interpreter
+** traits / extension methods
+*** link with invokedynamic?
+* Minor
+** explicit type annotations
+** alternative backend
+*** LLVM - [[https://github.com/bytedeco/javacpp-presets]]
+*** GRIN - missing JVM bindings?
+* Snagging
+** fix name shadowing and duplication in lambda parameters
