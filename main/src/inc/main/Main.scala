@@ -13,10 +13,18 @@ import java.net.URLClassLoader
 import java.io.{File => JavaFile, ByteArrayOutputStream}
 import java.net.URL
 import java.nio.file.Paths
+import scribe._
+import scribe.format._
 
 case class ConfigError(private val position: Pos, private val message: String) extends Error(position, message)
 
 object Main {
+
+  Logger.root
+    .clearHandlers()
+    .withHandler(formatter = Formatter.simple)
+    .replace()
+
   val NL = System.lineSeparator
 
   def main(args: Array[String]): Unit = {
@@ -53,14 +61,17 @@ object Main {
     }
 
     def sourceContext(msg: String, prog: String, pos: Pos) = {
-      val highlighted = fansi.Str(prog).overlay(fansi.Color.Red, pos.from, pos.to)
+      val highlighted =
+        if (pos.from > 0 && pos.to > pos.from)
+          fansi.Str(prog).overlay(fansi.Color.Red, pos.from, pos.to)
+        else
+          fansi.Str(prog)
 
       val (highlightedLines, _) = highlighted.render.split('\n').foldLeft(Chain.empty[String] -> 0) {
         case ((lines, idx), line) =>
           val nextIdx = idx + 1 + fansi.Str(line).length
           (lines :+ (idx.toString.padTo(String.valueOf(highlighted.length).length + 1, ' ') + '|' + line), nextIdx)
       }
-
 
       NL + msg + ":" + NL + NL + highlightedLines.toList.mkString(System.lineSeparator)
     }
@@ -70,15 +81,15 @@ object Main {
         case Left(errors) =>
           errors.map { e =>
             sourceContext(e.getMessage, prog, e.pos)
-          }.foreach(println)
+          }.foreach(scribe.error(_))
         case Right(_) =>
-          println(NL + "Success")
+          scribe.info(NL + "Success")
       }
     }
   }
 
   def printPhaseTiming(phase: String, before: Long, after: Long): Unit =
-    println(NL + s"Completed $phase in ${(after - before) / 1000000}ms")
+    scribe.info(NL + s"Completed $phase in ${(after - before) / 1000000}ms")
 
   def runPhase[A](
     name: String,
@@ -86,8 +97,7 @@ object Main {
     printOutput: Configuration => Boolean,
     phase: => Either[List[Error], A],
     print: A => Unit = (a: A) => {
-      println()
-      pprint.pprintln(a)
+      scribe.info(NL + pprint.apply(a))
     }
   ): Either[List[Error], A] = {
     val before = System.nanoTime
@@ -186,7 +196,7 @@ object Main {
 
       val afterAll = System.nanoTime
 
-      println(NL + s"""Compiled ${mod.pkg.mkString(".")}.${mod.name} in ${(afterAll - beforeAll) / 1000000}ms""")
+      scribe.info(NL + s"""Compiled ${mod.pkg.mkString(".")}.${mod.name} in ${(afterAll - beforeAll) / 1000000}ms""")
 
       out
     }

@@ -136,8 +136,6 @@ class TypecheckerSpec extends FlatSpec with Matchers {
       mkLet("app", mkApp(mkRef("lam"), List(mkBool(true))))
     ))
 
-    println(Printer.print(mod2).render(80))
-
     val result2 = Typechecker.typecheck(mod2)
     result2 shouldBe 'right
   }

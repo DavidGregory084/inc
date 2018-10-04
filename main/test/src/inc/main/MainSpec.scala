@@ -110,7 +110,6 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
   // TODO: figure out how to push the inferred type back down into the AST efficiently
   it should "compile a lambda expression" in withTmpDir { dir =>
     val prog = "module Test.Main.Lambda { let x = 42; let y = 41; let lam = bool -> if bool then x else y }"
-    println(prog)
     val result = Main.compileProgram(dir, prog)
     result shouldBe 'right
     val classFile = result.right.get
@@ -119,7 +118,6 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
 
   it should "compile an identity function" in withTmpDir { dir =>
     val prog = "module Test.Main.Lambda { let id = a -> a }"
-    println(prog)
     val result = Main.compileProgram(dir, prog)
     result shouldBe 'right
     val classFile = result.right.get
@@ -128,7 +126,6 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
 
   it should "compile an application of an identity function with a reference type" in withTmpDir { dir =>
     val prog = """module Test.Main.Lambda { let id = a -> a; let str = id("string") }"""
-    println(prog)
     val result = Main.compileProgram(dir, prog)
     result shouldBe 'right
     val classFile = result.right.get
@@ -137,7 +134,6 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
 
   it should "compile an application of an identity function with a primitive type" in withTmpDir { dir =>
     val prog = """module Test.Main.Lambda { let id = a -> a; let int = id(1) }"""
-    println(prog)
     val result = Main.compileProgram(dir, prog)
     result shouldBe 'right
     val classFile = result.right.get

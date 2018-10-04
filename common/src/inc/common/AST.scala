@@ -321,7 +321,7 @@ case class TypeScheme(bound: List[TypeVariable], typ: Type) {
   def instantiate: Type = if (bound.isEmpty) typ else {
     val freshVars = bound.map(_ => TypeVariable())
     val subst = bound.zip(freshVars).toMap
-    println("instantiate: " + Printer.print(subst))
+    scribe.info("instantiate: " + Printer.print(subst))
     typ.substitute(subst)
   }
 }
@@ -332,7 +332,7 @@ object TypeScheme {
     val freeInEnv = env.values.flatMap(_.freeTypeVariables).toSet
     val bound = typ.freeTypeVariables diff freeInEnv
     val scheme = TypeScheme(bound.toList, typ)
-    println("generalize: " + bound.map(Printer.print(_)).mkString("[", ", ", "]"))
+    scribe.info("generalize: " + bound.map(Printer.print(_)).mkString("[", ", ", "]"))
     scheme
   }
 
@@ -370,7 +370,7 @@ sealed trait Type {
     case tyVar @ TypeVariable(_) =>
       val substFor = subst.getOrElse(tyVar, tyVar)
       if (tyVar != substFor)
-        println(Printer.print(tyVar) + " |-> " + Printer.print(substFor))
+        scribe.info(Printer.print(tyVar) + " |-> " + Printer.print(substFor))
       substFor
     case TypeConstructor(nm, tyParams) =>
       TypeConstructor(nm, tyParams.map(_.substitute(subst)))

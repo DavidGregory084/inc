@@ -13,11 +13,11 @@ object Typechecker {
   val EmptyResult: Either[List[TypeError], (Chain[Expr[NamePosType]], Substitution)] = Right((Chain.empty, EmptySubst))
 
   def trace(name: String, typ: Type) = {
-    println(name + ": " + Printer.print(typ))
+    scribe.info(name + ": " + Printer.print(typ))
   }
 
   def trace(name: String, typ: TypeScheme) = {
-    println(name + ": " + Printer.print(typ))
+    scribe.info(name + ": " + Printer.print(typ))
   }
 
   def bind(pos: Pos, tyVar: TypeVariable, typ: Type): Either[List[TypeError], Substitution] = typ match {
@@ -44,7 +44,7 @@ object Typechecker {
   def unify(pos: Pos, left: Type, right: Type): Either[List[TypeError], Substitution] = {
     val ll = Printer.print(left)
     val rr = Printer.print(right)
-    println(s"unify $ll with $rr")
+    scribe.info(s"unify $ll with $rr")
 
     (left, right) match {
       case (TypeConstructor(_, lvars), TypeConstructor(_, rvars)) if lvars.length != rvars.length =>
