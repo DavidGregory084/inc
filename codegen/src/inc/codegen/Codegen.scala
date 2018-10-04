@@ -104,6 +104,7 @@ object Codegen {
 
   def functionClass(typ: TypeConstructor): Either[List[CodegenError], Class[_]] =
     (typ.typeParams.length - 1) match {
+      case 0 => Right(classOf[inc.rts.Function[_]])
       case 1 => Right(classOf[inc.rts.Function1[_, _]])
       case 2 => Right(classOf[inc.rts.Function2[_, _, _]])
       case 3 => Right(classOf[inc.rts.Function3[_, _, _, _]])
