@@ -113,7 +113,7 @@ object Parser {
 
   val lambda = P(
     Index ~
-    (inParens(identifier.rep(min = 1, sep = comma.~/)) | identifier.map(Seq(_))) ~ allWs ~ "->" ~/ allWs ~
+    (inParens(identifier.rep(sep = comma.~/)) | identifier.map(Seq(_))) ~ allWs ~ "->" ~/ allWs ~
       expression ~
       Index
   ).map {
@@ -128,10 +128,11 @@ object Parser {
       fn => Apply(fn, args.toList, Pos(from, to))
   }
 
-  val expression: Parser[Expr[Pos]] = P( (literal | ifExpr | lambda | reference) ~ application.rep ).map {
+  // NoCut allows us to backtrack out of a nullary lambda into a unit literal
+  val expression: Parser[Expr[Pos]] = P( (NoCut(lambda) | literal | ifExpr | reference) ~ application.rep ).map {
     case (expr, applications) =>
-      applications.foldRight(expr) {
-        case (app, expr) =>
+      applications.foldLeft(expr) {
+        case (expr, app) =>
           app(expr)
       }
   }
