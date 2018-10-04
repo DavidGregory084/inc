@@ -251,7 +251,7 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
       |    MAXSTACK = 1
       |    MAXLOCALS = 0
       |}
-      |""".stripMargin
+      |""".stripMargin.replaceAll("\\r\\n", "\n")
     )
   }
 
