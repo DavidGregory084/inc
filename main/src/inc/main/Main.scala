@@ -60,32 +60,52 @@ object Main {
       }
     }
 
-    def sourceContext(msg: String, prog: String, pos: Pos) = {
-      val highlighted =
-        if (pos.from > 0 && pos.to > pos.from)
-          fansi.Str(prog).overlay(fansi.Color.Red, pos.from, pos.to)
-        else
-          fansi.Str(prog)
-
-      val (highlightedLines, _) = highlighted.render.split('\n').foldLeft(Chain.empty[String] -> 0) {
-        case ((lines, idx), line) =>
-          val nextIdx = idx + 1 + fansi.Str(line).length
-          (lines :+ (idx.toString.padTo(String.valueOf(highlighted.length).length + 1, ' ') + '|' + line), nextIdx)
-      }
-
-      NL + msg + ":" + NL + NL + highlightedLines.toList.mkString(System.lineSeparator)
-    }
-
-    parser.parse(args, Configuration()) foreach { config =>
+    parser.parse(args, Configuration()).foreach { config =>
       compileProgram(dir, prog, config) match {
         case Left(errors) =>
           errors.map { e =>
-            sourceContext(e.getMessage, prog, e.pos)
+            sourceContext("<stdin>", e.getMessage, prog, e.pos)
           }.foreach(scribe.error(_))
+          scribe.info(NL + fansi.Color.Red("Failure").render)
         case Right(_) =>
-          scribe.info(NL + "Success")
+          scribe.info(NL + fansi.Color.Green("Success").render)
       }
     }
+  }
+
+  def sourceContext(fileName: String, msg: String, prog: String, pos: Pos) = {
+    val highlighted =
+      if (pos.from > 0 && pos.to > pos.from)
+        fansi.Str(prog).overlay(fansi.Color.Red, pos.from, pos.to)
+      else
+        fansi.Str(prog)
+
+    val highlightedLines = highlighted.render.split("\\r?\\n")
+
+    val numberOfLines = highlightedLines.length
+
+    val (formattedLines, _) = highlightedLines.zipWithIndex.foldLeft(Chain.empty[String] -> 0) {
+      case ((lines, idx), (line, lineIdx)) =>
+        val nextIdx = idx + 1 + fansi.Str(line).length
+
+        val nextLines =
+          if (pos.from < idx || pos.to >= nextIdx)
+            lines
+          else {
+            val lineNumber = lineIdx + 1
+            val marginWidth = String.valueOf(numberOfLines).length + 1
+            val margin = fansi.Color.White(lineNumber.toString.padTo(marginWidth, ' ') + '|').render
+
+            lines :+ (margin + line)
+          }
+
+        (nextLines, nextIdx)
+    }
+
+    NL +
+      fansi.Color.Blue(fileName + ":").render + NL +
+      formattedLines.toList.mkString(System.lineSeparator) + (NL * 2) +
+      msg
   }
 
   def printPhaseTiming(phase: String, before: Long, after: Long): Unit =
@@ -164,6 +184,18 @@ object Main {
     }.map(_.iterator.toArray).toEither
   }
 
+  def withMargin(prog: String) = {
+    val lines = prog.split("\\r?\\n")
+    val numberOfLines = lines.length
+    lines.zipWithIndex.foldLeft(Chain.empty[String]) {
+      case (outLines, (line, lineIdx)) =>
+        val lineNumber = lineIdx + 1
+        val marginWidth = String.valueOf(numberOfLines).length + 1
+        val margin = lineNumber.toString.padTo(marginWidth, ' ') + '|'
+        outLines :+ (margin + line)
+    }.toList.mkString(System.lineSeparator)
+  }
+
   def compileProgram(dest: File, prog: String, config: Configuration = Configuration.default): Either[List[Error], File] = {
     val beforeAll = System.nanoTime
 
@@ -176,7 +208,7 @@ object Main {
 
       resolved <- runPhase[Module[NameWithPos]]("resolver", config, _.printResolver, Resolver.resolve(mod, importedDecls))
 
-      checked <- runPhase[Module[NamePosType]]("typechecker", config, _.printTyper, Typechecker.typecheck(resolved, importedDecls))
+      checked <- runPhase[Module[NamePosType]]("typechecker", config, _.printTyper, Typechecker.typecheck(prog, resolved, importedDecls))
 
       code <- runPhase[Array[Byte]]("codegen", config, _.printCodegen, Codegen.generate(checked), Codegen.print(_))
 
@@ -196,7 +228,7 @@ object Main {
 
       val afterAll = System.nanoTime
 
-      scribe.info(NL + s"""Compiled ${mod.pkg.mkString(".")}.${mod.name} in ${(afterAll - beforeAll) / 1000000}ms""")
+      scribe.info(NL + fansi.Color.Blue(s"""Compiled ${mod.pkg.mkString(".")}.${mod.name} in """) + fansi.Color.White(s"""${(afterAll - beforeAll) / 1000000}ms"""))
 
       out
     }
