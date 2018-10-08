@@ -20,13 +20,10 @@ import scribe.format._
 case class ConfigError(private val position: Pos, private val message: String) extends Error(position, message)
 
 object Main {
-
   Logger.root
     .clearHandlers()
     .withHandler(formatter = Formatter.simple)
     .replace()
-
-  val NL = System.lineSeparator
 
   def main(args: Array[String]): Unit = {
     val dir = ".".toFile
@@ -65,48 +62,13 @@ object Main {
       compileProgram(dir, prog, config) match {
         case Left(errors) =>
           errors.map { e =>
-            sourceContext("<stdin>", e.getMessage, prog, e.pos)
+            Printer.withSourceContext(Some("<stdin>"), e.getMessage, e.pos, fansi.Color.Red, prog)
           }.foreach(scribe.error(_))
-          scribe.info(NL + fansi.Color.Red("Failure").render)
+          scribe.info(NL + Red("Failure") + NL)
         case Right(_) =>
-          scribe.info(NL + fansi.Color.Green("Success").render)
+          scribe.info(NL + Green("Success") + NL)
       }
     }
-  }
-
-  def sourceContext(fileName: String, msg: String, prog: String, pos: Pos) = {
-    val highlighted =
-      if (pos.from > 0 && pos.to > pos.from)
-        fansi.Str(prog).overlay(fansi.Color.Red, pos.from, pos.to)
-      else
-        fansi.Str(prog)
-
-    val highlightedLines = highlighted.render.split("\\r?\\n")
-
-    val numberOfLines = highlightedLines.length
-
-    val (formattedLines, _) = highlightedLines.zipWithIndex.foldLeft(Chain.empty[String] -> 0) {
-      case ((lines, idx), (line, lineIdx)) =>
-        val nextIdx = idx + 1 + fansi.Str(line).length
-
-        val nextLines =
-          if (pos.from < idx || pos.to >= nextIdx)
-            lines
-          else {
-            val lineNumber = lineIdx + 1
-            val marginWidth = String.valueOf(numberOfLines).length + 1
-            val margin = fansi.Color.White(lineNumber.toString.padTo(marginWidth, ' ') + '|').render
-
-            lines :+ (margin + line)
-          }
-
-        (nextLines, nextIdx)
-    }
-
-    NL +
-      fansi.Color.Blue(fileName + ":").render + NL +
-      formattedLines.toList.mkString(System.lineSeparator) + (NL * 2) +
-      msg
   }
 
   def printPhaseTiming(phase: String, before: Long, after: Long): Unit =
@@ -185,18 +147,6 @@ object Main {
     }.map(_.iterator.toArray).toEither
   }
 
-  def withMargin(prog: String) = {
-    val lines = prog.split("\\r?\\n")
-    val numberOfLines = lines.length
-    lines.zipWithIndex.foldLeft(Chain.empty[String]) {
-      case (outLines, (line, lineIdx)) =>
-        val lineNumber = lineIdx + 1
-        val marginWidth = String.valueOf(numberOfLines).length + 1
-        val margin = lineNumber.toString.padTo(marginWidth, ' ') + '|'
-        outLines :+ (margin + line)
-    }.toList.mkString(System.lineSeparator)
-  }
-
   def compileProgram(dest: File, prog: String, config: Configuration = Configuration.default): Either[List[Error], File] = {
     val beforeAll = System.nanoTime
 
@@ -229,7 +179,7 @@ object Main {
 
       val afterAll = System.nanoTime
 
-      scribe.info(NL + fansi.Color.Blue(s"""Compiled ${mod.pkg.mkString(".")}.${mod.name} in """) + fansi.Color.White(s"""${(afterAll - beforeAll) / 1000000}ms"""))
+      scribe.info(NL + Blue(s"""Compiled ${mod.pkg.mkString(".")}.${mod.name} in """) + White(s"""${(afterAll - beforeAll) / 1000000}ms"""))
 
       out
     }

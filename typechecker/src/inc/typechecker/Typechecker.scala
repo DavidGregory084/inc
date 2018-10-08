@@ -5,8 +5,6 @@ import cats.syntax.functor._
 import inc.common._
 
 object Typechecker {
-  val NL = System.lineSeparator
-
   type Environment = Map[String, TypeScheme]
   type Substitution = Map[TypeVariable, Type]
 
@@ -14,49 +12,14 @@ object Typechecker {
   val EmptySubst: Substitution = Map.empty
   val EmptyResult: Either[List[TypeError], (Chain[Expr[NamePosType]], Substitution)] = Right((Chain.empty, EmptySubst))
 
-  def sourceContext(prog: String, msg: String, pos: Pos) = {
-
-    val highlighted =
-      if (pos.from > 0 && pos.to > pos.from)
-        fansi.Str(prog).overlay(fansi.Color.Yellow, pos.from, pos.to)
-      else
-        fansi.Str(prog)
-
-    val highlightedLines = highlighted.render.split("\\r?\\n")
-
-    val numberOfLines = highlightedLines.length
-
-    val (formattedLines, _) = highlightedLines.zipWithIndex.foldLeft(Chain.empty[String] -> 0) {
-      case ((lines, idx), (line, lineIdx)) =>
-        val nextIdx = idx + 1 + fansi.Str(line).length
-
-        val nextLines =
-          if (pos.from < idx || pos.to >= nextIdx)
-            lines
-          else {
-            val lineNumber = lineIdx + 1
-            val marginWidth = String.valueOf(numberOfLines).length + 1
-            val margin = fansi.Color.White(lineNumber.toString.padTo(marginWidth, ' ') + '|').render
-
-            lines :+ (margin + line)
-          }
-
-        (nextLines, nextIdx)
-    }
-
-    NL +
-      formattedLines.toList.mkString(System.lineSeparator) +
-      (NL * 2) + msg
-  }
-
   def trace(prog: String, name: String, pos: Pos, typ: Type) = {
     val formattedMsg = name + ": " + Printer.print(typ)
-    scribe.info(sourceContext(prog, formattedMsg, pos))
+    scribe.info(Printer.withSourceContext(None, formattedMsg, pos, fansi.Color.Yellow, prog))
   }
 
   def trace(prog: String, name: String, pos: Pos, typ: TypeScheme) = {
     val formattedMsg = name + ": " + Printer.print(typ)
-    scribe.info(sourceContext(prog, formattedMsg, pos))
+    scribe.info(Printer.withSourceContext(None, formattedMsg, pos, fansi.Color.Yellow, prog))
   }
 
   def bind(pos: Pos, tyVar: TypeVariable, typ: Type): Either[List[TypeError], Substitution] = typ match {
@@ -74,8 +37,10 @@ object Typechecker {
   def chainSubstitutions(ss: Substitution*): Substitution =
     chainSubstitutions(ss.toList)
 
-  def substitute(env: Environment, subst: Substitution): Environment =
+  def substitute(env: Environment, subst: Substitution): Environment = {
+    if (subst.nonEmpty) scribe.info(NL + "Apply substitution: " + Printer.print(subst))
     env.mapValues(_.substitute(subst))
+  }
 
   def chainSubstitution(s1: Substitution, s2: Substitution): Substitution =
     s2 ++ s1.mapValues(_.substitute(s2))
@@ -84,13 +49,13 @@ object Typechecker {
     val ll = Printer.print(left)
     val rr = Printer.print(right)
 
-    val llYellow = fansi.Str(ll).overlay(fansi.Color.Yellow).render
-    val rrYellow = fansi.Str(rr).overlay(fansi.Color.Yellow).render
+    val llYellow = Yellow(ll)
+    val rrYellow = Yellow(rr)
 
     scribe.info(NL + s"Unify $llYellow with $rrYellow")
 
-    val llRed = fansi.Str(ll).overlay(fansi.Color.Red).render
-    val rrRed = fansi.Str(rr).overlay(fansi.Color.Red).render
+    val llRed = Red(ll)
+    val rrRed = Red(rr)
 
     (left, right) match {
       case (TypeConstructor(_, lvars), TypeConstructor(_, rvars)) if lvars.length != rvars.length =>
@@ -152,7 +117,7 @@ object Typechecker {
 
     case ref @ Reference(name, meta)  =>
       env.get(name).map { typ =>
-        trace(prog, s"reference to $name", meta.pos, typ)
+        trace(prog, s"Reference to $name", meta.pos, typ)
         withTypeScheme(ref, typ)
       }.getOrElse(TypeError.singleton(meta.pos, s"Reference to undefined symbol: $name"))
 
@@ -164,7 +129,7 @@ object Typechecker {
 
         NamePosType(_, _, condType) = c.meta
 
-        _ = trace(prog, "if condition", c.meta.pos, condType)
+        _ = trace(prog, "If condition", c.meta.pos, condType)
 
         // Typecheck the then expression
         r2 <- typecheck(prog, thenExpr, env)
@@ -172,7 +137,7 @@ object Typechecker {
 
         NamePosType(_, _, thenType) = t.meta
 
-        _ = trace(prog, "then expression", t.meta.pos, thenType)
+        _ = trace(prog, "Then expression", t.meta.pos, thenType)
 
         // Typecheck the else expression
         r3 <- typecheck(prog, elseExpr, env)
@@ -180,7 +145,7 @@ object Typechecker {
 
         NamePosType(_, _, elseType) = e.meta
 
-        _ = trace(prog, "else expression", e.meta.pos, elseType)
+        _ = trace(prog, "Else expression", e.meta.pos, elseType)
 
         // Unify the condition with Boolean
         s4 <- unify(c.meta.pos, condType.instantiate, Type.Boolean)
@@ -190,9 +155,11 @@ object Typechecker {
 
         s = chainSubstitutions(s1, s2, s3, s4, s5)
 
+        _ = if (s.nonEmpty) scribe.info(NL + "Apply substitution: " + Printer.print(s))
+
         expr = If(c, t, e, meta.withType(thenType)).substitute(s)
 
-        _ = trace(prog, "if expression", expr.meta.pos, expr.meta.typ)
+        _ = trace(prog, "If expression", expr.meta.pos, expr.meta.typ)
 
       } yield (expr, s)
 
@@ -214,31 +181,33 @@ object Typechecker {
         r <- typecheck(prog, body, env ++ paramMappings)
         (b, s) = r
 
-        _ = trace(prog, "lambda body", b.meta.pos, b.meta.typ)
+        _ = trace(prog, "Lambda body", b.meta.pos, b.meta.typ)
 
         // Create a new function type
         tp = Type.Function(typedParams.map(_.meta.typ.typ), b.meta.typ.instantiate)
+
+        _ = if (s.nonEmpty) scribe.info(NL + "Apply substitution: " + Printer.print(s))
 
         // Apply the substitutions from the body
         ts = TypeScheme.generalize(env, tp.substitute(s))
 
         expr = Lambda(typedParams.map(_.substitute(s)), b.substitute(s), meta.withType(ts))
 
-        _ = trace(prog, "lambda expression", expr.meta.pos, expr.meta.typ)
+        _ = trace(prog, "Lambda expression", expr.meta.pos, expr.meta.typ)
 
       } yield (expr, s)
 
     case Apply(fn, args, meta) =>
       val tv = TypeVariable()
 
-      trace(prog, "function application", meta.pos, tv)
+      trace(prog, "Function application", meta.pos, tv)
 
       for {
         // Typecheck the function
         rf <- typecheck(prog, fn, env)
         (f, s1) = rf
 
-        _ = trace(prog, "function to apply", f.meta.pos, f.meta.typ)
+        _ = trace(prog, "Function to apply", f.meta.pos, f.meta.typ)
 
         // Typecheck the arg expressions
         ra <- args.zipWithIndex.foldLeft(EmptyResult) {
@@ -250,7 +219,7 @@ object Typechecker {
               a <- typecheck(prog, nextArg, substitute(env, s1))
               (typedArg, newSubst) = a
 
-              _ = trace(prog, s"argument ${idx + 1}", typedArg.meta.pos, typedArg.meta.typ)
+              _ = trace(prog, s"Argument ${idx + 1}", typedArg.meta.pos, typedArg.meta.typ)
 
             } yield (typedSoFar :+ typedArg, chainSubstitution(substSoFar, newSubst))
         }
@@ -262,12 +231,14 @@ object Typechecker {
         // Create a new function type
         tp = Type.Function(argsList.map(_.meta.typ.instantiate), tv).substitute(s2)
 
-        _ = trace(prog, "expected type", meta.pos, tp)
+        _ = trace(prog, "Expected type", meta.pos, tp)
 
         // Unify the function type with the actual argument types
         s3 <- unify(meta.pos, f.meta.typ.instantiate, tp)
 
         s = chainSubstitutions(s1, s2, s3)
+
+        _ = if (s.nonEmpty) scribe.info(NL + "Apply substitution: " + Printer.print(s))
 
         expr = Apply(f.substitute(s), argsList.map(_.substitute(s)), meta.withType(TypeScheme(tv.substitute(s))))
 
