@@ -242,7 +242,7 @@ object Typechecker {
 
         expr = Apply(f.substitute(s), argsList.map(_.substitute(s)), meta.withType(TypeScheme(tv.substitute(s))))
 
-      } yield (expr, s2)
+      } yield (expr, s)
   }
 
   def typecheck(prog: String, decl: TopLevelDeclaration[NameWithPos], env: Environment): Either[List[TypeError], (TopLevelDeclaration[NamePosType], Environment)] = decl match {
