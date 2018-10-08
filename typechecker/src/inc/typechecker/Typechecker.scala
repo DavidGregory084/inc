@@ -12,14 +12,14 @@ object Typechecker {
   val EmptySubst: Substitution = Map.empty
   val EmptyResult: Either[List[TypeError], (Chain[Expr[NamePosType]], Substitution)] = Right((Chain.empty, EmptySubst))
 
-  def trace(prog: String, name: String, pos: Pos, typ: Type) = {
+  def trace(name: String, pos: Pos, typ: Type, source: String) = {
     val formattedMsg = name + ": " + Printer.print(typ)
-    scribe.info(Printer.withSourceContext(None, formattedMsg, pos, fansi.Color.Yellow, prog))
+    scribe.info(Printer.withSourceContext(None, formattedMsg, pos, fansi.Color.Yellow, source))
   }
 
-  def trace(prog: String, name: String, pos: Pos, typ: TypeScheme) = {
+  def trace(name: String, pos: Pos, typ: TypeScheme, source: String) = {
     val formattedMsg = name + ": " + Printer.print(typ)
-    scribe.info(Printer.withSourceContext(None, formattedMsg, pos, fansi.Color.Yellow, prog))
+    scribe.info(Printer.withSourceContext(None, formattedMsg, pos, fansi.Color.Yellow, source))
   }
 
   def bind(pos: Pos, tyVar: TypeVariable, typ: Type): Either[List[TypeError], Substitution] = typ match {
@@ -117,7 +117,7 @@ object Typechecker {
 
     case ref @ Reference(name, meta)  =>
       env.get(name).map { typ =>
-        trace(prog, s"Reference to $name", meta.pos, typ)
+        trace(s"Reference to $name", meta.pos, typ, prog)
         withTypeScheme(ref, typ)
       }.getOrElse(TypeError.singleton(meta.pos, s"Reference to undefined symbol: $name"))
 
@@ -129,7 +129,7 @@ object Typechecker {
 
         NamePosType(_, _, condType) = c.meta
 
-        _ = trace(prog, "If condition", c.meta.pos, condType)
+        _ = trace("If condition", c.meta.pos, condType, prog)
 
         // Typecheck the then expression
         r2 <- typecheck(prog, thenExpr, env)
@@ -137,7 +137,7 @@ object Typechecker {
 
         NamePosType(_, _, thenType) = t.meta
 
-        _ = trace(prog, "Then expression", t.meta.pos, thenType)
+        _ = trace("Then expression", t.meta.pos, thenType, prog)
 
         // Typecheck the else expression
         r3 <- typecheck(prog, elseExpr, env)
@@ -145,7 +145,7 @@ object Typechecker {
 
         NamePosType(_, _, elseType) = e.meta
 
-        _ = trace(prog, "Else expression", e.meta.pos, elseType)
+        _ = trace("Else expression", e.meta.pos, elseType, prog)
 
         // Unify the condition with Boolean
         s4 <- unify(c.meta.pos, condType.instantiate, Type.Boolean)
@@ -159,7 +159,7 @@ object Typechecker {
 
         expr = If(c, t, e, meta.withType(thenType)).substitute(s)
 
-        _ = trace(prog, "If expression", expr.meta.pos, expr.meta.typ)
+        _ = trace("If expression", expr.meta.pos, expr.meta.typ, prog)
 
       } yield (expr, s)
 
@@ -173,7 +173,7 @@ object Typechecker {
 
       typedParams.foreach {
         case Param(name, meta) =>
-          trace(prog, name, meta.pos, meta.typ)
+          trace(name, meta.pos, meta.typ, prog)
       }
 
       for {
@@ -181,7 +181,7 @@ object Typechecker {
         r <- typecheck(prog, body, env ++ paramMappings)
         (b, s) = r
 
-        _ = trace(prog, "Lambda body", b.meta.pos, b.meta.typ)
+        _ = trace("Lambda body", b.meta.pos, b.meta.typ, prog)
 
         // Create a new function type
         tp = Type.Function(typedParams.map(_.meta.typ.typ), b.meta.typ.instantiate)
@@ -193,21 +193,21 @@ object Typechecker {
 
         expr = Lambda(typedParams.map(_.substitute(s)), b.substitute(s), meta.withType(ts))
 
-        _ = trace(prog, "Lambda expression", expr.meta.pos, expr.meta.typ)
+        _ = trace("Lambda expression", expr.meta.pos, expr.meta.typ, prog)
 
       } yield (expr, s)
 
     case Apply(fn, args, meta) =>
       val tv = TypeVariable()
 
-      trace(prog, "Function application", meta.pos, tv)
+      trace("Function application", meta.pos, tv, prog)
 
       for {
         // Typecheck the function
         rf <- typecheck(prog, fn, env)
         (f, s1) = rf
 
-        _ = trace(prog, "Function to apply", f.meta.pos, f.meta.typ)
+        _ = trace("Function to apply", f.meta.pos, f.meta.typ, prog)
 
         // Typecheck the arg expressions
         ra <- args.zipWithIndex.foldLeft(EmptyResult) {
@@ -219,7 +219,7 @@ object Typechecker {
               a <- typecheck(prog, nextArg, substitute(env, s1))
               (typedArg, newSubst) = a
 
-              _ = trace(prog, s"Argument ${idx + 1}", typedArg.meta.pos, typedArg.meta.typ)
+              _ = trace(s"Argument ${idx + 1}", typedArg.meta.pos, typedArg.meta.typ, prog)
 
             } yield (typedSoFar :+ typedArg, chainSubstitution(substSoFar, newSubst))
         }
@@ -231,7 +231,7 @@ object Typechecker {
         // Create a new function type
         tp = Type.Function(argsList.map(_.meta.typ.instantiate), tv).substitute(s2)
 
-        _ = trace(prog, "Expected type", meta.pos, tp)
+        _ = trace("Expected type", meta.pos, tp, prog)
 
         // Unify the function type with the actual argument types
         s3 <- unify(meta.pos, f.meta.typ.instantiate, tp)
@@ -250,7 +250,7 @@ object Typechecker {
       typecheck(prog, expr, env).flatMap {
         case (checkedExpr, subst) =>
           val tp = checkedExpr.meta.typ
-          trace(prog, name, meta.pos, tp)
+          trace(name, meta.pos, tp, prog)
           Right((Let(name, checkedExpr, meta.withType(tp)), substitute(env, subst).updated(name, checkedExpr.meta.typ)))
       }
   }
