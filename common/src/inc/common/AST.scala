@@ -1,7 +1,7 @@
 package inc.common
 
-import cats._
-import cats.implicits._
+import cats.Functor
+import cats.syntax.functor._
 import java.util.concurrent.atomic.AtomicInteger
 
 abstract class Error(val pos: Pos, val msg: String) extends Throwable(msg) with Product with Serializable

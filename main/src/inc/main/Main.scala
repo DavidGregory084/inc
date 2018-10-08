@@ -8,7 +8,8 @@ import inc.codegen.Codegen
 
 import better.files._
 import cats.data.{ Chain, Validated }
-import cats.implicits._
+import cats.instances.list._
+import cats.syntax.traverse._
 import java.net.URLClassLoader
 import java.io.{File => JavaFile, ByteArrayOutputStream}
 import java.net.URL
@@ -71,6 +72,8 @@ object Main {
           scribe.info(NL + fansi.Color.Green("Success").render)
       }
     }
+
+    System.exit(0)
   }
 
   def sourceContext(fileName: String, msg: String, prog: String, pos: Pos) = {

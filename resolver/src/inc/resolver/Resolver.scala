@@ -1,7 +1,7 @@
 package inc.resolver
 
 import cats.data.Chain
-import cats.implicits._
+import cats.syntax.functor._
 import inc.common._
 
 object Resolver {
