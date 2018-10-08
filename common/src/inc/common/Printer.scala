@@ -4,39 +4,39 @@ import cats.data.Chain
 import org.typelevel.paiges._
 
 object Printer {
-  def withSourceContext(header: Option[String], msg: String, pos: Pos, colour: fansi.Attrs, source: String) = {
-    val highlighted =
-      if (pos.from > 0 && pos.to > pos.from)
-        fansi.Str(source).overlay(colour, pos.from, pos.to)
-      else
-        fansi.Str(source)
+  def regionWithMargin(inputLines: Array[String], pos: Pos) = {
+    val numberOfLines = inputLines.length
 
-    val highlightedLines = highlighted.render.split("\\r?\\n")
-
-    val numberOfLines = highlightedLines.length
-
-    val (formattedLines, _) = highlightedLines.zipWithIndex.foldLeft(Chain.empty[String] -> 0) {
-      case ((lines, idx), (line, lineIdx)) =>
-        val nextIdx = idx + 1 + fansi.Str(line).length
+    val (formattedLines, _) = inputLines.zipWithIndex.foldLeft(Chain.empty[String] -> 0) {
+      case ((lines, charIdx), (line, lineIdx)) =>
+        val nextCharIdx = charIdx + 1 + fansi.Str(line).length
 
         val nextLines =
-          if (pos.from < idx || pos.to >= nextIdx)
+          if (pos.from < charIdx || pos.to >= nextCharIdx)
             lines
           else {
             val lineNumber = lineIdx + 1
             val marginWidth = String.valueOf(numberOfLines).length + 1
             val margin = White(lineNumber.toString.padTo(marginWidth, ' ') + '|')
-
             lines :+ (margin + line)
           }
 
-        (nextLines, nextIdx)
+        (nextLines, nextCharIdx)
     }
 
-    NL +
-      header.map(h => Blue(h + ":") + NL).getOrElse("") +
-      formattedLines.toList.mkString(System.lineSeparator) + (NL * 2) +
-      msg
+    formattedLines.toList
+  }
+
+  def withSourceContext(header: Option[String], msg: String, pos: Pos, colour: fansi.Attrs, source: String) = {
+    if (pos.isEmpty)
+      NL + msg
+    else {
+      val highlighted = fansi.Str(source).overlay(colour, pos.from, pos.to)
+      val highlightedLines = highlighted.render.split("\\r?\\n")
+      val formattedLines = regionWithMargin(highlightedLines, pos).mkString(System.lineSeparator)
+      val formattedHeader = header.map(h => Blue(h + ":") + NL).getOrElse("")
+      NL + formattedHeader + formattedLines + (NL * 2) + msg
+    }
   }
 
 

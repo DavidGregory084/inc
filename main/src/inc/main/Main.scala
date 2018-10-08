@@ -14,17 +14,10 @@ import java.net.URLClassLoader
 import java.io.{File => JavaFile, ByteArrayOutputStream}
 import java.net.URL
 import java.nio.file.Paths
-import scribe._
-import scribe.format._
 
 case class ConfigError(private val position: Pos, private val message: String) extends Error(position, message)
 
 object Main {
-  Logger.root
-    .clearHandlers()
-    .withHandler(formatter = Formatter.simple)
-    .replace()
-
   def main(args: Array[String]): Unit = {
     val dir = ".".toFile
 

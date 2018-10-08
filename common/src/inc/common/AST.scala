@@ -6,9 +6,11 @@ import java.util.concurrent.atomic.AtomicInteger
 
 abstract class Error(val pos: Pos, val msg: String) extends Throwable(msg) with Product with Serializable
 
-case class Pos(from: Int, to: Int)
+case class Pos(from: Int, to: Int) {
+  def isEmpty = this == Pos.Empty
+}
 object Pos {
-  def Empty = Pos(-1, -1)
+  def Empty = Pos(0, 0)
 }
 
 sealed trait Tree[A] extends Product with Serializable {
