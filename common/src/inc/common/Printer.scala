@@ -1,33 +1,70 @@
 package inc.common
 
+import cats.data.Chain
 import org.typelevel.paiges._
 
 object Printer {
+  def withSourceContext(header: Option[String], msg: String, pos: Pos, colour: fansi.Attrs, source: String) = {
+    val highlighted =
+      if (pos.from > 0 && pos.to > pos.from)
+        fansi.Str(source).overlay(colour, pos.from, pos.to)
+      else
+        fansi.Str(source)
+
+    val highlightedLines = highlighted.render.split("\\r?\\n")
+
+    val numberOfLines = highlightedLines.length
+
+    val (formattedLines, _) = highlightedLines.zipWithIndex.foldLeft(Chain.empty[String] -> 0) {
+      case ((lines, idx), (line, lineIdx)) =>
+        val nextIdx = idx + 1 + fansi.Str(line).length
+
+        val nextLines =
+          if (pos.from < idx || pos.to >= nextIdx)
+            lines
+          else {
+            val lineNumber = lineIdx + 1
+            val marginWidth = String.valueOf(numberOfLines).length + 1
+            val margin = White(lineNumber.toString.padTo(marginWidth, ' ') + '|')
+
+            lines :+ (margin + line)
+          }
+
+        (nextLines, nextIdx)
+    }
+
+    NL +
+      header.map(h => Blue(h + ":") + NL).getOrElse("") +
+      formattedLines.toList.mkString(System.lineSeparator) + (NL * 2) +
+      msg
+  }
+
 
   def print(subst: Map[TypeVariable, Type]): String = {
     subst.map {
       case (tyVar, typ) =>
-        print(tyVar) + " |-> " + print(typ)
+        print(tyVar) + White(" |-> ") + print(typ)
     }.mkString(", ")
   }
 
   def print(typ: Type): String = typ match {
     case TypeVariable(i) =>
-      "T" + i
+      Yellow("T" + i)
     case TypeConstructor(nm, tyParams) =>
       if (tyParams.isEmpty)
-        nm
+        Yellow(nm)
       else if (nm == "->") {
         val args =
           if (tyParams.length == 2)
             print(tyParams.head)
           else
-            tyParams.init.map(print).mkString("(", ", ", ")")
+            tyParams.init.map(print).mkString(Yellow("("), ", ", Yellow(")"))
 
-        args + " -> " + print(tyParams.last)
+        args + Yellow(" -> ") + print(tyParams.last)
 
-      } else
+      } else {
         nm + tyParams.map(print).mkString("[", ", ", "]")
+      }
   }
 
   def print(typ: TypeScheme): String = {

@@ -1,6 +1,10 @@
 package inc.codegen
 
-import cats.implicits._
+import cats.syntax.either._
+import cats.syntax.foldable._
+import cats.syntax.traverse._
+import cats.instances.either._
+import cats.instances.list._
 import java.io.{ OutputStream, PrintWriter }
 import java.util.Arrays
 import org.objectweb.asm.{ Attribute, ByteVector, ClassReader, ClassVisitor, ClassWriter, Label, Type => AsmType }

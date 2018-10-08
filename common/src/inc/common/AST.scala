@@ -1,7 +1,7 @@
 package inc.common
 
-import cats._
-import cats.implicits._
+import cats.Functor
+import cats.syntax.functor._
 import java.util.concurrent.atomic.AtomicInteger
 
 abstract class Error(val pos: Pos, val msg: String) extends Throwable(msg) with Product with Serializable
@@ -342,7 +342,7 @@ case class TypeScheme(bound: List[TypeVariable], typ: Type) {
   def instantiate: Type = if (bound.isEmpty) typ else {
     val freshVars = bound.map(_ => TypeVariable())
     val subst = bound.zip(freshVars).toMap
-    scribe.info("instantiate: " + Printer.print(subst))
+    scribe.info(NL + "Instantiate: " + Printer.print(subst))
     typ.substitute(subst)
   }
 }
@@ -353,7 +353,7 @@ object TypeScheme {
     val freeInEnv = env.values.flatMap(_.freeTypeVariables).toSet
     val bound = typ.freeTypeVariables diff freeInEnv
     val scheme = TypeScheme(bound.toList, typ)
-    scribe.info("generalize: " + bound.map(Printer.print(_)).mkString("[", ", ", "]"))
+    scribe.info(NL + "Generalize: " + bound.map(Printer.print(_)).mkString("[", ", ", "]"))
     scheme
   }
 
@@ -389,10 +389,7 @@ sealed trait Type {
 
   def substitute(subst: Map[TypeVariable, Type]): Type = this match {
     case tyVar @ TypeVariable(_) =>
-      val substFor = subst.getOrElse(tyVar, tyVar)
-      if (tyVar != substFor)
-        scribe.info(Printer.print(tyVar) + " |-> " + Printer.print(substFor))
-      substFor
+      subst.getOrElse(tyVar, tyVar)
     case TypeConstructor(nm, tyParams) =>
       TypeConstructor(nm, tyParams.map(_.substitute(subst)))
   }

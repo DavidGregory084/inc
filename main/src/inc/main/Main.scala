@@ -8,7 +8,8 @@ import inc.codegen.Codegen
 
 import better.files._
 import cats.data.{ Chain, Validated }
-import cats.implicits._
+import cats.instances.list._
+import cats.syntax.traverse._
 import java.net.URLClassLoader
 import java.io.{File => JavaFile, ByteArrayOutputStream}
 import java.net.URL
@@ -19,13 +20,10 @@ import scribe.format._
 case class ConfigError(private val position: Pos, private val message: String) extends Error(position, message)
 
 object Main {
-
   Logger.root
     .clearHandlers()
     .withHandler(formatter = Formatter.simple)
     .replace()
-
-  val NL = System.lineSeparator
 
   def main(args: Array[String]): Unit = {
     val dir = ".".toFile
@@ -60,30 +58,15 @@ object Main {
       }
     }
 
-    def sourceContext(msg: String, prog: String, pos: Pos) = {
-      val highlighted =
-        if (pos.from > 0 && pos.to > pos.from)
-          fansi.Str(prog).overlay(fansi.Color.Red, pos.from, pos.to)
-        else
-          fansi.Str(prog)
-
-      val (highlightedLines, _) = highlighted.render.split('\n').foldLeft(Chain.empty[String] -> 0) {
-        case ((lines, idx), line) =>
-          val nextIdx = idx + 1 + fansi.Str(line).length
-          (lines :+ (idx.toString.padTo(String.valueOf(highlighted.length).length + 1, ' ') + '|' + line), nextIdx)
-      }
-
-      NL + msg + ":" + NL + NL + highlightedLines.toList.mkString(System.lineSeparator)
-    }
-
-    parser.parse(args, Configuration()) foreach { config =>
+    parser.parse(args, Configuration()).foreach { config =>
       compileProgram(dir, prog, config) match {
         case Left(errors) =>
           errors.map { e =>
-            sourceContext(e.getMessage, prog, e.pos)
+            Printer.withSourceContext(Some("<stdin>"), e.getMessage, e.pos, fansi.Color.Red, prog)
           }.foreach(scribe.error(_))
+          scribe.info(NL + Red("Failure") + NL)
         case Right(_) =>
-          scribe.info(NL + "Success")
+          scribe.info(NL + Green("Success") + NL)
       }
     }
   }
@@ -176,7 +159,7 @@ object Main {
 
       resolved <- runPhase[Module[NameWithPos]]("resolver", config, _.printResolver, Resolver.resolve(mod, importedDecls))
 
-      checked <- runPhase[Module[NamePosType]]("typechecker", config, _.printTyper, Typechecker.typecheck(resolved, importedDecls))
+      checked <- runPhase[Module[NamePosType]]("typechecker", config, _.printTyper, Typechecker.typecheck(prog, resolved, importedDecls))
 
       code <- runPhase[Array[Byte]]("codegen", config, _.printCodegen, Codegen.generate(checked), Codegen.print(_))
 
@@ -196,7 +179,7 @@ object Main {
 
       val afterAll = System.nanoTime
 
-      scribe.info(NL + s"""Compiled ${mod.pkg.mkString(".")}.${mod.name} in ${(afterAll - beforeAll) / 1000000}ms""")
+      scribe.info(NL + Blue(s"""Compiled ${mod.pkg.mkString(".")}.${mod.name} in """) + White(s"""${(afterAll - beforeAll) / 1000000}ms"""))
 
       out
     }
