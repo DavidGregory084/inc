@@ -72,8 +72,6 @@ object Main {
           scribe.info(NL + fansi.Color.Green("Success").render)
       }
     }
-
-    System.exit(0)
   }
 
   def sourceContext(fileName: String, msg: String, prog: String, pos: Pos) = {
