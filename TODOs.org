@@ -19,10 +19,13 @@
 *** codegen: tests for polymorphic definitions
 ** error messages
 *** use an ADT
-*** printing of source code context
-*** highlighting of relevant subexpressions
+*** DONE printing of source code context
+    CLOSED: [2018-10-09 Tue 01:33]
+*** DONE highlighting of relevant subexpressions
+    CLOSED: [2018-10-09 Tue 01:33]
 *** syntax highlighting of context?
-*** type inference tracing
+*** DONE type inference tracing
+    CLOSED: [2018-10-09 Tue 01:33]
 ** metaprogramming
 *** MetaML
 ** REPL / interpreter
