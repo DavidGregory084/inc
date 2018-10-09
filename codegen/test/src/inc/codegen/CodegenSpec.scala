@@ -314,6 +314,8 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
         Class.forName(s"${pkg + out.nameWithoutExtension}", true, childLoader)
       } catch {
         case e: Throwable =>
+          println(Printer.print(mod).render(80))
+          println()
           Codegen.print(result.right.get)
           throw e
       }
