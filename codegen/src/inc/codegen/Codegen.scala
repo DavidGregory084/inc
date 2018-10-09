@@ -38,6 +38,27 @@ class InterfaceAttributeVisitor extends ClassVisitor(ASM6) {
 object Codegen {
   val InterfaceAttributePrototype = InterfaceAttribute(Array.empty)
 
+  val BootstrapMethodDescriptor = MethodType.methodType(
+    // Return type
+    classOf[CallSite],
+    // Stacked by the VM
+    classOf[MethodHandles.Lookup], // caller
+    classOf[String],               // invokedName
+    classOf[MethodType],           // invokedType
+    // Must be provided
+    classOf[MethodType],           // samMethodType
+    classOf[MethodHandle],         // implMethod
+    classOf[MethodType]            // instantiatedMethodType
+  ).toMethodDescriptorString()
+
+  val BootstrapMethodHandle = new Handle(
+    H_INVOKESTATIC,
+    AsmType.getInternalName(classOf[LambdaMetafactory]),
+    "metafactory",
+    BootstrapMethodDescriptor,
+    false
+  )
+
   def print(code: Array[Byte], os: OutputStream = System.out): Unit = {
     val reader = new ClassReader(code)
     val writer = new PrintWriter(os)
@@ -227,7 +248,7 @@ object Codegen {
       staticInitializer.visitFieldInsn(PUTSTATIC, enclosingClass, fieldName, fieldDescriptor)
     }
 
-  def newExpr(className: String, generator: GeneratorAdapter, locals: Map[String, Int])(expr: Expr[NamePosType]): Either[List[CodegenError], Unit] = expr match {
+  def newExpr(classWriter: ClassWriter, className: String, generator: GeneratorAdapter, outerName: String, arguments: Map[String, Int], locals: Map[String, Int])(expr: Expr[NamePosType]): Either[List[CodegenError], Unit] = expr match {
     case LiteralInt(i, _) =>
       Right(generator.visitLdcInsn(i))
     case LiteralLong(l, _) =>
@@ -251,12 +272,12 @@ object Codegen {
       val trueLabel = new Label
       val falseLabel = new Label
       for {
-        _ <- newExpr(className, generator, locals)(cond)
+        _ <- newExpr(classWriter, className, generator, outerName, arguments, locals)(cond)
         _ = generator.visitJumpInsn(IFEQ, falseLabel)
-        _ <- newExpr(className, generator, locals)(thenExpr)
+        _ <- newExpr(classWriter, className, generator, outerName, arguments, locals)(thenExpr)
         _ = generator.visitJumpInsn(GOTO, trueLabel)
         _ = generator.visitLabel(falseLabel)
-        _ <- newExpr(className, generator, locals)(elseExpr)
+        _ <- newExpr(classWriter, className, generator, outerName, arguments, locals)(elseExpr)
         _ = generator.visitLabel(trueLabel)
       } yield ()
     case Reference(ref, nameWithType) =>
@@ -270,7 +291,7 @@ object Codegen {
           case MemberName(_, _, _) =>
             generator.visitFieldInsn(GETSTATIC, internalName, ref, descriptor)
           case LocalName(nm) =>
-            generator.loadArg(locals(nm))
+            generator.loadArg(arguments(nm))
           case NoName | ModuleName(_, _) =>
             throw new Exception("wtf")
         }
@@ -301,15 +322,61 @@ object Codegen {
           case (arg, argTp) =>
             for {
               actualArgTp <- asmTypeOf(arg.meta.typ.typ)
-              _ <- newExpr(className, generator, locals)(arg)
+              _ <- newExpr(classWriter, className, generator, outerName, arguments, locals)(arg)
             } yield {
               if (arg.meta.typ.typ.isPrimitive && !argTp.isPrimitive) generator.box(actualArgTp)
             }
         }
       } yield generator.visitMethodInsn(INVOKESTATIC, internalName, methodName, descriptor, false)
 
-    case Lambda(_, _, _) =>
-      ???
+    case Lambda(params, body, nameWithType) =>
+      // TODO: Handle captured variables
+      val TypeScheme(_, TypeConstructor("->", tpArgs)) = nameWithType.typ
+
+      val descriptorForFunction = tpArgs.traverse(asmTypeOf).map { args =>
+        AsmType.getMethodDescriptor(args.last, args.init: _*)
+      }
+
+      val boxedTypeForFunction = tpArgs.traverse(boxedAsmTypeOf).map { args =>
+        AsmType.getMethodType(args.last, args.init: _*)
+      }
+
+      val typeForLambda = asmTypeOf(nameWithType.typ.typ)
+
+      for {
+        functionDescriptor <- descriptorForFunction
+        instantiatedFunctionType <- boxedTypeForFunction
+
+        lambdaType <- typeForLambda
+
+        _ <- withGeneratorAdapter(classWriter, outerName + "$lifted", functionDescriptor, ACC_PRIVATE + ACC_STATIC + ACC_SYNTHETIC) { innerGen =>
+          params.foreach(p => innerGen.visitParameter(p.name, ACC_FINAL))
+          newExpr(classWriter, className, innerGen, outerName + "$inner", params.map(_.name).zipWithIndex.toMap, locals)(body)
+        }
+
+      } yield {
+        val objectType = AsmType.getType(classOf[Object])
+
+        val genericFunctionType = AsmType.getMethodType(objectType, params.as(objectType): _*)
+
+        val lambdaHandle = new Handle(
+          H_INVOKESTATIC,
+          className,
+          outerName + "$lifted",
+          functionDescriptor,
+          false
+        )
+
+        generator.visitInvokeDynamicInsn(
+          "apply",
+          AsmType.getMethodDescriptor(lambdaType),
+          BootstrapMethodHandle,
+          // Bootstrap method args
+          genericFunctionType,
+          lambdaHandle,
+          instantiatedFunctionType
+        )
+      }
   }
 
   def newTopLevelLet(className: String, classWriter: ClassWriter, staticInitializer: GeneratorAdapter, let: Let[NamePosType]): Either[List[CodegenError], Unit] = {
@@ -339,87 +406,17 @@ object Codegen {
           newStaticFieldFrom(classWriter, className, staticInitializer)(let.name, descriptor, internalName, ref)
         }
       case ifExpr @ If(_, _, _, nameWithType) =>
-        descriptorFor(nameWithType.typ).flatMap { descriptor =>
-          classWriter.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, let.name, descriptor, null, null).visitEnd()
-          newExpr(className, staticInitializer, Map.empty)(ifExpr).map { _ =>
-            staticInitializer.visitFieldInsn(PUTSTATIC, className, let.name, descriptor)
-          }
-        }
-      case Lambda(params, body, nameWithType) =>
-        val TypeScheme(_, TypeConstructor("->", tpArgs)) = nameWithType.typ
-
-        val descriptorForFunction = tpArgs.traverse(asmTypeOf).map { args =>
-          AsmType.getMethodDescriptor(args.last, args.init: _*)
-        }
-
-        val boxedTypeForFunction = tpArgs.traverse(boxedAsmTypeOf).map { args =>
-          AsmType.getMethodType(args.last, args.init: _*)
-        }
-
-        val descriptorForLambda = descriptorFor(nameWithType.typ)
-        val typeForLambda = asmTypeOf(nameWithType.typ.typ)
-
         for {
-          functionDescriptor <- descriptorForFunction
-          instantiatedFunctionType <- boxedTypeForFunction
-
-          lambdaDescriptor <- descriptorForLambda
-          lambdaType <- typeForLambda
-
-          _ <- withGeneratorAdapter(classWriter, let.name + "$lifted", functionDescriptor, ACC_PRIVATE + ACC_STATIC + ACC_SYNTHETIC) { generator =>
-            params.foreach(p => generator.visitParameter(p.name, ACC_FINAL))
-            newExpr(className, generator, params.map(_.name).zipWithIndex.toMap)(body)
-          }
-
-          _ <- newStaticField(classWriter)(let.name, lambdaDescriptor, null)
-
-        } yield {
-          val bootstrapDescriptor = MethodType.methodType(
-            classOf[CallSite],
-            // Stacked by the VM
-            classOf[MethodHandles.Lookup], // caller
-            classOf[String], // invokedName
-            classOf[MethodType], // invokedType
-            // Must be provided
-            classOf[MethodType], // samMethodType
-            classOf[MethodHandle], // implMethod
-            classOf[MethodType] // instantiatedMethodType
-          ).toMethodDescriptorString()
-
-          val bootstrapMethodHandle = new Handle(
-            H_INVOKESTATIC,
-            AsmType.getInternalName(classOf[LambdaMetafactory]),
-            "metafactory",
-            bootstrapDescriptor,
-            false
-          )
-
-          val objectType = AsmType.getType(classOf[Object])
-
-          val genericFunctionType = AsmType.getMethodType(objectType, params.as(objectType): _*)
-
-          val lambdaHandle = new Handle(
-            H_INVOKESTATIC,
-            className,
-            let.name + "$lifted",
-            functionDescriptor,
-            false
-          )
-
-          staticInitializer.visitInvokeDynamicInsn(
-            "apply",
-            AsmType.getMethodDescriptor(lambdaType),
-            bootstrapMethodHandle,
-            // Bootstrap method args
-            genericFunctionType,
-            lambdaHandle,
-            instantiatedFunctionType
-          )
-
-          staticInitializer.visitFieldInsn(PUTSTATIC, className, let.name, lambdaDescriptor)
-        }
-
-
+          descriptor <- descriptorFor(nameWithType.typ)
+          _ <- newStaticField(classWriter)(let.name, descriptor, null)
+          _ <- newExpr(classWriter, className, staticInitializer, let.name, Map.empty, Map.empty)(ifExpr)
+        } yield staticInitializer.visitFieldInsn(PUTSTATIC, className, let.name, descriptor)
+      case lam @ Lambda(_, _, nameWithType) =>
+        for {
+          descriptor <- descriptorFor(nameWithType.typ)
+          _ <- newStaticField(classWriter)(let.name, descriptor, null)
+          _ <- newExpr(classWriter, className, staticInitializer, let.name, Map.empty, Map.empty)(lam)
+        } yield staticInitializer.visitFieldInsn(PUTSTATIC, className, let.name, descriptor)
       case apply @ Apply(fn, _, nameWithType) =>
         val TypeScheme(_, TypeConstructor("->", tpArgs)) = fn.meta.typ
         val to = tpArgs.last
@@ -428,7 +425,7 @@ object Codegen {
           descriptor <- descriptorFor(nameWithType.typ)
           asmType <- asmTypeOf(let.meta.typ.typ)
           _ = classWriter.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, let.name, descriptor, null, null).visitEnd()
-          _ <- newExpr(className, staticInitializer, Map.empty)(apply)
+          _ <- newExpr(classWriter, className, staticInitializer, let.name, Map.empty, Map.empty)(apply)
         } yield {
           if (nameWithType.typ.typ.isPrimitive && !to.isPrimitive) staticInitializer.unbox(asmType)
           if (!nameWithType.typ.typ.isPrimitive) staticInitializer.visitTypeInsn(CHECKCAST, AsmType.getType(descriptor).getInternalName)

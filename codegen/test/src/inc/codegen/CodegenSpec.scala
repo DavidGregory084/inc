@@ -281,34 +281,40 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
 
   it should "round trip arbitrary module files" in forAll(minSuccessful(1000)) { mod: Module[NamePosType] =>
     withTmpDir { dir =>
-      val result = Codegen.generate(mod)
-      result shouldBe 'right
-
-      Codegen.readInterface(result.right.get) shouldBe Some(mod.map(_.forgetPos))
-
-      val outDir = mod.pkg.foldLeft(dir) {
-        case (path, next) => path / next
-      }
-
-      val out = outDir / s"${mod.name}.class"
-
-      out
-        .createIfNotExists(createParents = true)
-        .writeByteArray(result.right.get)
-
-      val classLoader = Thread.currentThread.getContextClassLoader.asInstanceOf[URLClassLoader]
-
-      val childLoader = URLClassLoader.newInstance(Array(dir.url), classLoader)
-
-      val pkg = if (mod.pkg.isEmpty) "" else mod.pkg.mkString(".") + "."
-
       try {
-        Class.forName(s"${pkg + out.nameWithoutExtension}", true, childLoader)
+        val result = Codegen.generate(mod)
+        result shouldBe 'right
+
+        Codegen.readInterface(result.right.get) shouldBe Some(mod.map(_.forgetPos))
+
+        val outDir = mod.pkg.foldLeft(dir) {
+          case (path, next) => path / next
+        }
+
+        val out = outDir / s"${mod.name}.class"
+
+        out
+          .createIfNotExists(createParents = true)
+          .writeByteArray(result.right.get)
+
+        val classLoader = Thread.currentThread.getContextClassLoader.asInstanceOf[URLClassLoader]
+
+        val childLoader = URLClassLoader.newInstance(Array(dir.url), classLoader)
+
+        val pkg = if (mod.pkg.isEmpty) "" else mod.pkg.mkString(".") + "."
+
+        try {
+          Class.forName(s"${pkg + out.nameWithoutExtension}", true, childLoader)
+        } catch {
+          case e: Throwable =>
+            Codegen.print(result.right.get)
+            throw e
+        }
       } catch {
         case e: Throwable =>
           println(Printer.print(mod).render(80))
           println()
-          Codegen.print(result.right.get)
+          e.printStackTrace()
           throw e
       }
     }
