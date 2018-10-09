@@ -194,7 +194,7 @@ object Parser {
         val input = extra.input
         val expected = extra.traced.expected
         val errorMessage = input.repr.errorMessage(input, expected, index)
-        ParserError.singleton(index, errorMessage)
+        ParserError.singleton(errorMessage)
     }
   }
 }

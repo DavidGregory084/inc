@@ -231,7 +231,7 @@ object Typechecker {
         // Create a new function type
         tp = Type.Function(argsList.map(_.meta.typ.instantiate), tv).substitute(s2)
 
-        _ = trace("Expected type", meta.pos, tp, prog)
+        _ = trace("Apparent type", meta.pos, tp, prog)
 
         // Unify the function type with the actual argument types
         s3 <- unify(meta.pos, f.meta.typ.instantiate, tp)
