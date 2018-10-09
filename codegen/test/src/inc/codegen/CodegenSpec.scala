@@ -61,9 +61,7 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
         // Unpleasant trick to allow later generators to refer to v
         decls ++ ps.map { p =>
           Let(p.name, Reference(p.name, p.meta), p.meta)
-        },
-        // Don't generate lambda because because we can't do first class functions yet
-        generateFunctions = false
+        }
       )
       lam <- Gen.const(Lambda(ps, body, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Function(pTps.map(_.typ), body.meta.typ.typ)))))
     } yield lam
@@ -114,30 +112,24 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
 
     for {
       condExpr <- condGen
-      thenExpr <- exprGen(decls, generateFunctions = false)
-      elseExpr <- exprGen(decls, generateFunctions = false).suchThat(_.meta.typ == thenExpr.meta.typ)
+      thenExpr <- exprGen(decls)
+      elseExpr <- exprGen(decls).suchThat(_.meta.typ == thenExpr.meta.typ)
     } yield If(condExpr, thenExpr, elseExpr, NamePosType(NoName, Pos.Empty, thenExpr.meta.typ))
   }
 
-  def exprGen(decls: Decls, generateFunctions: Boolean = true): Gen[Expr[NamePosType]] = {
-    val lambdaGens =
-      if (generateFunctions) List(lambdaGen(decls)) else List.empty
-
+  def exprGen(decls: Decls): Gen[Expr[NamePosType]] = {
     val lambdaDecls = decls.collect {
       case lambdaDecl @ Let(_, Lambda(_, _, _), _) => lambdaDecl
     }
 
-    val nonLambdaDecls = decls.filterNot(lambdaDecls.contains)
-
     val applyGens =
-      if (lambdaDecls.nonEmpty) List(applyGen(lambdaDecls)(nonLambdaDecls)) else List.empty
+      if (lambdaDecls.nonEmpty) List(applyGen(lambdaDecls)(decls)) else List.empty
 
     val exprGens =
-      if (nonLambdaDecls.isEmpty)
-        literalGens ++ lambdaGens ++ applyGens :+ ifGen(decls)
+      if (decls.isEmpty)
+        literalGens ++ applyGens :+ lambdaGen(decls) :+ ifGen(decls)
       else
-        // Don't generate reference to lambda because because we can't do first class functions yet
-        literalGens ++ lambdaGens ++ applyGens :+ referenceGen(nonLambdaDecls) :+ ifGen(decls)
+        literalGens ++ applyGens :+ lambdaGen(decls) :+ referenceGen(decls) :+ ifGen(decls)
 
     Gen.oneOf(exprGens)
       .flatMap(identity)
