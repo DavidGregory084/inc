@@ -286,60 +286,81 @@ object Codegen {
         asmType <- asmTypeOf(nameWithType.typ.typ)
         loadIns = loadInstructionFor(asmType)
         internalName = getInternalName(nameWithType.name, className)
-      } yield {
-        nameWithType.name match {
+        _ <- nameWithType.name match {
           case MemberName(_, _, _) =>
-            generator.visitFieldInsn(GETSTATIC, internalName, ref, descriptor)
+            Right(generator.visitFieldInsn(GETSTATIC, internalName, ref, descriptor))
           case LocalName(nm) =>
-            generator.loadArg(arguments(nm))
+            Right(generator.loadArg(arguments(nm)))
           case NoName | ModuleName(_, _) =>
-            throw new Exception("wtf")
+            CodegenError.singleton(s"Unable to resolve reference to variable $ref")
         }
-      }
-    case Apply(fn, args, _) =>
-      val TypeScheme(_, TypeConstructor("->", tpArgs)) = fn.meta.typ
+      } yield ()
 
-      val getMethodName = fn.meta.name match {
-        case LocalName(nm) =>
-          Right(nm)
-        case MemberName(_, _, nm) =>
-          Right(nm + "$lifted")
-        case _ =>
-          CodegenError.singleton("Unable to retrieve name for method")
-      }
+    case Apply(fn, args, nameWithType) =>
+      val TypeScheme(_, TypeConstructor("->", tpArgs)) = fn.meta.typ
+      val objectType = AsmType.getType(classOf[Object])
 
       for {
-        methodName <- getMethodName
-
-        argTps <- tpArgs.init.traverse(asmTypeOf)
+        fnTp <- asmTypeOf(fn.meta.typ.typ)
         retTp <- asmTypeOf(tpArgs.last)
 
-        descriptor = AsmType.getMethodDescriptor(retTp, argTps: _*)
+        descriptor = AsmType.getMethodDescriptor(objectType, tpArgs.init.as(objectType): _*)
 
-        internalName = getInternalName(fn.meta.name, className)
-
-        _ <- args.zip(tpArgs).traverse_ {
-          case (arg, argTp) =>
-            for {
-              actualArgTp <- asmTypeOf(arg.meta.typ.typ)
-              _ <- newExpr(classWriter, className, generator, outerName, arguments, locals)(arg)
-            } yield {
-              if (arg.meta.typ.typ.isPrimitive && !argTp.isPrimitive) generator.box(actualArgTp)
-            }
+        _ <- fn.meta.name match {
+          case MemberName(_, _, nm) =>
+            Right(generator.visitFieldInsn(GETSTATIC, getInternalName(fn.meta.name, className), nm, fnTp.getDescriptor))
+          case LocalName(nm) =>
+            Right(generator.loadArg(arguments(nm)))
+          case _ =>
+            Right(())
         }
-      } yield generator.visitMethodInsn(INVOKESTATIC, internalName, methodName, descriptor, false)
 
-    case Lambda(params, body, nameWithType) =>
-      // TODO: Handle captured variables
+        _ <- args.traverse_ { arg =>
+          for {
+            actualArgTp <- asmTypeOf(arg.meta.typ.typ)
+            _ <- newExpr(classWriter, className, generator, outerName, arguments, locals)(arg)
+          } yield {
+            if (arg.meta.typ.typ.isPrimitive) generator.box(actualArgTp)
+          }
+        }
+
+      } yield {
+        generator.visitMethodInsn(INVOKEINTERFACE, fnTp.getInternalName, "apply", descriptor, true)
+        if (nameWithType.typ.typ.isPrimitive) generator.unbox(retTp)
+        if (!nameWithType.typ.typ.isPrimitive) generator.visitTypeInsn(CHECKCAST, retTp.getInternalName)
+      }
+
+    case lam @ Lambda(params, body, nameWithType) =>
       val TypeScheme(_, TypeConstructor("->", tpArgs)) = nameWithType.typ
 
-      val descriptorForFunction = tpArgs.traverse(asmTypeOf).map { args =>
+      val capturedVars = lam.capturedVariables.toList
+      val capturedVarsWithIdx = capturedVars.zipWithIndex
+      val capturedVarTypes = capturedVars.map(_.meta.typ.typ)
+      val adaptedArgTypes = capturedVarTypes ++ tpArgs
+
+      // This descriptor points to the real function including adapted args
+      val descriptorForFunction = adaptedArgTypes.traverse(asmTypeOf).map { args =>
         AsmType.getMethodDescriptor(args.last, args.init: _*)
       }
 
+      // This is the instantiated type for the interface method (no adapted args)
       val boxedTypeForFunction = tpArgs.traverse(boxedAsmTypeOf).map { args =>
         AsmType.getMethodType(args.last, args.init: _*)
       }
+
+      // Manufacture params so that we can prepend captured variables to the arguments list
+      val prependedParams = capturedVarsWithIdx.map {
+        case (v, i) =>
+          val newName = "captured$" + i
+          Param(newName, v.meta.copy(name = LocalName(newName)))
+      }
+
+      // Replace all references to the captured variables with the adapted args
+      val replaceCaptured = capturedVarsWithIdx.map {
+        case (v, i) =>
+          val newName = "captured$" + i
+          (v.copy(meta = v.meta.withEmptyPos), Reference(newName, v.meta.copy(name = LocalName(newName))))
+      }.toMap
 
       val typeForLambda = asmTypeOf(nameWithType.typ.typ)
 
@@ -349,9 +370,18 @@ object Codegen {
 
         lambdaType <- typeForLambda
 
+        capturedArgTps <- capturedVarTypes.traverse(asmTypeOf)
+
+        // Write out a new static method with adapted arguments
         _ <- withGeneratorAdapter(classWriter, outerName + "$lifted", functionDescriptor, ACC_PRIVATE + ACC_STATIC + ACC_SYNTHETIC) { innerGen =>
-          params.foreach(p => innerGen.visitParameter(p.name, ACC_FINAL))
-          newExpr(classWriter, className, innerGen, outerName + "$inner", params.map(_.name).zipWithIndex.toMap, locals)(body)
+          val allParams = prependedParams ++ params
+          allParams.foreach(p => innerGen.visitParameter(p.name, ACC_FINAL))
+          newExpr(classWriter, className, innerGen, outerName + "$inner", allParams.map(_.name).zipWithIndex.toMap, locals)(body.replace(replaceCaptured))
+        }
+
+        // Stack the captured variables for invokedynamic
+        _ <- capturedVars.traverse_ { v =>
+          newExpr(classWriter, className, generator, outerName, arguments, locals)(v)
         }
 
       } yield {
@@ -369,7 +399,8 @@ object Codegen {
 
         generator.visitInvokeDynamicInsn(
           "apply",
-          AsmType.getMethodDescriptor(lambdaType),
+          // Captured args must be passed to invokedynamic
+          AsmType.getMethodDescriptor(lambdaType, capturedArgTps: _*),
           BootstrapMethodHandle,
           // Bootstrap method args
           genericFunctionType,
@@ -417,20 +448,12 @@ object Codegen {
           _ <- newStaticField(classWriter)(let.name, descriptor, null)
           _ <- newExpr(classWriter, className, staticInitializer, let.name, Map.empty, Map.empty)(lam)
         } yield staticInitializer.visitFieldInsn(PUTSTATIC, className, let.name, descriptor)
-      case apply @ Apply(fn, _, nameWithType) =>
-        val TypeScheme(_, TypeConstructor("->", tpArgs)) = fn.meta.typ
-        val to = tpArgs.last
-
+      case apply @ Apply(_, _, nameWithType) =>
         for {
           descriptor <- descriptorFor(nameWithType.typ)
-          asmType <- asmTypeOf(let.meta.typ.typ)
-          _ = classWriter.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, let.name, descriptor, null, null).visitEnd()
+          _ <- newStaticField(classWriter)(let.name, descriptor, null)
           _ <- newExpr(classWriter, className, staticInitializer, let.name, Map.empty, Map.empty)(apply)
-        } yield {
-          if (nameWithType.typ.typ.isPrimitive && !to.isPrimitive) staticInitializer.unbox(asmType)
-          if (!nameWithType.typ.typ.isPrimitive) staticInitializer.visitTypeInsn(CHECKCAST, AsmType.getType(descriptor).getInternalName)
-          staticInitializer.visitFieldInsn(PUTSTATIC, className, let.name, descriptor)
-        }
+        } yield staticInitializer.visitFieldInsn(PUTSTATIC, className, let.name, descriptor)
     }
   }
 

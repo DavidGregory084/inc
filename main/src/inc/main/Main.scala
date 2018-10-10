@@ -73,7 +73,7 @@ object Main {
     printOutput: Configuration => Boolean,
     phase: => Either[List[Error], A],
     print: A => Unit = (a: A) => {
-      scribe.info(NL + pprint.apply(a))
+      scribe.info(NL + pprint.apply(a, height = 1000))
     }
   ): Either[List[Error], A] = {
     val before = System.nanoTime

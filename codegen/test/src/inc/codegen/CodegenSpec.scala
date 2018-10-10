@@ -282,6 +282,8 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
   it should "round trip arbitrary module files" in forAll(minSuccessful(1000)) { mod: Module[NamePosType] =>
     withTmpDir { dir =>
       try {
+        println(Printer.print(mod).render(80))
+
         val result = Codegen.generate(mod)
         result shouldBe 'right
 
