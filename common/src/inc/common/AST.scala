@@ -371,12 +371,16 @@ case class TypeScheme(bound: List[TypeVariable], typ: Type) {
   def substitute(subst: Map[TypeVariable, Type]) =
     TypeScheme(bound, typ.substitute(subst -- bound))
 
-  def instantiate: Type = if (bound.isEmpty) typ else {
-    val freshVars = bound.map(_ => TypeVariable())
-    val subst = bound.zip(freshVars).toMap
-    scribe.info(NL + "Instantiate: " + Printer.print(subst))
-    typ.substitute(subst)
-  }
+  // TODO return the substitution so it can be used on the AST
+  def instantiate: Type =
+    if (bound.isEmpty)
+      typ
+    else {
+      val freshVars = bound.map(_ => TypeVariable())
+      val subst = bound.zip(freshVars).toMap
+      scribe.info(NL + "Instantiate: " + Printer.print(subst))
+      typ.substitute(subst)
+    }
 }
 object TypeScheme {
   def apply(typ: Type): TypeScheme = TypeScheme(List.empty, typ)

@@ -302,18 +302,11 @@ object Codegen {
 
       for {
         fnTp <- asmTypeOf(fn.meta.typ.typ)
-        retTp <- asmTypeOf(tpArgs.last)
+        retTp <- asmTypeOf(nameWithType.typ.typ)
 
         descriptor = AsmType.getMethodDescriptor(objectType, tpArgs.init.as(objectType): _*)
 
-        _ <- fn.meta.name match {
-          case MemberName(_, _, nm) =>
-            Right(generator.visitFieldInsn(GETSTATIC, getInternalName(fn.meta.name, className), nm, fnTp.getDescriptor))
-          case LocalName(nm) =>
-            Right(generator.loadArg(arguments(nm)))
-          case _ =>
-            Right(())
-        }
+        _ <- newExpr(classWriter, className, generator, outerName, arguments, locals)(fn)
 
         _ <- args.traverse_ { arg =>
           for {

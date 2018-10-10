@@ -226,17 +226,19 @@ object Typechecker {
 
         (as, s2) = ra
 
+        s3 = chainSubstitution(s1, s2)
+
         argsList = as.toList
 
         // Create a new function type
-        tp = Type.Function(argsList.map(_.meta.typ.instantiate), tv).substitute(s2)
+        tp = Type.Function(argsList.map(_.meta.typ.instantiate), tv).substitute(s3)
 
         _ = trace("Apparent type", meta.pos, tp, prog)
 
         // Unify the function type with the actual argument types
-        s3 <- unify(meta.pos, f.meta.typ.instantiate, tp)
+        s4 <- unify(meta.pos, f.meta.typ.instantiate, tp)
 
-        s = chainSubstitutions(s1, s2, s3)
+        s = chainSubstitution(s3, s4)
 
         _ = if (s.nonEmpty) scribe.info(NL + "Apply substitution: " + Printer.print(s))
 
