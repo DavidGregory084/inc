@@ -147,13 +147,19 @@ object Typechecker {
 
         _ = trace("Else expression", e.meta.pos, elseType, prog)
 
+        (cTp, s4) = condType.instantiate
+
         // Unify the condition with Boolean
-        s4 <- unify(c.meta.pos, condType.instantiate, Type.Boolean)
+        s5 <- unify(c.meta.pos, cTp, Type.Boolean)
+
+        (tTp, s6) = thenType.instantiate
+
+        (eTp, s7) = elseType.instantiate
 
         // Unify the then expression and the else expression
-        s5 <- unify(meta.pos, thenType.instantiate, elseType.instantiate)
+        s8 <- unify(meta.pos, tTp, eTp)
 
-        s = chainSubstitutions(s1, s2, s3, s4, s5)
+        s = chainSubstitutions(s1, s2, s3, s4, s5, s6, s7, s8)
 
         _ = if (s.nonEmpty) scribe.info(NL + "Apply substitution: " + Printer.print(s))
 
@@ -179,19 +185,23 @@ object Typechecker {
       for {
         // Typecheck the body with the params in scope
         r <- typecheck(prog, body, env ++ paramMappings)
-        (b, s) = r
+        (b, s1) = r
 
         _ = trace("Lambda body", b.meta.pos, b.meta.typ, prog)
 
+        (bTp, s2) = b.meta.typ.instantiate
+
         // Create a new function type
-        tp = Type.Function(typedParams.map(_.meta.typ.typ), b.meta.typ.instantiate)
+        tp = Type.Function(typedParams.map(_.meta.typ.typ), bTp)
+
+        s = chainSubstitution(s1, s2)
 
         _ = if (s.nonEmpty) scribe.info(NL + "Apply substitution: " + Printer.print(s))
 
         // Apply the substitutions from the body
         ts = TypeScheme.generalize(env, tp.substitute(s))
 
-        expr = Lambda(typedParams.map(_.substitute(s)), b.substitute(s), meta.withType(ts))
+        expr = Lambda(typedParams, b, meta.withType(ts)).substitute(s)
 
         _ = trace("Lambda expression", expr.meta.pos, expr.meta.typ, prog)
 
@@ -230,19 +240,27 @@ object Typechecker {
 
         argsList = as.toList
 
-        // Create a new function type
-        tp = Type.Function(argsList.map(_.meta.typ.instantiate), tv).substitute(s3)
+        (argTps, s4) = argsList.foldLeft((Chain.empty[Type], s3)) {
+          case ((tps, subst), arg) =>
+            val (argTp, argSubst) = arg.meta.typ.instantiate
+            (tps :+ argTp, chainSubstitution(subst, argSubst))
+        }
 
-        _ = trace("Apparent type", meta.pos, tp, prog)
+        // Create a new function type
+        appliedTp = Type.Function(argTps.toList, tv).substitute(s4)
+
+        _ = trace("Applied type", meta.pos, appliedTp, prog)
+
+        (fnTp, s5) = f.meta.typ.instantiate
 
         // Unify the function type with the actual argument types
-        s4 <- unify(meta.pos, f.meta.typ.instantiate, tp)
+        s6 <- unify(meta.pos, fnTp, appliedTp)
 
-        s = chainSubstitution(s3, s4)
+        s = chainSubstitutions(s3, s4, s5, s6)
 
         _ = if (s.nonEmpty) scribe.info(NL + "Apply substitution: " + Printer.print(s))
 
-        expr = Apply(f.substitute(s), argsList.map(_.substitute(s)), meta.withType(TypeScheme(tv.substitute(s))))
+        expr = Apply(f, argsList, meta.withType(TypeScheme(tv))).substitute(s)
 
       } yield (expr, s)
   }
