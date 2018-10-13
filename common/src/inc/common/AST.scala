@@ -82,7 +82,7 @@ case class ImportModule(pkg: List[String], name: String) extends Import
 case class ImportSymbols(pkg: List[String], name: String, symbols: List[String]) extends Import
 
 sealed trait Expr[A] extends Tree[A] {
-  def capturedVariables(implicit eqv: A =:= NamePosType): Set[NamePosType] = this match {
+  def capturedVariables(implicit eqv: A =:= NamePosType): Set[Reference[NamePosType]] = this match {
     case LiteralInt(_, _) => Set.empty
     case LiteralLong(_, _) => Set.empty
     case LiteralFloat(_, _) => Set.empty
@@ -91,13 +91,43 @@ sealed trait Expr[A] extends Tree[A] {
     case LiteralString(_, _) => Set.empty
     case LiteralChar(_, _) => Set.empty
     case LiteralUnit(_) => Set.empty
-    case Reference(_, meta) => Set(eqv(meta))
+    case Reference(nm, meta) =>
+      Set(Reference(nm, eqv(meta)))
     case If(cond, thenExpr, elseExpr, _) =>
       cond.capturedVariables ++ thenExpr.capturedVariables ++ elseExpr.capturedVariables
     case Lambda(params, body, _) =>
-      body.capturedVariables -- params.map(p => eqv(p.meta))
+      val lambdaParams = params.map(p => Reference(p.name, eqv(p.meta).withEmptyPos))
+      val capturedInBody = body.capturedVariables.map(v => v.copy(meta = v.meta.withEmptyPos))
+      capturedInBody -- lambdaParams
     case Apply(fn, args, _) =>
       fn.capturedVariables ++ args.flatMap(_.capturedVariables)
+  }
+
+  def replace(mapping: Map[Reference[A], Reference[A]])(implicit eqv: A =:= NamePosType): Expr[A] = this match {
+    case int @ LiteralInt(_, _) => int
+    case long @ LiteralLong(_, _) => long
+    case flt @ LiteralFloat(_, _) => flt
+    case dbl @ LiteralDouble(_, _) => dbl
+    case bool @ LiteralBoolean(_, _) => bool
+    case str @ LiteralString(_, _) => str
+    case chr @ LiteralChar(_, _) => chr
+    case unit @ LiteralUnit(_) => unit
+    case ref @ Reference(_, _) =>
+      mapping.getOrElse(
+        ref.copy(meta = eqv(meta).withEmptyPos.asInstanceOf[A]),
+        ref
+      )
+    case ifExpr @ If(cond, thenExpr, elseExpr, _) =>
+      ifExpr.copy(
+        cond = cond.replace(mapping),
+        thenExpr = thenExpr.replace(mapping),
+        elseExpr = elseExpr.replace(mapping))
+    case lam @ Lambda(_, body, _) =>
+      lam.copy(body = body.replace(mapping))
+    case app @ Apply(fn, args, _) =>
+      app.copy(
+        fn = fn.replace(mapping),
+        args = args.map(_.replace(mapping)))
   }
 
   def toProto(implicit eqv: A =:= NamePosType): proto.Expr = this match {
@@ -341,12 +371,15 @@ case class TypeScheme(bound: List[TypeVariable], typ: Type) {
   def substitute(subst: Map[TypeVariable, Type]) =
     TypeScheme(bound, typ.substitute(subst -- bound))
 
-  def instantiate: Type = if (bound.isEmpty) typ else {
-    val freshVars = bound.map(_ => TypeVariable())
-    val subst = bound.zip(freshVars).toMap
-    scribe.info(NL + "Instantiate: " + Printer.print(subst))
-    typ.substitute(subst)
-  }
+  def instantiate: (Type, Map[TypeVariable, Type]) =
+    if (bound.isEmpty)
+      (typ, Map.empty)
+    else {
+      val freshVars = bound.map(_ => TypeVariable())
+      val subst = bound.zip(freshVars).toMap
+      scribe.info(NL + "Instantiate: " + Printer.print(subst))
+      (typ.substitute(subst), subst)
+    }
 }
 object TypeScheme {
   def apply(typ: Type): TypeScheme = TypeScheme(List.empty, typ)
@@ -463,6 +496,8 @@ case class NamePosType(name: Name, pos: Pos, typ: TypeScheme) {
     name = name.toProto,
     `type` = Some(typ.toProto)
   )
+
+  def withEmptyPos = copy(pos = Pos.Empty)
 
   def forgetPos = NameWithType(name, typ)
 

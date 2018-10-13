@@ -73,7 +73,7 @@ object Main {
     printOutput: Configuration => Boolean,
     phase: => Either[List[Error], A],
     print: A => Unit = (a: A) => {
-      scribe.info(NL + pprint.apply(a))
+      scribe.info(NL + pprint.apply(a, height = 1000))
     }
   ): Either[List[Error], A] = {
     val before = System.nanoTime
@@ -152,7 +152,7 @@ object Main {
 
       resolved <- runPhase[Module[NameWithPos]]("resolver", config, _.printResolver, Resolver.resolve(mod, importedDecls))
 
-      checked <- runPhase[Module[NamePosType]]("typechecker", config, _.printTyper, Typechecker.typecheck(prog, resolved, importedDecls))
+      checked <- runPhase[Module[NamePosType]]("typechecker", config, _.printTyper, Typechecker.typecheck(resolved, importedDecls, prog))
 
       code <- runPhase[Array[Byte]]("codegen", config, _.printCodegen, Codegen.generate(checked), Codegen.print(_))
 

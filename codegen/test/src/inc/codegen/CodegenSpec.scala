@@ -61,9 +61,7 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
         // Unpleasant trick to allow later generators to refer to v
         decls ++ ps.map { p =>
           Let(p.name, Reference(p.name, p.meta), p.meta)
-        },
-        // Don't generate lambda because because we can't do first class functions yet
-        generateFunctions = false
+        }
       )
       lam <- Gen.const(Lambda(ps, body, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Function(pTps.map(_.typ), body.meta.typ.typ)))))
     } yield lam
@@ -114,30 +112,24 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
 
     for {
       condExpr <- condGen
-      thenExpr <- exprGen(decls, generateFunctions = false)
-      elseExpr <- exprGen(decls, generateFunctions = false).suchThat(_.meta.typ == thenExpr.meta.typ)
+      thenExpr <- exprGen(decls)
+      elseExpr <- exprGen(decls).suchThat(_.meta.typ == thenExpr.meta.typ)
     } yield If(condExpr, thenExpr, elseExpr, NamePosType(NoName, Pos.Empty, thenExpr.meta.typ))
   }
 
-  def exprGen(decls: Decls, generateFunctions: Boolean = true): Gen[Expr[NamePosType]] = {
-    val lambdaGens =
-      if (generateFunctions) List(lambdaGen(decls)) else List.empty
-
+  def exprGen(decls: Decls): Gen[Expr[NamePosType]] = {
     val lambdaDecls = decls.collect {
       case lambdaDecl @ Let(_, Lambda(_, _, _), _) => lambdaDecl
     }
 
-    val nonLambdaDecls = decls.filterNot(lambdaDecls.contains)
-
     val applyGens =
-      if (lambdaDecls.nonEmpty) List(applyGen(lambdaDecls)(nonLambdaDecls)) else List.empty
+      if (lambdaDecls.nonEmpty) List(applyGen(lambdaDecls)(decls)) else List.empty
 
     val exprGens =
-      if (nonLambdaDecls.isEmpty)
-        literalGens ++ lambdaGens ++ applyGens :+ ifGen(decls)
+      if (decls.isEmpty)
+        literalGens ++ applyGens :+ lambdaGen(decls) :+ ifGen(decls)
       else
-        // Don't generate reference to lambda because because we can't do first class functions yet
-        literalGens ++ lambdaGens ++ applyGens :+ referenceGen(nonLambdaDecls) :+ ifGen(decls)
+        literalGens ++ applyGens :+ lambdaGen(decls) :+ referenceGen(decls) :+ ifGen(decls)
 
     Gen.oneOf(exprGens)
       .flatMap(identity)
@@ -289,32 +281,39 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
 
   it should "round trip arbitrary module files" in forAll(minSuccessful(1000)) { mod: Module[NamePosType] =>
     withTmpDir { dir =>
-      val result = Codegen.generate(mod)
-      result shouldBe 'right
-
-      Codegen.readInterface(result.right.get) shouldBe Some(mod.map(_.forgetPos))
-
-      val outDir = mod.pkg.foldLeft(dir) {
-        case (path, next) => path / next
-      }
-
-      val out = outDir / s"${mod.name}.class"
-
-      out
-        .createIfNotExists(createParents = true)
-        .writeByteArray(result.right.get)
-
-      val classLoader = Thread.currentThread.getContextClassLoader.asInstanceOf[URLClassLoader]
-
-      val childLoader = URLClassLoader.newInstance(Array(dir.url), classLoader)
-
-      val pkg = if (mod.pkg.isEmpty) "" else mod.pkg.mkString(".") + "."
-
       try {
-        Class.forName(s"${pkg + out.nameWithoutExtension}", true, childLoader)
+        val result = Codegen.generate(mod)
+        result shouldBe 'right
+
+        Codegen.readInterface(result.right.get) shouldBe Some(mod.map(_.forgetPos))
+
+        val outDir = mod.pkg.foldLeft(dir) {
+          case (path, next) => path / next
+        }
+
+        val out = outDir / s"${mod.name}.class"
+
+        out
+          .createIfNotExists(createParents = true)
+          .writeByteArray(result.right.get)
+
+        val classLoader = Thread.currentThread.getContextClassLoader.asInstanceOf[URLClassLoader]
+
+        val childLoader = URLClassLoader.newInstance(Array(dir.url), classLoader)
+
+        val pkg = if (mod.pkg.isEmpty) "" else mod.pkg.mkString(".") + "."
+
+        try {
+          Class.forName(s"${pkg + out.nameWithoutExtension}", true, childLoader)
+        } catch {
+          case e: Throwable =>
+            Codegen.print(result.right.get)
+            throw e
+        }
       } catch {
         case e: Throwable =>
-          Codegen.print(result.right.get)
+          println(Printer.print(mod).render(80))
+          e.printStackTrace()
           throw e
       }
     }
