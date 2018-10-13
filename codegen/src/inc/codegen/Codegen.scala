@@ -59,6 +59,10 @@ object Codegen {
     false
   )
 
+  val liftedDefns = new ThreadLocal[Int] {
+    override def initialValue = 0
+  }
+
   def print(code: Array[Byte], os: OutputStream = System.out): Unit = {
     val reader = new ClassReader(code)
     val writer = new PrintWriter(os)
@@ -365,11 +369,13 @@ object Codegen {
 
         capturedArgTps <- capturedVarTypes.traverse(asmTypeOf)
 
+        liftedName = outerName + "$lifted" + liftedDefns.get
+
         // Write out a new static method with adapted arguments
-        _ <- withGeneratorAdapter(classWriter, outerName + "$lifted", functionDescriptor, ACC_PRIVATE + ACC_STATIC + ACC_SYNTHETIC) { innerGen =>
+        _ <- withGeneratorAdapter(classWriter, liftedName, functionDescriptor, ACC_PRIVATE + ACC_STATIC + ACC_SYNTHETIC) { innerGen =>
           val allParams = prependedParams ++ params
           allParams.foreach(p => innerGen.visitParameter(p.name, ACC_FINAL))
-          newExpr(classWriter, className, innerGen, outerName + "$inner", allParams.map(_.name).zipWithIndex.toMap, locals)(body.replace(replaceCaptured))
+          newExpr(classWriter, className, innerGen, liftedName + "$inner", allParams.map(_.name).zipWithIndex.toMap, locals)(body.replace(replaceCaptured))
         }
 
         // Stack the captured variables for invokedynamic
@@ -385,10 +391,12 @@ object Codegen {
         val lambdaHandle = new Handle(
           H_INVOKESTATIC,
           className,
-          outerName + "$lifted",
+          liftedName,
           functionDescriptor,
           false
         )
+
+        liftedDefns.set(liftedDefns.get + 1)
 
         generator.visitInvokeDynamicInsn(
           "apply",
@@ -469,6 +477,8 @@ object Codegen {
 
   def generate(mod: Module[NamePosType]): Either[List[CodegenError], Array[Byte]] = {
     val className = getInternalName(mod.meta.name, mod.name)
+
+    liftedDefns.set(0)
 
     withClassWriter(className) { classWriter =>
       // Persist the AST to protobuf
