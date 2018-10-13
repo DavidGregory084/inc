@@ -54,15 +54,30 @@ object Resolver {
       } yield (If(c, t, e, NameWithPos(NoName, pos)), tbl)
 
     case Lambda(params, body, pos) =>
-      val resolvedParams = params.map {
-        case Param(name, pos) =>
-          Param(name, NameWithPos(LocalName(name), pos))
+      val emptyParams: Chain[Param[NameWithPos]] = Chain.empty
+      val emptyRes: Either[List[ResolverError], (Chain[Param[NameWithPos]], SymbolTable)] = Right((emptyParams, tbl))
+
+      val resolvedParams = params.foldLeft(emptyRes) {
+        case (resSoFar, param @ Param(name, pos)) =>
+          resSoFar.flatMap {
+            case (paramsSoFar, updatedTbl) =>
+              if (updatedTbl.contains(name))
+                ResolverError.singleton(pos, s"Symbol $name is already defined")
+              else {
+                val localName = LocalName(name)
+                val paramWithName = param.copy(meta = NameWithPos(localName, pos))
+                Right((paramsSoFar :+ paramWithName, updatedTbl.updated(name, localName)))
+              }
+          }
       }
 
       for {
-        r <- resolve(body, tbl ++ resolvedParams.map(p => p.name -> p.meta.name))
-        (b, _) = r
-      } yield (Lambda(resolvedParams, b, NameWithPos(NoName, pos)), tbl)
+        r1 <- resolvedParams
+        (parms, updatedTbl) = r1
+        r2 <- resolve(body, updatedTbl)
+        (b, _) = r2
+      } yield (Lambda(parms.toList, b, NameWithPos(NoName, pos)), tbl)
+
 
     case Apply(fn, args, pos) =>
       for {
@@ -88,7 +103,7 @@ object Resolver {
       resolve(expr, tbl).flatMap {
         case (resolvedExpr, updatedTbl) =>
           if (updatedTbl.contains(name))
-            ResolverError.singleton(resolvedExpr.meta.pos, s"Symbol $name is already defined as ${updatedTbl(name)}")
+            ResolverError.singleton(resolvedExpr.meta.pos, s"Symbol $name is already defined")
           else
             Right((Let(name, resolvedExpr, NameWithPos(memberName, pos)), updatedTbl.updated(name, memberName)))
       }

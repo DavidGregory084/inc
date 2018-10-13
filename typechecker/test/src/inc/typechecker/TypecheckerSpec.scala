@@ -44,10 +44,12 @@ class TypecheckerSpec extends FlatSpec with Matchers {
   def mkCheckedInt(i: Int) = LiteralInt(i, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Int)))
   def mkCheckedRef(r: String, typ: TypeScheme) = Reference(r, NamePosType(NoName, Pos.Empty, typ))
 
+  val noImports = Map.empty[String, TopLevelDeclaration[NameWithType]]
+
   "Typechecker" should "typecheck let bound literals successfully" in {
     val mod = mkModule("Int", List(mkLet("int", mkInt(42))))
     val expected = mkCheckedModule("Int", List(mkCheckedLet("int", mkCheckedInt(42))))
-    val result = Typechecker.typecheck("", mod)
+    val result = Typechecker.typecheck(mod, noImports, "")
     result shouldBe 'right
     result.right.get shouldBe expected
   }
@@ -61,7 +63,7 @@ class TypecheckerSpec extends FlatSpec with Matchers {
       mkCheckedLet("int", mkCheckedInt(42)),
       mkCheckedLet("int2", mkCheckedRef("int", TypeScheme(Type.Int)))
     ))
-    val result = Typechecker.typecheck("", mod)
+    val result = Typechecker.typecheck(mod, noImports, "")
     result shouldBe 'right
     result.right.get shouldBe expected
   }
@@ -71,7 +73,7 @@ class TypecheckerSpec extends FlatSpec with Matchers {
       mkLet("int", mkInt(42)),
       mkLet("int2", mkRef("int3"))
     ))
-    val result = Typechecker.typecheck("", mod)
+    val result = Typechecker.typecheck(mod, noImports, "")
     result shouldBe 'left
   }
 
@@ -80,14 +82,14 @@ class TypecheckerSpec extends FlatSpec with Matchers {
       mkLet("integer", mkIf(mkBool(true), mkInt(42), mkInt(41)))
     ))
 
-    val result1 = Typechecker.typecheck("", mod1)
+    val result1 = Typechecker.typecheck(mod1, noImports, "")
     result1 shouldBe 'right
 
     val mod2 = mkModule("If", List(
       mkLet("integer", mkIf(mkInt(1), mkInt(42), mkInt(41)))
     ))
 
-    val result2 = Typechecker.typecheck("", mod2)
+    val result2 = Typechecker.typecheck(mod2, noImports, "")
     result2 shouldBe 'left
     result2.left.get.head shouldBe TypeError(Pos.Empty, Red("Int") + " does not unify with " + Red("Boolean"))
   }
@@ -97,14 +99,14 @@ class TypecheckerSpec extends FlatSpec with Matchers {
       mkLet("integer", mkIf(mkBool(true), mkInt(42), mkInt(41)))
     ))
 
-    val result1 = Typechecker.typecheck("", mod1)
+    val result1 = Typechecker.typecheck(mod1, noImports, "")
     result1 shouldBe 'right
 
     val mod2 = mkModule("If", List(
       mkLet("integer", mkIf(mkBool(true), mkInt(42), mkDbl(41.0)))
     ))
 
-    val result2 = Typechecker.typecheck("", mod2)
+    val result2 = Typechecker.typecheck(mod2, noImports, "")
     result2 shouldBe 'left
     result2.left.get.head shouldBe TypeError(Pos.Empty, Red("Int") + " does not unify with " + Red("Double"))
   }
@@ -114,14 +116,14 @@ class TypecheckerSpec extends FlatSpec with Matchers {
       mkLet("lam", mkLam(List("bool"), mkIf(mkRef("bool"), mkInt(42), mkInt(41))))
     ))
 
-    val result = Typechecker.typecheck("", mod1)
+    val result = Typechecker.typecheck(mod1, noImports, "")
     result shouldBe 'right
 
     val mod2 = mkModule("Lambda", List(
       mkLet("lam", mkLam(List("a"), mkRef("a")))
     ))
 
-    val result2 = Typechecker.typecheck("", mod2)
+    val result2 = Typechecker.typecheck(mod2, noImports, "")
     result2 shouldBe 'right
   }
 
@@ -131,7 +133,7 @@ class TypecheckerSpec extends FlatSpec with Matchers {
       mkLet("app", mkApp(mkRef("lam"), List(mkBool(true))))
     ))
 
-    val result1 = Typechecker.typecheck("", mod1)
+    val result1 = Typechecker.typecheck(mod1, noImports, "")
     result1 shouldBe 'right
 
     val mod2 = mkModule("Apply", List(
@@ -139,7 +141,7 @@ class TypecheckerSpec extends FlatSpec with Matchers {
       mkLet("app", mkApp(mkRef("lam"), List(mkBool(true))))
     ))
 
-    val result2 = Typechecker.typecheck("", mod2)
+    val result2 = Typechecker.typecheck(mod2, noImports, "")
     result2 shouldBe 'right
   }
 }
