@@ -8,17 +8,20 @@ import fastparse.all._
 
 object Parser {
   val ReservedWords = P(
-    "module" |
-    "import" |
-    "let" |
-    "if" |
-    "then" |
-    "else"
+    (
+      "module" |
+      "import" |
+      "let" |
+      "if" |
+      "then" |
+      "else"
+    ) ~/ nonZeroWs
   )
 
   // Whitespace
   val ws = P(CharsWhile(_ == ' ', min = 0))
   val allWs = P(CharsWhile(Character.isWhitespace, min = 0))
+  val nonZeroWs = P(CharsWhile(Character.isWhitespace, min = 1))
 
   // Separators
   val maybeSemi = P(";".? ~ allWs)
@@ -61,17 +64,26 @@ object Parser {
         LiteralLong(Long.parseLong(num), Pos(from, to))
   }
 
+  val exponentPart = P(
+    (CharIn("eE").! ~/ CharIn("+-").?.! ~ digits).?
+  ).map {
+    case Some((exponentIndicator, sign, digits)) =>
+      exponentIndicator + sign + digits.mkString
+    case None =>
+      ""
+  }
+
   val literalFloatingPoint = P(
     Index ~
-      (zero | digitsLeadingOneToNine) ~ "." ~/ digits ~ (CharIn("dD") | CharIn("fF")).?.! ~
+      (zero | digitsLeadingOneToNine) ~ "." ~/ digits ~ exponentPart ~ (CharIn("dD") | CharIn("fF")).?.! ~
       Index
   ).map {
-    case (from, wholeNumberPart, fractionPart, "", to) =>
-      LiteralDouble(Double.parseDouble(wholeNumberPart + "." + fractionPart), Pos(from, to))
-    case (from, wholeNumberPart, fractionPart, suffix, to) if suffix.toUpperCase == "D" =>
-      LiteralDouble(Double.parseDouble(wholeNumberPart + "." + fractionPart), Pos(from, to))
-    case (from, wholeNumberPart, fractionPart, suffix, to) if suffix.toUpperCase == "F" =>
-      LiteralFloat(Float.parseFloat(wholeNumberPart + "." + fractionPart), Pos(from, to))
+    case (from, wholeNumberPart, fractionPart, exponentPart, "", to) =>
+      LiteralDouble(Double.parseDouble(wholeNumberPart + "." + fractionPart + exponentPart), Pos(from, to))
+    case (from, wholeNumberPart, fractionPart, exponentPart, suffix, to) if suffix.toUpperCase == "D" =>
+      LiteralDouble(Double.parseDouble(wholeNumberPart + "." + fractionPart + exponentPart), Pos(from, to))
+    case (from, wholeNumberPart, fractionPart, exponentPart, suffix, to) if suffix.toUpperCase == "F" =>
+      LiteralFloat(Float.parseFloat(wholeNumberPart + "." + fractionPart + exponentPart), Pos(from, to))
   }
 
   val literalUnit = P(Index ~ "()" ~ Index).map {
@@ -103,9 +115,9 @@ object Parser {
 
   val ifExpr = P(
     Index ~
-    "if" ~/ allWs ~ expression ~ allWs ~
-      "then" ~ allWs ~ expression ~ allWs ~
-      "else" ~ allWs ~ expression ~ Index ~ ws
+    "if" ~/ nonZeroWs ~ expression ~ nonZeroWs ~
+      "then" ~ nonZeroWs ~ expression ~ nonZeroWs ~
+      "else" ~ nonZeroWs ~ expression ~ Index ~ ws
   ).map {
     case (from, cond, thenExpr, elseExpr, to) =>
       If(cond, thenExpr, elseExpr, Pos(from, to))
@@ -120,7 +132,7 @@ object Parser {
 
   val lambda = P(
     Index ~
-    (inParens(param.rep(sep = comma.~/)) | param.map(Seq(_))) ~ allWs ~ "->" ~/ allWs ~
+    (inParens(param.rep(sep = comma.~/)) | param.map(Seq(_))) ~ nonZeroWs ~ "->" ~/ nonZeroWs ~
       expression ~
       Index
   ).map {
@@ -135,8 +147,8 @@ object Parser {
       fn => Apply(fn, args.toList, Pos(from, to))
   }
 
-  // NoCut allows us to backtrack out of a nullary lambda into a unit literal
-  val expression: Parser[Expr[Pos]] = P( (NoCut(lambda) | literal | ifExpr | reference) ~ application.rep ).map {
+  // NoCut allows us to backtrack out of a nullary lambda into a unit literal, and from an if statement into an identifier starting with "if"
+  val expression: Parser[Expr[Pos]] = P( (NoCut(lambda) | NoCut(ifExpr) | literal | reference) ~ application.rep ).map {
     case (expr, applications) =>
       applications.foldLeft(expr) {
         case (expr, app) =>
@@ -145,7 +157,7 @@ object Parser {
   }
 
   val letDeclaration = P(
-    Index ~ "let" ~/ allWs ~ identifier ~ allWs ~ "=" ~ allWs ~
+    Index ~ "let" ~/ nonZeroWs ~ identifier ~ nonZeroWs ~ "=" ~ nonZeroWs ~
       (inBraces(expression) | expression) ~
       Index ~ ws
   ).map {
@@ -156,7 +168,7 @@ object Parser {
   val decl = P(letDeclaration)
 
   val imports = P {
-    "import" ~/ ws ~ identifier.rep(min = 1, sep = ".") ~ ("." ~ inBraces(identifier.rep(min = 1, sep = comma.~/))).?
+    "import" ~/ nonZeroWs ~ identifier.rep(min = 1, sep = ".") ~ ("." ~ inBraces(identifier.rep(min = 1, sep = comma.~/))).?
   }.map {
     case (ident, Some(symbols)) =>
       if (ident.length > 1)
@@ -170,11 +182,11 @@ object Parser {
         ImportModule(List.empty, ident.head)
   }
 
-  val bracesBlock = P(inBraces(imports.rep(sep = maybeSemi) ~ maybeSemi ~ allWs ~ decl.rep(sep = maybeSemi)))
+  val bracesBlock = P(inBraces(imports.rep(sep = maybeSemi) ~ maybeSemi ~ decl.rep(sep = maybeSemi)))
 
   val module = P {
     allWs ~ Index ~
-    "module" ~/ ws ~ (identifier.rep(min = 1, sep = ".")) ~ allWs ~
+    "module" ~/ nonZeroWs ~ (identifier.rep(min = 1, sep = ".")) ~ allWs ~
       bracesBlock ~ Index ~
       allWs ~ End
   }.map {

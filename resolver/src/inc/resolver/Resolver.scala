@@ -54,8 +54,10 @@ object Resolver {
       } yield (If(c, t, e, NameWithPos(NoName, pos)), tbl)
 
     case Lambda(params, body, pos) =>
+      // Allow name shadowing in lambda params
+      val tblWithoutParams = tbl.filterNot { case (nm, _) => params.map(_.name).contains(nm) }
       val emptyParams: Chain[Param[NameWithPos]] = Chain.empty
-      val emptyRes: Either[List[ResolverError], (Chain[Param[NameWithPos]], SymbolTable)] = Right((emptyParams, tbl))
+      val emptyRes: Either[List[ResolverError], (Chain[Param[NameWithPos]], SymbolTable)] = Right((emptyParams, tblWithoutParams))
 
       val resolvedParams = params.foldLeft(emptyRes) {
         case (resSoFar, param @ Param(name, pos)) =>

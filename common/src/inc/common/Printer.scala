@@ -31,7 +31,7 @@ object Printer {
     if (pos.isEmpty)
       NL + msg
     else {
-      val highlighted = fansi.Str(source).overlay(colour, pos.from, pos.to)
+      val highlighted = fansi.Str(source, errorMode = fansi.ErrorMode.Sanitize).overlay(colour, pos.from, pos.to)
       val highlightedLines = highlighted.render.split("\\r?\\n")
       val formattedLines = regionWithMargin(highlightedLines, pos).mkString(System.lineSeparator)
       val formattedHeader = header.map(h => Blue(h + ":") + NL).getOrElse("")
@@ -78,9 +78,9 @@ object Printer {
     case LiteralInt(i, _) =>
       Doc.str(i)
     case LiteralLong(l, _) =>
-      Doc.str(l + 'L')
+      Doc.str(l + "L")
     case LiteralFloat(f, _) =>
-      Doc.str(f + 'F')
+      Doc.str(f + "F")
     case LiteralDouble(d, _) =>
       Doc.str(d)
     case LiteralBoolean(b, _) =>

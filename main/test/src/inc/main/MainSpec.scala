@@ -4,9 +4,10 @@ import better.files._
 import java.net.URLClassLoader
 import org.scalatest._
 import org.scalatest.prop._
+import inc.common._
 import inc.rts.{ Unit => IncUnit }
 
-class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks {
+class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks with Generators {
   def loadClassFrom(classFileDir: File, className: String) = {
     val classLoader = Thread.currentThread.getContextClassLoader.asInstanceOf[URLClassLoader]
     val childLoader = URLClassLoader.newInstance(Array(classFileDir.url), classLoader)
@@ -137,5 +138,23 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
     result shouldBe 'right
     val classFile = result.right.get
     loadClassFrom(dir, "Test.Main." + classFile.nameWithoutExtension)
+  }
+
+  it should "compile arbitrary well-typed programs" in withTmpDir { dir =>
+    val modGen = arbitraryModule.arbitrary.map(_.copy(pkg = List("Test", "Main")))
+    forAll(modGen, minSuccessful(1000)) { mod =>
+      try {
+        val prog = Printer.print(mod).render(80)
+        val result = Main.compileProgram(dir, prog)
+        result shouldBe 'right
+        val classFile = result.right.get
+        loadClassFrom(dir, "Test.Main." + classFile.nameWithoutExtension)
+      } catch {
+        case e: Throwable =>
+          println(NL + prog)
+          e.printStackTrace
+          throw e
+      }
+    }
   }
 }

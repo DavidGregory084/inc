@@ -55,7 +55,7 @@ trait ScalaSettingsModule extends ScalaModule {
     // Partial unification
     "-Ypartial-unification"
   )
-  object test extends Tests {
+  trait Test extends Tests {
     def ivyDeps = Agg(
       ivy"org.typelevel::cats-core:1.3.0",
       ivy"io.chrisdavenport::cats-scalacheck:0.1.0",
@@ -82,6 +82,7 @@ object common extends ScalaPBModule with ScalaSettingsModule {
       ivy"com.outr::scribe:2.6.0"
     )
   }
+  object test extends super.Test
 }
 
 object rts extends ScalaSettingsModule
@@ -89,14 +90,17 @@ object rts extends ScalaSettingsModule
 object parser extends ScalaSettingsModule {
   def moduleDeps = Seq(common)
   def ivyDeps = Agg(ivy"com.lihaoyi::fastparse:1.0.0")
+  object test extends super.Test
 }
 
 object resolver extends ScalaSettingsModule {
   def moduleDeps = Seq(common)
+  object test extends super.Test
 }
 
 object typechecker extends ScalaSettingsModule {
   def moduleDeps = Seq(common)
+  object test extends super.Test
 }
 
 object codegen extends ScalaSettingsModule {
@@ -107,6 +111,10 @@ object codegen extends ScalaSettingsModule {
     ivy"org.ow2.asm:asm-commons:${asmVersion()}",
     ivy"org.ow2.asm:asm-util:${asmVersion()}"
   )
+  object test extends super.Test {
+    override def moduleDeps =
+      super.moduleDeps :+ common.test
+  }
 }
 
 object main extends ScalaSettingsModule {
@@ -118,4 +126,8 @@ object main extends ScalaSettingsModule {
     // PPrint definitely requires scala-reflect
     ivy"org.scala-lang:scala-reflect:${scalaVersion()}"
   )
+  object test extends super.Test {
+    override def moduleDeps =
+      super.moduleDeps :+ common.test
+  }
 }
