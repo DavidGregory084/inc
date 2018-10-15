@@ -388,7 +388,7 @@ object TypeScheme {
     val freeInEnv = env.values.flatMap(_.freeTypeVariables).toSet
     val bound = typ.freeTypeVariables diff freeInEnv
     val scheme = TypeScheme(bound.toList, typ)
-    scribe.info(NL + "Generalize: " + bound.map(Printer.print(_)).mkString("[", ", ", "]"))
+    if (bound.nonEmpty) scribe.info(NL + "Generalize: " + bound.map(Printer.print(_)).mkString("[", ", ", "]"))
     scheme
   }
 

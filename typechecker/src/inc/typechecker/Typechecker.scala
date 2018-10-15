@@ -22,6 +22,11 @@ object Typechecker {
     scribe.info(Printer.withSourceContext(None, formattedMsg, pos, fansi.Color.Yellow, source))
   }
 
+  def trace(name: String, env: Environment) = {
+    val formattedMsg = NL + name + ": " + (NL * 2) + env.map { case (nm, tp) => nm + ": " + Printer.print(tp) }.mkString(NL)
+    scribe.info(formattedMsg)
+  }
+
   def bind(pos: Pos, tyVar: TypeVariable, typ: Type): Either[List[TypeError], Substitution] = typ match {
     case t @ TypeVariable(_) if tyVar == t =>
       Right(EmptySubst)
@@ -199,9 +204,7 @@ object Typechecker {
         _ = if (s.nonEmpty) scribe.info(NL + "Apply substitution: " + Printer.print(s))
 
         // Apply the substitutions from the body
-        ts = TypeScheme.generalize(env, tp.substitute(s))
-
-        expr = Lambda(typedParams, b, meta.withType(ts)).substitute(s)
+        expr = Lambda(typedParams, b, meta.withSimpleType(tp)).substitute(s)
 
         _ = trace("Lambda expression", expr.meta.pos, expr.meta.typ, source)
 
@@ -256,7 +259,7 @@ object Typechecker {
         // Unify the function type with the actual argument types
         s6 <- unify(meta.pos, fnTp, appliedTp)
 
-        s = chainSubstitutions(s3, s4, s5, s6)
+        s = chainSubstitutions(s4, s5, s6)
 
         _ = if (s.nonEmpty) scribe.info(NL + "Apply substitution: " + Printer.print(s))
 
@@ -269,9 +272,10 @@ object Typechecker {
     case Let(name, expr, meta) =>
       typecheck(expr, env, source).flatMap {
         case (checkedExpr, subst) =>
-          val tp = checkedExpr.meta.typ
+          val (eTp, _) = checkedExpr.meta.typ.instantiate
+          val tp = TypeScheme.generalize(env, eTp)
           trace(name, meta.pos, tp, source)
-          Right((Let(name, checkedExpr, meta.withType(tp)), substitute(env, subst).updated(name, checkedExpr.meta.typ)))
+          Right((Let(name, checkedExpr, meta.withType(tp)), substitute(env.updated(name, tp), subst)))
       }
   }
 
@@ -298,7 +302,10 @@ object Typechecker {
       }
 
       typecheckedDecls.map {
-        case (checked, _) =>
+        case (checked, env) =>
+
+          trace("Final type environment", env)
+
           module.copy(
             declarations = checked.toList,
             meta = meta.withSimpleType(Type.Module)
