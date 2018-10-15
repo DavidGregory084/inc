@@ -143,8 +143,8 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
   it should "compile arbitrary well-typed programs" in withTmpDir { dir =>
     val modGen = arbitraryModule.arbitrary.map(_.copy(pkg = List("Test", "Main")))
     forAll(modGen, minSuccessful(1000)) { mod =>
+      val prog = Printer.print(mod).render(80)
       try {
-        val prog = Printer.print(mod).render(80)
         val result = Main.compileProgram(dir, prog)
         result shouldBe 'right
         val classFile = result.right.get
