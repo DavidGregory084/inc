@@ -9,7 +9,7 @@ import inc.rts.{ Unit => IncUnit }
 
 class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks with Generators {
   def loadClassFrom(classFileDir: File, className: String) = {
-    val classLoader = Thread.currentThread.getContextClassLoader.asInstanceOf[URLClassLoader]
+    val classLoader = Thread.currentThread.getContextClassLoader
     val childLoader = URLClassLoader.newInstance(Array(classFileDir.url), classLoader)
     Class.forName(s"${className}", true, childLoader)
   }
