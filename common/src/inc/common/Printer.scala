@@ -1,7 +1,11 @@
 package inc.common
 
 import cats.data.Chain
+import java.lang.String
 import org.typelevel.paiges._
+import scala.{ Array, Option }
+import scala.collection.immutable.Map
+import scala.Predef.{ArrowAssoc, StringCanBuildFrom, augmentString, genericArrayOps}
 
 object Printer {
   def regionWithMargin(inputLines: Array[String], pos: Pos) = {
@@ -33,7 +37,7 @@ object Printer {
     else {
       val highlighted = fansi.Str(source, errorMode = fansi.ErrorMode.Sanitize).overlay(colour, pos.from, pos.to)
       val highlightedLines = highlighted.render.split("\\r?\\n")
-      val formattedLines = regionWithMargin(highlightedLines, pos).mkString(System.lineSeparator)
+      val formattedLines = regionWithMargin(highlightedLines, pos).mkString(NL)
       val formattedHeader = header.map(h => Blue(h + ":") + NL).getOrElse("")
       NL + formattedHeader + formattedLines + (NL * 2) + msg
     }

@@ -53,7 +53,9 @@ trait ScalaSettingsModule extends ScalaModule {
     "-Xlint:unsound-match",              // Pattern match may not be typesafe.
     "-Ywarn-infer-any",                   // Warn when a type argument is inferred to be `Any`.
     // Partial unification
-    "-Ypartial-unification"
+    "-Ypartial-unification",
+    // No default imports
+    "-Yno-imports"
   )
   trait Test extends Tests {
     def ivyDeps = Agg(
@@ -65,15 +67,21 @@ trait ScalaSettingsModule extends ScalaModule {
       ivy"org.scalacheck::scalacheck:1.14.0"
     )
     def testFrameworks = Seq("org.scalatest.tools.Framework")
+    def scalacOptions = T { super.scalacOptions().filterNot(Set("-Yno-imports")) }
   }
 }
 
 object decompiled extends JavaModule
 
-object common extends ScalaPBModule with ScalaSettingsModule {
+object proto extends ScalaPBModule with ScalaSettingsModule {
   def scalaPBVersion = "0.8.0"
   def scalaPBFlatPackage = true
   def scalaPBGrpc = false
+  def scalacOptions = T { super.scalacOptions().filterNot(Set("-Yno-imports")) }
+}
+
+object common extends ScalaSettingsModule {
+  def moduleDeps = Seq(proto)
   def ivyDeps = T {
     super.ivyDeps() ++ Agg(
       ivy"org.typelevel::cats-core:1.3.0",

@@ -1,10 +1,11 @@
 package inc.parser
 
-import java.lang.{ Boolean, Double, Float, Long }
-
-import inc.common._
-
 import fastparse._, NoWhitespace._
+import inc.common._
+import java.lang.{ Boolean, Character, Double, Float, Integer, Long, String }
+import scala.{ Either, Right, Some, None }
+import scala.collection.immutable.{ List, Seq }
+import scala.Predef.augmentString
 
 object Parser {
   def ReservedWords[_: P] = P(

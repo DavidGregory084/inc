@@ -1,5 +1,8 @@
 package inc.main
 
+import java.lang.String
+import scala.Boolean
+
 case class Configuration(
   classpath: String = ".",
   printParser: Boolean = false,

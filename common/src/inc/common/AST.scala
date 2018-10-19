@@ -2,7 +2,11 @@ package inc.common
 
 import cats.Functor
 import cats.syntax.functor._
+import java.lang.{ Exception, String, Throwable }
 import java.util.concurrent.atomic.AtomicInteger
+import scala.{ Boolean, Char, Double, Float, Int, Long, Product, Serializable, Some, None }
+import scala.Predef.=:=
+import scala.collection.immutable.{ List, Map, Set }
 
 abstract class Error(val pos: Pos, val msg: String) extends Throwable(msg) with Product with Serializable
 
