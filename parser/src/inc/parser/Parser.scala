@@ -4,10 +4,10 @@ import java.lang.{ Boolean, Double, Float, Long }
 
 import inc.common._
 
-import fastparse.all._
+import fastparse._, NoWhitespace._
 
 object Parser {
-  val ReservedWords = P(
+  def ReservedWords[_: P] = P(
     (
       "module" |
       "import" |
@@ -19,22 +19,22 @@ object Parser {
   )
 
   // Whitespace
-  val ws = P(CharsWhile(_ == ' ', min = 0))
-  val allWs = P(CharsWhile(Character.isWhitespace, min = 0))
-  val nonZeroWs = P(CharsWhile(Character.isWhitespace, min = 1))
+  def ws[_: P] = P(CharsWhile(_ == ' ', min = 0))
+  def allWs[_: P] = P(CharsWhile(Character.isWhitespace, min = 0))
+  def nonZeroWs[_: P] = P(CharsWhile(Character.isWhitespace, min = 1))
 
   // Separators
-  val maybeSemi = P(";".? ~ allWs)
-  val comma = P("," ~ allWs)
+  def maybeSemi[_: P] = P(";".? ~ allWs)
+  def comma[_: P] = P("," ~ allWs)
 
   // Literals
-  val zero = P("0".!)
-  val oneToNine = P(CharIn('1' to '9'))
-  val zeroToNine = P(CharIn('0' to '9'))
-  val digits = P(zeroToNine.rep.!)
-  val digitsLeadingOneToNine = P((oneToNine.rep(exactly = 1).! ~ zeroToNine.rep.!).map { case (first, rest) => first + rest })
+  def zero[_: P] = P("0".!)
+  def oneToNine[_: P] = P(CharIn("1-9"))
+  def zeroToNine[_: P] = P(CharIn("0-9"))
+  def digits[_: P] = P(zeroToNine.rep.!)
+  def digitsLeadingOneToNine[_: P] = P((oneToNine.rep(exactly = 1).! ~ zeroToNine.rep.!).map { case (first, rest) => first + rest })
 
-  val literalBoolean = P(Index ~ ("true" | "false").! ~ Index).map {
+  def literalBoolean[_: P] = P(Index ~ ("true" | "false").! ~ Index).map {
     case (from, b, to) =>
       LiteralBoolean(Boolean.parseBoolean(b), Pos(from, to))
   }
@@ -43,11 +43,11 @@ object Parser {
   val charDisallowedChars = "\'" + disallowedChars
   val stringDisallowedChars = "\"" + disallowedChars
 
-  val literalChar = P(Index ~ "'" ~/ CharPred(c => !charDisallowedChars.contains(c)).! ~ "'" ~ Index).map {
+  def literalChar[_: P] = P(Index ~ "'" ~/ CharPred(c => !charDisallowedChars.contains(c)).! ~ "'" ~ Index).map {
     case (from, s, to) => LiteralChar(s(0), Pos(from, to))
   }
 
-  val literalString = P(
+  def literalString[_: P] = P(
     Index ~
       "\"" ~/ CharsWhile(c => !stringDisallowedChars.contains(c), min = 0).! ~ "\"" ~
       Index
@@ -56,7 +56,7 @@ object Parser {
       LiteralString(s, Pos(from, to))
   }
 
-  val literalIntegral = P(Index ~ (zero | digitsLeadingOneToNine) ~ CharIn("lL").?.! ~ Index).map {
+  def literalIntegral[_: P] = P(Index ~ (zero | digitsLeadingOneToNine) ~ CharIn("lL").?.! ~ Index).map {
     case (from, num, suffix, to) =>
       if (suffix.isEmpty)
         LiteralInt(Integer.parseInt(num), Pos(from, to))
@@ -64,8 +64,8 @@ object Parser {
         LiteralLong(Long.parseLong(num), Pos(from, to))
   }
 
-  val exponentPart = P(
-    (CharIn("eE").! ~/ CharIn("+-").?.! ~ digits).?
+  def exponentPart[_: P] = P(
+    (CharIn("eE").! ~/ CharIn("+\\-").?.! ~ digits).?
   ).map {
     case Some((exponentIndicator, sign, digits)) =>
       exponentIndicator + sign + digits.mkString
@@ -73,7 +73,7 @@ object Parser {
       ""
   }
 
-  val literalFloatingPoint = P(
+  def literalFloatingPoint[_: P] = P(
     Index ~
       (zero | digitsLeadingOneToNine) ~ "." ~/ digits ~ exponentPart ~ (CharIn("dD") | CharIn("fF")).?.! ~
       Index
@@ -86,12 +86,12 @@ object Parser {
       LiteralFloat(Float.parseFloat(wholeNumberPart + "." + fractionPart + exponentPart), Pos(from, to))
   }
 
-  val literalUnit = P(Index ~ "()" ~ Index).map {
+  def literalUnit[_: P] = P(Index ~ "()" ~ Index).map {
     case (from, to) =>
       LiteralUnit(Pos(from, to))
   }
 
-  val literal =
+  def literal[_: P] =
     literalFloatingPoint |
       literalIntegral |
       literalChar |
@@ -100,20 +100,20 @@ object Parser {
       literalUnit
 
   // Identifiers
-  val identifier = !ReservedWords ~ P((CharPred(Character.isJavaIdentifierStart).! ~ CharsWhile(Character.isJavaIdentifierPart).rep.!).map {
+  def identifier[_: P] = !ReservedWords ~ P((CharPred(Character.isJavaIdentifierStart).! ~ CharsWhile(Character.isJavaIdentifierPart).rep.!).map {
     case (first, rest) => first + rest
   })
 
   // Blocks
-  def inBraces[A](p: Parser[A]) = P("{" ~/ allWs ~ p ~ allWs ~ "}")
-  def inParens[A](p: Parser[A]) = P("(" ~/ allWs ~ p ~ allWs ~ ")")
+  def inBraces[_: P, A](p: => P[A]) = P("{" ~/ allWs ~ p ~ allWs ~ "}")
+  def inParens[_: P, A](p: => P[A]) = P("(" ~/ allWs ~ p ~ allWs ~ ")")
 
-  val reference = P(Index ~ identifier ~ Index).map {
+  def reference[_: P] = P(Index ~ identifier ~ Index).map {
     case (from, id, to) =>
       Reference(id, Pos(from, to))
   }
 
-  val ifExpr = P(
+  def ifExpr[_: P] = P(
     Index ~
     "if" ~/ nonZeroWs ~ expression ~ nonZeroWs ~
       "then" ~ nonZeroWs ~ expression ~ nonZeroWs ~
@@ -123,16 +123,16 @@ object Parser {
       If(cond, thenExpr, elseExpr, Pos(from, to))
   }
 
-  val param = P(
-    (Index ~ identifier ~ Index)
+  def param[_: P] = P(
+    Index ~ identifier ~ Index
   ).map {
     case (from, name, to) =>
       Param(name, Pos(from, to))
   }
 
-  val lambda = P(
+  def lambda[_: P] = P(
     Index ~
-    (inParens(param.rep(sep = comma.~/)) | param.map(Seq(_))) ~ nonZeroWs ~ "->" ~/ nonZeroWs ~
+    (inParens(param.rep(sep = comma./)) | param.map(Seq(_))) ~ nonZeroWs ~ "->" ~/ nonZeroWs ~
       expression ~
       Index
   ).map {
@@ -140,15 +140,15 @@ object Parser {
       Lambda(params.toList, expr, Pos(from, to))
   }
 
-  val application: Parser[Expr[Pos] => Expr[Pos]] = P(
-    Index ~ inParens(expression.rep(sep = comma.~/)) ~ Index
+  def application[_: P]: P[Expr[Pos] => Expr[Pos]] = P(
+    Index ~ inParens(expression.rep(sep = comma./)) ~ Index
   ).map {
     case (from, args, to) =>
       fn => Apply(fn, args.toList, Pos(from, to))
   }
 
   // NoCut allows us to backtrack out of a nullary lambda into a unit literal, and from an if statement into an identifier starting with "if"
-  val expression: Parser[Expr[Pos]] = P( (NoCut(lambda) | NoCut(ifExpr) | literal | reference) ~ application.rep ).map {
+  def expression[_: P]: P[Expr[Pos]] = P( (NoCut(lambda) | NoCut(ifExpr) | literal | reference) ~ application.rep ).map {
     case (expr, applications) =>
       applications.foldLeft(expr) {
         case (expr, app) =>
@@ -156,7 +156,7 @@ object Parser {
       }
   }
 
-  val letDeclaration = P(
+  def letDeclaration[_: P] = P(
     Index ~ "let" ~/ nonZeroWs ~ identifier ~ nonZeroWs ~ "=" ~ nonZeroWs ~
       (inBraces(expression) | expression) ~
       Index ~ ws
@@ -165,10 +165,10 @@ object Parser {
       Let(name, expr, Pos(from, to))
   }
 
-  val decl = P(letDeclaration)
+  def decl[_: P] = P(letDeclaration)
 
-  val imports = P {
-    "import" ~/ nonZeroWs ~ identifier.rep(min = 1, sep = ".") ~ ("." ~ inBraces(identifier.rep(min = 1, sep = comma.~/))).?
+  def imports[_: P] = P {
+    "import" ~/ nonZeroWs ~ identifier.rep(min = 1, sep = ".") ~ ("." ~ inBraces(identifier.rep(min = 1, sep = comma./))).?
   }.map {
     case (ident, Some(symbols)) =>
       if (ident.length > 1)
@@ -182,11 +182,11 @@ object Parser {
         ImportModule(List.empty, ident.head)
   }
 
-  val bracesBlock = P(inBraces(imports.rep(sep = maybeSemi) ~ maybeSemi ~ decl.rep(sep = maybeSemi)))
+  def bracesBlock[_: P] = P(inBraces(imports.rep(sep = maybeSemi) ~ maybeSemi ~ decl.rep(sep = maybeSemi)))
 
-  val module = P {
+  def module[_: P] = P {
     allWs ~ Index ~
-    "module" ~/ nonZeroWs ~ (identifier.rep(min = 1, sep = ".")) ~ allWs ~
+    "module" ~/ nonZeroWs ~ identifier.rep(min = 1, sep = ".") ~ allWs ~
       bracesBlock ~ Index ~
       allWs ~ End
   }.map {
@@ -199,13 +199,11 @@ object Parser {
   }
 
   def parse(fileContents: String): Either[List[ParserError], Module[Pos]] = {
-    module.parse(fileContents) match {
+    fastparse.parse(fileContents, module(_)) match {
       case Parsed.Success(mod, _) =>
         Right(mod)
-      case Parsed.Failure(_, index, extra) =>
-        val input = extra.input
-        val expected = extra.traced.expected
-        val errorMessage = input.repr.errorMessage(input, expected, index)
+      case f @ Parsed.Failure(_, _, _) =>
+        val errorMessage = f.trace().msg
         ParserError.singleton(errorMessage)
     }
   }
