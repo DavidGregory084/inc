@@ -2,10 +2,12 @@ package inc.main
 
 import better.files._
 import java.net.URLClassLoader
+import java.nio.file.{Files, Path}
+
 import org.scalatest._
 import org.scalatest.prop._
 import inc.common._
-import inc.rts.{ Unit => IncUnit }
+import inc.rts.{Unit => IncUnit}
 
 class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks with Generators {
   def loadClassFrom(classFileDir: File, className: String) = {
@@ -27,17 +29,20 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
     }
   }
 
-  def withTmpDir[A](test: File => A) = {
-    val dir = File.newTemporaryDirectory()
+  def withTmpDir[A](test: Path => A) = {
+    val dir = Files.createTempDirectory("")
     try test(dir)
-    finally dir.delete()
+    finally {
+      dir.toFile.toScala.delete()
+      ()
+    }
   }
 
   def shouldCompileField[A](fieldName: String, stringValue: String, expectedValue: A) = withTmpDir { dir =>
     val pkg = "Test.Main."
     val prog = s"module ${pkg}${fieldName.capitalize} { let ${fieldName} = ${stringValue} }"
     val classFile = Main.compileProgram(dir, prog).fold(err => fail(err.head), identity)
-    val clazz = loadClassFrom(dir, pkg + classFile.nameWithoutExtension)
+    val clazz = loadClassFrom(dir, pkg + classFile.toFile.toScala.nameWithoutExtension)
     getStatic(clazz, fieldName) shouldBe expectedValue
   }
 
@@ -82,7 +87,7 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
     val result = Main.compileProgram(dir, prog)
     result shouldBe 'right
     val classFile = result.right.get
-    val clazz = loadClassFrom(dir, pkg + classFile.nameWithoutExtension)
+    val clazz = loadClassFrom(dir, pkg + classFile.toFile.toScala.nameWithoutExtension)
     getStatic(clazz, fieldName) shouldBe 42
   }
 
@@ -93,7 +98,7 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
     val result = Main.compileProgram(dir, prog)
     result shouldBe 'right
     val classFile = result.right.get
-    val clazz = loadClassFrom(dir, pkg + classFile.nameWithoutExtension)
+    val clazz = loadClassFrom(dir, pkg + classFile.toFile.toScala.nameWithoutExtension)
     getStatic(clazz, fieldName) shouldBe 42
   }
 
@@ -104,7 +109,7 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
     val result = Main.compileProgram(dir, prog)
     result shouldBe 'right
     val classFile = result.right.get
-    val clazz = loadClassFrom(dir, pkg + classFile.nameWithoutExtension)
+    val clazz = loadClassFrom(dir, pkg + classFile.toFile.toScala.nameWithoutExtension)
     getStatic(clazz, fieldName) shouldBe 41
   }
 
@@ -113,7 +118,7 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
     val result = Main.compileProgram(dir, prog)
     result shouldBe 'right
     val classFile = result.right.get
-    loadClassFrom(dir, "Test.Main." + classFile.nameWithoutExtension)
+    loadClassFrom(dir, "Test.Main." + classFile.toFile.toScala.nameWithoutExtension)
   }
 
   it should "compile an identity function" in withTmpDir { dir =>
@@ -121,7 +126,7 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
     val result = Main.compileProgram(dir, prog)
     result shouldBe 'right
     val classFile = result.right.get
-    loadClassFrom(dir, "Test.Main." + classFile.nameWithoutExtension)
+    loadClassFrom(dir, "Test.Main." + classFile.toFile.toScala.nameWithoutExtension)
   }
 
   it should "compile an application of an identity function with a reference type" in withTmpDir { dir =>
@@ -129,7 +134,7 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
     val result = Main.compileProgram(dir, prog)
     result shouldBe 'right
     val classFile = result.right.get
-    loadClassFrom(dir, "Test.Main." + classFile.nameWithoutExtension)
+    loadClassFrom(dir, "Test.Main." + classFile.toFile.toScala.nameWithoutExtension)
   }
 
   it should "compile an application of an identity function with a primitive type" in withTmpDir { dir =>
@@ -137,7 +142,7 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
     val result = Main.compileProgram(dir, prog)
     result shouldBe 'right
     val classFile = result.right.get
-    loadClassFrom(dir, "Test.Main." + classFile.nameWithoutExtension)
+    loadClassFrom(dir, "Test.Main." + classFile.toFile.toScala.nameWithoutExtension)
   }
 
   it should "compile arbitrary well-typed programs" in withTmpDir { dir =>
@@ -148,7 +153,7 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
         val result = Main.compileProgram(dir, prog)
         result shouldBe 'right
         val classFile = result.right.get
-        loadClassFrom(dir, "Test.Main." + classFile.nameWithoutExtension)
+        loadClassFrom(dir, "Test.Main." + classFile.toFile.toScala.nameWithoutExtension)
       } catch {
         case e: Throwable =>
           println(NL + prog)
