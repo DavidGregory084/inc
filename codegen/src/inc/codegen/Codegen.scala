@@ -6,16 +6,19 @@ import cats.syntax.functor._
 import cats.syntax.traverse._
 import cats.instances.either._
 import cats.instances.list._
+import inc.common._
+import inc.rts.{ Unit => IncUnit }
 import java.io.{ OutputStream, PrintWriter }
+import java.lang.{ Class, ClassNotFoundException, Exception, Object, String, System, ThreadLocal }
 import java.lang.invoke.{ CallSite, LambdaMetafactory, MethodType, MethodHandle, MethodHandles }
 import java.util.Arrays
 import org.objectweb.asm.{ Attribute, ByteVector, ClassReader, ClassVisitor, ClassWriter, Label, Handle, Type => AsmType }
 import org.objectweb.asm.Opcodes._
 import org.objectweb.asm.util.TraceClassVisitor
 import org.objectweb.asm.commons.{ GeneratorAdapter, Method }
-
-import inc.common._
-import inc.rts.{ Unit => IncUnit }
+import scala.{ Array, Byte, Char, Int, Unit, Option, Either, Right, StringContext }
+import scala.collection.immutable.{ List, Map }
+import scala.Predef.classOf
 
 case class InterfaceAttribute(buffer: Array[Byte]) extends Attribute("IncInterface") {
   override def read(classReader: ClassReader, offset: Int, length: Int, charBuffer: Array[Char], codeAttributeOffset: Int, labels: Array[Label]) = {

@@ -8,10 +8,13 @@ import inc.codegen.Codegen
 import cats.data.{Chain, Validated}
 import cats.instances.list._
 import cats.syntax.traverse._
-import java.net.URLClassLoader
+import java.lang.{ ClassLoader, String, System }
 import java.io.{ByteArrayOutputStream, File, InputStream, OutputStream}
-import java.net.URL
+import java.net.{ URL, URLClassLoader }
 import java.nio.file.{Files, Path, Paths}
+import scala.{ Array, Boolean, Byte, Long, Unit, Either, Left, Right, Option, Some, StringContext }
+import scala.collection.immutable.{ List, Map }
+import scala.Predef.{ ArrowAssoc, wrapRefArray }
 
 case class ConfigError(private val position: Pos, private val message: String) extends Error(position, message)
 

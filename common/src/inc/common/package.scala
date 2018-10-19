@@ -1,5 +1,6 @@
 package inc
 
+import java.lang.{ String, System }
 import scribe._
 import scribe.format._
 

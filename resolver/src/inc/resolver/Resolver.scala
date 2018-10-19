@@ -3,6 +3,9 @@ package inc.resolver
 import cats.data.Chain
 import cats.syntax.functor._
 import inc.common._
+import java.lang.String
+import scala.{ Either, Right, StringContext }
+import scala.collection.immutable.{ List, Map }
 
 object Resolver {
   type SymbolTable = Map[String, Name]
