@@ -89,7 +89,7 @@ object rts extends ScalaSettingsModule
 
 object parser extends ScalaSettingsModule {
   def moduleDeps = Seq(common)
-  def ivyDeps = Agg(ivy"com.lihaoyi::fastparse:1.0.0")
+  def ivyDeps = Agg(ivy"com.lihaoyi::fastparse:2.0.4")
   object test extends super.Test
 }
 
