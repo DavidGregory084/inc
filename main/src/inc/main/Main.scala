@@ -5,21 +5,19 @@ import inc.parser.Parser
 import inc.resolver.Resolver
 import inc.typechecker.Typechecker
 import inc.codegen.Codegen
-
-import better.files._
-import cats.data.{ Chain, Validated }
+import cats.data.{Chain, Validated}
 import cats.instances.list._
 import cats.syntax.traverse._
 import java.net.URLClassLoader
-import java.io.{File => JavaFile, ByteArrayOutputStream}
+import java.io.{ByteArrayOutputStream, File, InputStream, OutputStream}
 import java.net.URL
-import java.nio.file.Paths
+import java.nio.file.{Files, Path, Paths}
 
 case class ConfigError(private val position: Pos, private val message: String) extends Error(position, message)
 
 object Main {
   def main(args: Array[String]): Unit = {
-    val dir = ".".toFile
+    val dir = Paths.get(".")
 
     var prog = ""
 
@@ -92,6 +90,32 @@ object Main {
     } yield out
   }
 
+  def readClassBytes(classloader: ClassLoader, className: String): Array[Byte] = {
+    val classStream = Option(classloader.getResourceAsStream(className))
+    val outputStream = new ByteArrayOutputStream()
+
+    val bufSize = 8192
+    val buf = new Array[Byte](bufSize)
+
+    def pipe(is: InputStream, os: OutputStream, buf: Array[Byte]): Unit = {
+      val num = is.read(buf)
+      if (num > 0) {
+        os.write(buf)
+        pipe(is, os, buf)
+      }
+    }
+
+    classStream.foreach { inputStream =>
+      try pipe(inputStream, outputStream, buf)
+      finally {
+        inputStream.close()
+        outputStream.close()
+      }
+    }
+
+    outputStream.toByteArray
+  }
+
   def readEnvironment(imports: List[Import], classloader: ClassLoader): Map[String, TopLevelDeclaration[NameWithType]] = {
     val distinctPrefixes = imports.map {
       case ImportModule(pkg, nm) =>
@@ -103,17 +127,9 @@ object Main {
     val importedDecls = distinctPrefixes.flatMap {
       case (pkg, nm, syms) =>
         val className = pkg.mkString("/") + "/" + nm + ".class"
-        val classStream = Option(classloader.getResourceAsStream(className))
-        val outputStream = new ByteArrayOutputStream()
+        val classBytes = readClassBytes(classloader, className)
 
-        classStream.foreach { inputStream =>
-          for {
-            in <- inputStream.autoClosed
-            out <- outputStream.autoClosed
-          } in.pipeTo(out)
-        }
-
-        val maybeInterface = Codegen.readInterface(outputStream.toByteArray)
+        val maybeInterface = Codegen.readInterface(classBytes)
 
         maybeInterface
           .toList
@@ -132,7 +148,7 @@ object Main {
   }
 
   def parseUrls(classpath: String): Either[List[Error], Array[URL]] = {
-    val urlStrings = classpath.split(JavaFile.pathSeparator)
+    val urlStrings = classpath.split(File.pathSeparator)
     Chain.fromSeq(urlStrings).traverse { p =>
       val path = Validated.catchNonFatal(Paths.get(p))
       val url = path.map(_.toUri.toURL)
@@ -140,7 +156,7 @@ object Main {
     }.map(_.iterator.toArray).toEither
   }
 
-  def compileProgram(dest: File, prog: String, config: Configuration = Configuration.default): Either[List[Error], File] = {
+  def compileProgram(dest: Path, prog: String, config: Configuration = Configuration.default): Either[List[Error], Path] = {
     val beforeAll = System.nanoTime
 
     for {
@@ -158,17 +174,16 @@ object Main {
 
     } yield {
       val outDir = mod.pkg.foldLeft(dest) {
-        case (path, next) => path / next
+        case (path, next) => path.resolve(next)
       }
 
-      val out = outDir / s"${mod.name}.class"
+      val out = outDir.resolve(s"${mod.name}.class")
 
-      if (out.exists)
-        out.delete()
+      Files.deleteIfExists(out)
 
-      out
-        .createIfNotExists(createParents = true)
-        .writeByteArray(code)
+      Files.createDirectories(out.getParent)
+
+      Files.write(out, code)
 
       val afterAll = System.nanoTime
 
