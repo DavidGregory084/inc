@@ -4,6 +4,7 @@ import mill.contrib.scalapblib._
 
 trait ScalaSettingsModule extends ScalaModule {
   def scalaVersion = "2.12.7"
+  def scalacPluginIvyDeps = Agg(ivy"com.olegpy::better-monadic-for:0.3.0-M4")
   def scalacOptions = Seq(
     // Common options
     "-deprecation",                      // Emit warning and location for usages of deprecated APIs.

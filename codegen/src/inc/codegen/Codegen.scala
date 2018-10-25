@@ -290,8 +290,6 @@ object Codegen {
     case Reference(ref, nameWithType) =>
       for {
         descriptor <- descriptorFor(nameWithType.typ)
-        asmType <- asmTypeOf(nameWithType.typ.typ)
-        loadIns = loadInstructionFor(asmType)
         internalName = getInternalName(nameWithType.name, className)
         _ <- nameWithType.name match {
           case MemberName(_, _, _) =>
