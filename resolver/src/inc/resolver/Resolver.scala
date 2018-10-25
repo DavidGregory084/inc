@@ -48,12 +48,9 @@ object Resolver {
 
     case If(cond, thenExpr, elseExpr, pos) =>
       for {
-        r1 <- resolve(cond, tbl)
-        (c, _) = r1
-        r2 <- resolve(thenExpr, tbl)
-        (t, _) = r2
-        r3 <- resolve(elseExpr, tbl)
-        (e, _) = r3
+        (c, _) <- resolve(cond, tbl)
+        (t, _) <- resolve(thenExpr, tbl)
+        (e, _) <- resolve(elseExpr, tbl)
       } yield (If(c, t, e, NameWithPos(NoName, pos)), tbl)
 
     case Lambda(params, body, pos) =>
@@ -77,24 +74,20 @@ object Resolver {
       }
 
       for {
-        r1 <- resolvedParams
-        (parms, updatedTbl) = r1
-        r2 <- resolve(body, updatedTbl)
-        (b, _) = r2
+        (parms, updatedTbl) <- resolvedParams
+        (b, _) <- resolve(body, updatedTbl)
       } yield (Lambda(parms.toList, b, NameWithPos(NoName, pos)), tbl)
 
 
     case Apply(fn, args, pos) =>
       for {
-        rf <- resolve(fn, tbl)
-        (f, _) = rf
+        (f, _) <- resolve(fn, tbl)
 
         ra <- args.foldLeft(EmptyResult) {
           case (resSoFar, nextArg) =>
             for {
               rs <- resSoFar
-              a <- resolve(nextArg, tbl)
-              (r, _) = a
+              (r, _) <- resolve(nextArg, tbl)
             } yield rs :+ r
         }
 
@@ -127,10 +120,8 @@ object Resolver {
       val resolvedDecls = decls.foldLeft(emptyRes) {
         case (resSoFar, nextDecl) =>
           for {
-            r <- resSoFar
-            (resolvedSoFar, tblSoFar) = r
-            c <- resolve(module, nextDecl, tblSoFar)
-            (resolvedDecl, updatedTbl) = c
+            (resolvedSoFar, tblSoFar) <- resSoFar
+            (resolvedDecl, updatedTbl) <- resolve(module, nextDecl, tblSoFar)
           } yield (resolvedSoFar :+ resolvedDecl, updatedTbl)
       }
 

@@ -133,24 +133,21 @@ object Typechecker {
     case If(cond, thenExpr, elseExpr, meta) =>
       for {
         // Typecheck the condition
-        r1 <- typecheck(cond, env, source)
-        (c, s1) = r1
+        (c, s1) <- typecheck(cond, env, source)
 
         NamePosType(_, _, condType) = c.meta
 
         _ = trace("If condition", c.meta.pos, condType, source)
 
         // Typecheck the then expression
-        r2 <- typecheck(thenExpr, env, source)
-        (t, s2) = r2
+        (t, s2) <- typecheck(thenExpr, env, source)
 
         NamePosType(_, _, thenType) = t.meta
 
         _ = trace("Then expression", t.meta.pos, thenType, source)
 
         // Typecheck the else expression
-        r3 <- typecheck(elseExpr, env, source)
-        (e, s3) = r3
+        (e, s3) <- typecheck(elseExpr, env, source)
 
         NamePosType(_, _, elseType) = e.meta
 
@@ -193,8 +190,7 @@ object Typechecker {
 
       for {
         // Typecheck the body with the params in scope
-        r <- typecheck(body, env ++ paramMappings, source)
-        (b, s1) = r
+        (b, s1) <- typecheck(body, env ++ paramMappings, source)
 
         _ = trace("Lambda body", b.meta.pos, b.meta.typ, source)
 
@@ -221,27 +217,22 @@ object Typechecker {
 
       for {
         // Typecheck the function
-        rf <- typecheck(fn, env, source)
-        (f, s1) = rf
+        (f, s1) <- typecheck(fn, env, source)
 
         _ = trace("Function to apply", f.meta.pos, f.meta.typ, source)
 
         // Typecheck the arg expressions
-        ra <- args.zipWithIndex.foldLeft(EmptyResult) {
+        (as, s2) <- args.zipWithIndex.foldLeft(EmptyResult) {
           case (resSoFar, (nextArg, idx)) =>
             for {
-              r <- resSoFar
-              (typedSoFar, substSoFar) = r
+              (typedSoFar, substSoFar) <- resSoFar
 
-              a <- typecheck(nextArg, substitute(env, s1), source)
-              (typedArg, newSubst) = a
+              (typedArg, newSubst) <- typecheck(nextArg, substitute(env, s1), source)
 
               _ = trace(s"Argument ${idx + 1}", typedArg.meta.pos, typedArg.meta.typ, source)
 
             } yield (typedSoFar :+ typedArg, chainSubstitution(substSoFar, newSubst))
         }
-
-        (as, s2) = ra
 
         s3 = chainSubstitution(s1, s2)
 
@@ -298,10 +289,8 @@ object Typechecker {
       val typecheckedDecls = decls.foldLeft(emptyRes) {
         case (resSoFar, nextDecl) =>
           for {
-            r <- resSoFar
-            (checkedSoFar, envSoFar) = r
-            c <- typecheck(nextDecl, envSoFar, source)
-            (checkedDecl, updatedEnv) = c
+            (checkedSoFar, envSoFar) <- resSoFar
+            (checkedDecl, updatedEnv) <- typecheck(nextDecl, envSoFar, source)
           } yield (checkedSoFar :+ checkedDecl, updatedEnv)
       }
 
