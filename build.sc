@@ -3,8 +3,11 @@ import mill.scalalib._
 import mill.contrib.scalapblib._
 
 trait ScalaSettingsModule extends ScalaModule {
-  def scalaVersion = "2.12.7"
-  def scalacPluginIvyDeps = Agg(ivy"com.olegpy::better-monadic-for:0.3.0-M4")
+  def scalaVersion = "2.12.8"
+  def scalacPluginIvyDeps = Agg(
+    ivy"com.olegpy::better-monadic-for:0.3.0-M4",
+    ivy"org.scalameta:semanticdb-scalac_${scalaVersion()}:4.1.3"
+  )
   def scalacOptions = Seq(
     // Common options
     "-deprecation",                      // Emit warning and location for usages of deprecated APIs.
@@ -56,7 +59,8 @@ trait ScalaSettingsModule extends ScalaModule {
     // Partial unification
     "-Ypartial-unification",
     // No default imports
-    "-Yno-imports"
+    "-Yno-imports",
+    "-Yrangepos"
   )
   trait Test extends Tests {
     def ivyDeps = Agg(
