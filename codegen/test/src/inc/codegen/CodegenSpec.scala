@@ -3,7 +3,6 @@ package inc.codegen
 import java.io.ByteArrayOutputStream
 
 import better.files._
-import cats.implicits._
 import inc.common._
 import java.net.URLClassLoader
 import org.scalatest._
@@ -11,19 +10,20 @@ import org.scalatest.prop._
 
 class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks with Generators {
 
-  def mkModule(name: String, decls: List[TopLevelDeclaration[NamePosType]]) = Module(
+  def mkModule(name: String, decls: List[TopLevelDeclaration[NameWithType]]) = Module(
     pkg = List("Test", "Codegen"),
     name = name,
     imports = List.empty,
     declarations = decls,
-    meta = NamePosType(ModuleName(List("Test", "Codegen"), name), Pos.Empty, TypeScheme(Type.Module)))
+    pos = Pos.Empty,
+    meta = NameWithType(ModuleName(List("Test", "Codegen"), name), TypeScheme(Type.Module)))
 
-  def mkLet(name: String, binding: Expr[NamePosType]) =
-    Let(name, binding, NamePosType(LocalName(name), Pos.Empty, binding.meta.typ))
+  def mkLet(name: String, binding: Expr[NameWithType]) =
+    Let(name, binding, Pos.Empty, NameWithType(LocalName(name), binding.meta.typ))
 
-  def mkInt(i: Int) = LiteralInt(i, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Int)))
-  def mkRef(r: String, typ: TypeScheme) = Reference(r, NamePosType(NoName, Pos.Empty, typ))
-  def mkUnit() = LiteralUnit(NamePosType(NoName, Pos.Empty, TypeScheme(Type.Unit)))
+  def mkInt(i: Int) = LiteralInt(i, Pos.Empty, NameWithType(NoName, TypeScheme(Type.Int)))
+  def mkRef(r: String, typ: TypeScheme) = Reference(r, Pos.Empty, NameWithType(NoName, typ))
+  def mkUnit() = LiteralUnit(Pos.Empty, NameWithType(NoName, TypeScheme(Type.Unit)))
 
   "Codegen" should "generate code for a simple module" in {
     val mod = mkModule("Ref", List(
@@ -90,7 +90,7 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
 
     result shouldBe 'right
 
-    Codegen.readInterface(result.right.get) shouldBe Some(mod.map(_.forgetPos))
+    Codegen.readInterface(result.right.get) shouldBe Some(mod)
   }
 
   def withTmpDir[A](test: File => A) = {
@@ -99,13 +99,13 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
     finally dir.delete()
   }
 
-  it should "round trip arbitrary module files" in forAll(minSuccessful(1000)) { mod: Module[NamePosType] =>
+  it should "round trip arbitrary module files" in forAll(minSuccessful(1000)) { mod: Module[NameWithType] =>
     withTmpDir { dir =>
       try {
         val result = Codegen.generate(mod)
         result shouldBe 'right
 
-        Codegen.readInterface(result.right.get) shouldBe Some(mod.map(_.forgetPos))
+        Codegen.readInterface(result.right.get) shouldBe Some(mod)
 
         val outDir = mod.pkg.foldLeft(dir) {
           case (path, next) => path / next

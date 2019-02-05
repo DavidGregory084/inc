@@ -4,30 +4,34 @@ import inc.common._
 import org.scalatest._
 
 class ResolverSpec extends FlatSpec with Matchers {
-  def mkModule(name: String, decls: List[TopLevelDeclaration[Pos]]) = Module(
+  def mkModule(name: String, decls: List[TopLevelDeclaration[Unit]]) = Module(
     pkg = List("Test", "Resolver"),
     name = name,
     imports = List.empty,
     declarations = decls,
-    meta = Pos.Empty)
+    pos = Pos.Empty,
+    meta = ()
+  )
 
-  def mkLet(name: String, binding: Expr[Pos]) =
-    Let(name, binding, Pos.Empty)
+  def mkLet(name: String, binding: Expr[Unit]) =
+    Let(name, binding, Pos.Empty, ())
 
-  def mkInt(i: Int) = LiteralInt(i, Pos.Empty)
-  def mkRef(r: String) = Reference(r, Pos.Empty)
+  def mkInt(i: Int) = LiteralInt(i, Pos.Empty, ())
+  def mkRef(r: String) = Reference(r, Pos.Empty, ())
 
-  def mkResolvedModule(name: String, decls: List[TopLevelDeclaration[NameWithPos]]) = Module(
+  def mkResolvedModule(name: String, decls: List[TopLevelDeclaration[Name]]) = Module(
     pkg = List("Test", "Resolver"),
     name = name,
     imports = List.empty,
     declarations = decls,
-    meta = NameWithPos(ModuleName(List("Test", "Resolver"), name), Pos.Empty))
+    pos = Pos.Empty,
+    meta = ModuleName(List("Test", "Resolver"), name)
+  )
 
-  def mkResolvedLet(modName: String, name: String, binding: Expr[NameWithPos]) =
-    Let(name, binding, NameWithPos(MemberName(List("Test", "Resolver"), modName, name), Pos.Empty))
+  def mkResolvedLet(modName: String, name: String, binding: Expr[Name]) =
+    Let(name, binding, Pos.Empty, MemberName(List("Test", "Resolver"), modName, name))
 
-  def mkResolvedInt(i: Int) = LiteralInt(i, NameWithPos(NoName, Pos.Empty))
+  def mkResolvedInt(i: Int) = LiteralInt(i, Pos.Empty, NoName: Name)
 
   "Resolver" should "resolve names for local let bindings" in {
     val mod = mkModule("Int", List(mkLet("int", mkInt(42))))

@@ -12,9 +12,10 @@ final case class Module[A](
   name: String,
   imports: List[Import],
   declarations: List[TopLevelDeclaration[A]],
+  pos: Pos,
   meta: A,
-) {
-  def toProto(implicit eqv: A =:= NamePosType): proto.Module = proto.Module(
+) extends Tree {
+  def toProto(implicit eqv: A =:= NameWithType): proto.Module = proto.Module(
     pkg = pkg,
     name = name,
     imports = imports.map(_.toProto),
@@ -22,7 +23,7 @@ final case class Module[A](
     nameWithType = Some(eqv(meta).toProto)
   )
 
-  def substitute(subst: Map[TypeVariable, Type])(implicit eqv: A =:= NamePosType): Module[A] =
+  def substitute(subst: Map[TypeVariable, Type])(implicit eqv: A =:= NameWithType): Module[A] =
     this.map(a => eqv(a).substitute(subst).asInstanceOf[A])
 }
 
@@ -32,6 +33,7 @@ object Module {
     name = mod.name,
     imports = mod.imports.toList.map(Import.fromProto),
     declarations = mod.declarations.toList.map(TopLevelDeclaration.fromProto),
+    pos = Pos.Empty,
     meta = NameWithType.fromProto(mod.getNameWithType),
   )
   implicit val moduleFunctor: Functor[Module] = new Functor[Module] {

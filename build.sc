@@ -2,6 +2,8 @@ import mill._
 import mill.scalalib._
 import mill.contrib.scalapblib._
 
+import $ivy.`ch.epfl.scala::mill-bloop:1.2.5+2-b6073b13` 
+
 trait ScalaSettingsModule extends ScalaModule {
   def scalaVersion = "2.12.8"
   def scalacPluginIvyDeps = Agg(

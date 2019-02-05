@@ -66,7 +66,7 @@ object Main {
   }
 
   def printPhaseTiming(phase: String, before: Long, after: Long): Unit =
-    scribe.info(NL + s"Completed $phase in ${(after - before) / 1000000}ms")
+    scribe.info(NL + Blue(s"Completed $phase in ") + White(s"${(after - before) / 1000000}ms"))
 
   def runPhase[A](
     name: String,
@@ -121,9 +121,9 @@ object Main {
 
   def readEnvironment(imports: List[Import], classloader: ClassLoader): Map[String, TopLevelDeclaration[NameWithType]] = {
     val distinctPrefixes = imports.map {
-      case ImportModule(pkg, nm) =>
+      case ImportModule(pkg, nm, _) =>
         (pkg, nm, List.empty[String])
-      case ImportSymbols(pkg, nm, syms) =>
+      case ImportSymbols(pkg, nm, syms, _) =>
         (pkg, nm, syms)
     }.distinct
 
@@ -165,13 +165,13 @@ object Main {
     for {
       urls <- parseUrls(config.classpath)
 
-      mod <- runPhase[Module[Pos]]("parser", config, _.printParser, Parser.parse(prog))
+      mod <- runPhase[Module[Unit]]("parser", config, _.printParser, Parser.parse(prog))
 
       importedDecls = readEnvironment(mod.imports, new URLClassLoader(urls))
 
-      resolved <- runPhase[Module[NameWithPos]]("resolver", config, _.printResolver, Resolver.resolve(mod, importedDecls))
+      resolved <- runPhase[Module[Name]]("resolver", config, _.printResolver, Resolver.resolve(mod, importedDecls))
 
-      checked <- runPhase[Module[NamePosType]]("typechecker", config, _.printTyper, Typechecker.typecheck(resolved, importedDecls, prog))
+      checked <- runPhase[Module[NameWithType]]("typechecker", config, _.printTyper, Typechecker.typecheck(resolved, importedDecls, prog))
 
       code <- runPhase[Array[Byte]]("codegen", config, _.printCodegen, Codegen.generate(checked), Codegen.print(_))
 

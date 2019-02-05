@@ -9,7 +9,7 @@ case class Configuration(
   printResolver: Boolean = false,
   printTyper: Boolean = false,
   printCodegen: Boolean = false,
-  printPhaseTiming: Boolean = false
+  printPhaseTiming: Boolean = true
 )
 
 object Configuration {

@@ -7,8 +7,8 @@ import org.scalacheck._
 import org.scalacheck.cats.implicits._
 
 trait Generators { self: Matchers =>
-  type Decl = TopLevelDeclaration[NamePosType]
-  type Decls = List[TopLevelDeclaration[NamePosType]]
+  type Decl = TopLevelDeclaration[NameWithType]
+  type Decls = List[TopLevelDeclaration[NameWithType]]
 
   val nameGen: Gen[String] =
     for {
@@ -20,36 +20,36 @@ trait Generators { self: Matchers =>
     } yield nm
 
   // Don't generate negative numbers: the language doesn't have operators yet so no parsing of prefix negation
-  val intGen: Gen[Expr[NamePosType]] =
-    Arbitrary.arbitrary[Int].filter(_ >= 0).map(LiteralInt(_, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Int))))
-  val longGen: Gen[Expr[NamePosType]] =
-    Arbitrary.arbitrary[Long].filter(_ >= 0L).map(LiteralLong(_, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Long))))
-  val fltGen: Gen[Expr[NamePosType]] =
-    Arbitrary.arbitrary[Float].filter(_ >= 0F).map(LiteralFloat(_, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Float))))
-  val dblGen: Gen[Expr[NamePosType]] =
-    Arbitrary.arbitrary[Double].filter(_ >= 0D).map(LiteralDouble(_, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Double))))
-  val boolGen: Gen[Expr[NamePosType]] =
-    Arbitrary.arbitrary[Boolean].map(LiteralBoolean(_, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Boolean))))
-  val charGen: Gen[Expr[NamePosType]] =
-    Arbitrary.arbitrary[Char].map(LiteralChar(_, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Char))))
-  val strGen: Gen[Expr[NamePosType]] =
+  val intGen: Gen[Expr[NameWithType]] =
+    Arbitrary.arbitrary[Int].filter(_ >= 0).map(LiteralInt(_, Pos.Empty, NameWithType(NoName, TypeScheme(Type.Int))))
+  val longGen: Gen[Expr[NameWithType]] =
+    Arbitrary.arbitrary[Long].filter(_ >= 0L).map(LiteralLong(_, Pos.Empty, NameWithType(NoName, TypeScheme(Type.Long))))
+  val fltGen: Gen[Expr[NameWithType]] =
+    Arbitrary.arbitrary[Float].filter(_ >= 0F).map(LiteralFloat(_, Pos.Empty, NameWithType(NoName, TypeScheme(Type.Float))))
+  val dblGen: Gen[Expr[NameWithType]] =
+    Arbitrary.arbitrary[Double].filter(_ >= 0D).map(LiteralDouble(_, Pos.Empty, NameWithType(NoName, TypeScheme(Type.Double))))
+  val boolGen: Gen[Expr[NameWithType]] =
+    Arbitrary.arbitrary[Boolean].map(LiteralBoolean(_, Pos.Empty, NameWithType(NoName, TypeScheme(Type.Boolean))))
+  val charGen: Gen[Expr[NameWithType]] =
+    Arbitrary.arbitrary[Char].map(LiteralChar(_, Pos.Empty, NameWithType(NoName, TypeScheme(Type.Char))))
+  val strGen: Gen[Expr[NameWithType]] =
     Gen.asciiPrintableStr.filterNot { str =>
       str.contains('\n') ||
       str.contains('\r') ||
       str.contains('\\') ||
       str.contains('"')
-    }.map(LiteralString(_, NamePosType(NoName, Pos.Empty, TypeScheme(Type.String))))
-  val unitGen: Gen[Expr[NamePosType]] =
-    Gen.const(LiteralUnit(NamePosType(NoName, Pos.Empty, TypeScheme(Type.Unit))))
+    }.map(LiteralString(_, Pos.Empty, NameWithType(NoName, TypeScheme(Type.String))))
+  val unitGen: Gen[Expr[NameWithType]] =
+    Gen.const(LiteralUnit(Pos.Empty, NameWithType(NoName, TypeScheme(Type.Unit))))
 
-  val literalGens: List[Gen[Expr[NamePosType]]] = List(intGen, longGen, fltGen, dblGen, boolGen, charGen, strGen, unitGen)
+  val literalGens: List[Gen[Expr[NameWithType]]] = List(intGen, longGen, fltGen, dblGen, boolGen, charGen, strGen, unitGen)
 
-  def referenceGen(decls: Decls): Gen[Expr[NamePosType]] =
+  def referenceGen(decls: Decls): Gen[Expr[NameWithType]] =
     Gen.oneOf(decls).map { existing =>
-      Reference(existing.name, NamePosType(existing.meta.name, Pos.Empty, existing.meta.typ))
+      Reference(existing.name, Pos.Empty, NameWithType(existing.meta.name, existing.meta.typ))
     }
 
-  def lambdaGen(decls: Decls): Gen[Expr[NamePosType]] =
+  def lambdaGen(decls: Decls): Gen[Expr[NameWithType]] =
     for {
       numArgs <- Gen.choose(1, 4)
       // Don't generate duplicate variable names
@@ -65,21 +65,21 @@ trait Generators { self: Matchers =>
         TypeScheme(Type.Unit)))
       ps = pNms.zip(pTps).map {
         case (nm, tp) =>
-          Param(nm, NamePosType(LocalName(nm), Pos.Empty, tp))
+          Param(nm, Pos.Empty, NameWithType(LocalName(nm), tp))
       }
       body <- exprGen(
         // Unpleasant trick to allow later generators to refer to v
         decls ++ ps.map { p =>
-          Let(p.name, Reference(p.name, p.meta), p.meta)
+          Let(p.name, Reference(p.name, Pos.Empty, p.meta), Pos.Empty, p.meta)
         }
       )
-      lam <- Gen.const(Lambda(ps, body, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Function(pTps.map(_.typ), body.meta.typ.typ)))))
+      lam <- Gen.const(Lambda(ps, body, Pos.Empty, NameWithType(NoName, TypeScheme(Type.Function(pTps.map(_.typ), body.meta.typ.typ)))))
     } yield lam
 
-  def genArg(tp: Type)(decls: Decls): Gen[Expr[NamePosType]] = {
+  def genArg(tp: Type)(decls: Decls): Gen[Expr[NameWithType]] = {
     val candidateDecls = decls.collect {
-      case Let(nm, _, candidateMeta @ NamePosType(_, _, TypeScheme(_, `tp`))) =>
-        Reference(nm, candidateMeta)
+      case Let(nm, _, _, candidateMeta @ NameWithType(_, TypeScheme(_, `tp`))) =>
+        Reference(nm, Pos.Empty, candidateMeta)
     }
 
     val litGen = tp match {
@@ -100,22 +100,22 @@ trait Generators { self: Matchers =>
       Gen.oneOf(candidateDecls)
   }
 
-  def applyGen(lambdaDecls: Decls)(decls: Decls): Gen[Expr[NamePosType]] =
+  def applyGen(lambdaDecls: Decls)(decls: Decls): Gen[Expr[NameWithType]] =
     for {
       lam <- Gen.oneOf(lambdaDecls)
 
-      Let(nm, Lambda(_, _, _), lambdaMeta) = lam
+      Let(nm, Lambda(_, _, _, _), _, lambdaMeta) = lam
 
       TypeScheme(_, TypeConstructor("->", tpArgs)) = lambdaMeta.typ
 
       args <- tpArgs.init.traverse(tp => genArg(tp)(decls))
 
-    } yield Apply(Reference(nm, lambdaMeta), args, NamePosType(NoName, Pos.Empty, TypeScheme(tpArgs.last)))
+    } yield Apply(Reference(nm, Pos.Empty, lambdaMeta), args, Pos.Empty, NameWithType(NoName, TypeScheme(tpArgs.last)))
 
-  def ifGen(decls: Decls): Gen[Expr[NamePosType]] = {
-    val condDecls: List[Gen[Expr[NamePosType]]] = boolGen :: decls.collect {
-      case Let(nm, _, condMeta @ NamePosType(_, _, TypeScheme(_, Type.Boolean))) =>
-        Reference(nm, condMeta)
+  def ifGen(decls: Decls): Gen[Expr[NameWithType]] = {
+    val condDecls: List[Gen[Expr[NameWithType]]] = boolGen :: decls.collect {
+      case Let(nm, _, _, condMeta @ NameWithType(_, TypeScheme(_, Type.Boolean))) =>
+        Reference(nm, Pos.Empty, condMeta)
     }.map(Gen.const)
 
     val condGen = Gen.oneOf(condDecls).flatMap(identity)
@@ -124,12 +124,12 @@ trait Generators { self: Matchers =>
       condExpr <- condGen
       thenExpr <- exprGen(decls)
       elseExpr <- exprGen(decls).suchThat(_.meta.typ == thenExpr.meta.typ)
-    } yield If(condExpr, thenExpr, elseExpr, NamePosType(NoName, Pos.Empty, thenExpr.meta.typ))
+    } yield If(condExpr, thenExpr, elseExpr, Pos.Empty, NameWithType(NoName, thenExpr.meta.typ))
   }
 
-  def exprGen(decls: Decls): Gen[Expr[NamePosType]] = {
+  def exprGen(decls: Decls): Gen[Expr[NameWithType]] = {
     val lambdaDecls = decls.collect {
-      case lambdaDecl @ Let(_, Lambda(_, _, _), _) => lambdaDecl
+      case lambdaDecl @ Let(_, Lambda(_, _, _, _), _, _) => lambdaDecl
     }
 
     val applyGens =
@@ -150,7 +150,7 @@ trait Generators { self: Matchers =>
       // Make sure we don't generate duplicate names
       name <- nameGen.suchThat(nm => !decls.map(_.name).contains(nm))
       expr <- exprGen(decls)
-    } yield Let(name, expr, NamePosType(MemberName(modName.pkg, modName.cls, name), Pos.Empty, expr.meta.typ))
+    } yield Let(name, expr, Pos.Empty, NameWithType(MemberName(modName.pkg, modName.cls, name), expr.meta.typ))
 
   def declGen(modName: ModuleName) =
     StateT.modifyF[Gen, (Decls, Int)] {
@@ -189,7 +189,7 @@ trait Generators { self: Matchers =>
   //     }
   //   } yield imp
 
-  implicit val arbitraryModule: Arbitrary[Module[NamePosType]] = Arbitrary {
+  implicit val arbitraryModule: Arbitrary[Module[NameWithType]] = Arbitrary {
     for {
       pkgLen <- Gen.choose(0, 5)
       pkg <- Gen.resize(pkgLen, Gen.listOfN(pkgLen, nameGen))
@@ -198,6 +198,6 @@ trait Generators { self: Matchers =>
       decls <- declsGen(modName)
       // impLen <- Gen.choose(0, 5)
       // imports <- Gen.resize(impLen, Gen.listOfN(impLen, importGen))
-    } yield Module(pkg, name, List.empty, decls, NamePosType(modName, Pos.Empty, TypeScheme(Type.Module)))
+    } yield Module(pkg, name, List.empty, decls, Pos.Empty, NameWithType(modName, TypeScheme(Type.Module)))
   }
 }

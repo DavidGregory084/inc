@@ -4,45 +4,49 @@ import inc.common._
 import org.scalatest._
 
 class TypecheckerSpec extends FlatSpec with Matchers {
-  def mkModule(name: String, decls: List[TopLevelDeclaration[NameWithPos]]) = Module(
+  def mkModule(name: String, decls: List[TopLevelDeclaration[Name]]) = Module(
     pkg = List("Test", "Typechecker"),
     name = name,
     imports = List.empty,
     declarations = decls,
-    meta = NameWithPos(ModuleName(List("Test", "Typechecker"), name), Pos.Empty))
-
-  def mkLet(name: String, binding: Expr[NameWithPos]) =
-    Let(name, binding, NameWithPos(LocalName(name), Pos.Empty))
-
-  def mkInt(i: Int) = LiteralInt(i, NameWithPos(NoName, Pos.Empty))
-  def mkDbl(d: Double) = LiteralDouble(d, NameWithPos(NoName, Pos.Empty))
-  def mkBool(b: Boolean) = LiteralBoolean(b, NameWithPos(NoName, Pos.Empty))
-  def mkRef(r: String) = Reference(r, NameWithPos(NoName, Pos.Empty))
-
-  def mkIf(cond: Expr[NameWithPos], thenExpr: Expr[NameWithPos], elseExpr: Expr[NameWithPos]) =
-    If(cond, thenExpr, elseExpr, NameWithPos(NoName, Pos.Empty))
-
-  def mkLam(params: List[String], body: Expr[NameWithPos]) = Lambda(
-    params.map(nm => Param(nm, NameWithPos(LocalName(nm), Pos.Empty))),
-    body,
-    NameWithPos(NoName, Pos.Empty)
+    pos = Pos.Empty,
+    meta = ModuleName(List("Test", "Typechecker"), name)
   )
 
-  def mkApp(fn: Expr[NameWithPos], args: List[Expr[NameWithPos]]) =
-    Apply(fn, args, NameWithPos(NoName, Pos.Empty))
+  def mkLet(name: String, binding: Expr[Name]) =
+    Let(name, binding, Pos.Empty, LocalName(name))
 
-  def mkCheckedModule(name: String, decls: List[TopLevelDeclaration[NamePosType]]) = Module(
+  def mkInt(i: Int) = LiteralInt(i, Pos.Empty, NoName: Name)
+  def mkDbl(d: Double) = LiteralDouble(d, Pos.Empty, NoName: Name)
+  def mkBool(b: Boolean) = LiteralBoolean(b, Pos.Empty, NoName: Name)
+  def mkRef(r: String) = Reference(r, Pos.Empty, NoName: Name)
+
+  def mkIf(cond: Expr[Name], thenExpr: Expr[Name], elseExpr: Expr[Name]) =
+    If(cond, thenExpr, elseExpr, Pos.Empty, NoName: Name)
+
+  def mkLam(params: List[String], body: Expr[Name]) = Lambda(
+    params.map(nm => Param(nm, Pos.Empty, LocalName(nm): Name)),
+    body,
+    Pos.Empty,
+    NoName: Name
+  )
+
+  def mkApp(fn: Expr[Name], args: List[Expr[Name]]) =
+    Apply(fn, args, Pos.Empty, NoName)
+
+  def mkCheckedModule(name: String, decls: List[TopLevelDeclaration[NameWithType]]) = Module(
     pkg = List("Test", "Typechecker"),
     name = name,
     imports = List.empty,
     declarations = decls,
-    meta = NamePosType(ModuleName(List("Test", "Typechecker"), name), Pos.Empty, TypeScheme(Type.Module)))
+    pos = Pos.Empty,
+    meta = NameWithType(ModuleName(List("Test", "Typechecker"), name), TypeScheme(Type.Module)))
 
-  def mkCheckedLet(name: String, binding: Expr[NamePosType]) =
-    Let(name, binding, NamePosType(LocalName(name), Pos.Empty, binding.meta.typ))
+  def mkCheckedLet(name: String, binding: Expr[NameWithType]) =
+    Let(name, binding, Pos.Empty, NameWithType(LocalName(name), binding.meta.typ))
 
-  def mkCheckedInt(i: Int) = LiteralInt(i, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Int)))
-  def mkCheckedRef(r: String, typ: TypeScheme) = Reference(r, NamePosType(NoName, Pos.Empty, typ))
+  def mkCheckedInt(i: Int) = LiteralInt(i, Pos.Empty, NameWithType(NoName, TypeScheme(Type.Int)))
+  def mkCheckedRef(r: String, typ: TypeScheme) = Reference(r, Pos.Empty, NameWithType(NoName, typ))
 
   val noImports = Map.empty[String, TopLevelDeclaration[NameWithType]]
 

@@ -3,7 +3,7 @@ package inc.parser
 import fastparse._, NoWhitespace._
 import inc.common._
 import java.lang.{ Boolean, Character, Double, Float, Integer, Long, String }
-import scala.{ Either, Right, Some, None }
+import scala.{ Either, Right, Some, None, Unit }
 import scala.collection.immutable.{ List, Seq }
 import scala.Predef.augmentString
 
@@ -37,7 +37,7 @@ object Parser {
 
   def literalBoolean[_: P] = P(Index ~ ("true" | "false").! ~ Index).map {
     case (from, b, to) =>
-      LiteralBoolean(Boolean.parseBoolean(b), Pos(from, to))
+      LiteralBoolean(Boolean.parseBoolean(b), Pos(from, to), ())
   }
 
   val disallowedChars = "\\\n\r"
@@ -45,7 +45,7 @@ object Parser {
   val stringDisallowedChars = "\"" + disallowedChars
 
   def literalChar[_: P] = P(Index ~ "'" ~/ CharPred(c => !charDisallowedChars.contains(c)).! ~ "'" ~ Index).map {
-    case (from, s, to) => LiteralChar(s(0), Pos(from, to))
+    case (from, s, to) => LiteralChar(s(0), Pos(from, to), ())
   }
 
   def literalString[_: P] = P(
@@ -54,15 +54,15 @@ object Parser {
       Index
   ).map {
     case (from, s, to) =>
-      LiteralString(s, Pos(from, to))
+      LiteralString(s, Pos(from, to), ())
   }
 
   def literalIntegral[_: P] = P(Index ~ (zero | digitsLeadingOneToNine) ~ CharIn("lL").?.! ~ Index).map {
     case (from, num, suffix, to) =>
       if (suffix.isEmpty)
-        LiteralInt(Integer.parseInt(num), Pos(from, to))
+        LiteralInt(Integer.parseInt(num), Pos(from, to), ())
       else
-        LiteralLong(Long.parseLong(num), Pos(from, to))
+        LiteralLong(Long.parseLong(num), Pos(from, to), ())
   }
 
   def exponentPart[_: P] = P(
@@ -80,16 +80,16 @@ object Parser {
       Index
   ).map {
     case (from, wholeNumberPart, fractionPart, exponentPart, "", to) =>
-      LiteralDouble(Double.parseDouble(wholeNumberPart + "." + fractionPart + exponentPart), Pos(from, to))
+      LiteralDouble(Double.parseDouble(wholeNumberPart + "." + fractionPart + exponentPart), Pos(from, to), ())
     case (from, wholeNumberPart, fractionPart, exponentPart, suffix, to) if suffix.toUpperCase == "D" =>
-      LiteralDouble(Double.parseDouble(wholeNumberPart + "." + fractionPart + exponentPart), Pos(from, to))
+      LiteralDouble(Double.parseDouble(wholeNumberPart + "." + fractionPart + exponentPart), Pos(from, to), ())
     case (from, wholeNumberPart, fractionPart, exponentPart, suffix, to) if suffix.toUpperCase == "F" =>
-      LiteralFloat(Float.parseFloat(wholeNumberPart + "." + fractionPart + exponentPart), Pos(from, to))
+      LiteralFloat(Float.parseFloat(wholeNumberPart + "." + fractionPart + exponentPart), Pos(from, to), ())
   }
 
   def literalUnit[_: P] = P(Index ~ "()" ~ Index).map {
     case (from, to) =>
-      LiteralUnit(Pos(from, to))
+      LiteralUnit(Pos(from, to), ())
   }
 
   def literal[_: P] =
@@ -111,7 +111,7 @@ object Parser {
 
   def reference[_: P] = P(Index ~ identifier ~ Index).map {
     case (from, id, to) =>
-      Reference(id, Pos(from, to))
+      Reference(id, Pos(from, to), ())
   }
 
   def ifExpr[_: P] = P(
@@ -121,14 +121,14 @@ object Parser {
       "else" ~ nonZeroWs ~ expression ~ Index ~ ws
   ).map {
     case (from, cond, thenExpr, elseExpr, to) =>
-      If(cond, thenExpr, elseExpr, Pos(from, to))
+      If(cond, thenExpr, elseExpr, Pos(from, to), ())
   }
 
   def param[_: P] = P(
     Index ~ identifier ~ Index
   ).map {
     case (from, name, to) =>
-      Param(name, Pos(from, to))
+      Param(name, Pos(from, to), ())
   }
 
   def lambda[_: P] = P(
@@ -138,18 +138,18 @@ object Parser {
       Index
   ).map {
     case (from, params, expr, to) =>
-      Lambda(params.toList, expr, Pos(from, to))
+      Lambda(params.toList, expr, Pos(from, to), ())
   }
 
-  def application[_: P]: P[Expr[Pos] => Expr[Pos]] = P(
+  def application[_: P]: P[Expr[Unit] => Expr[Unit]] = P(
     Index ~ inParens(expression.rep(sep = comma./)) ~ Index
   ).map {
     case (from, args, to) =>
-      fn => Apply(fn, args.toList, Pos(from, to))
+      fn => Apply(fn, args.toList, Pos(from, to), ())
   }
 
   // NoCut allows us to backtrack out of a nullary lambda into a unit literal, and from an if statement into an identifier starting with "if"
-  def expression[_: P]: P[Expr[Pos]] = P( (NoCut(lambda) | NoCut(ifExpr) | literal | reference) ~ application.rep ).map {
+  def expression[_: P]: P[Expr[Unit]] = P( (NoCut(lambda) | NoCut(ifExpr) | literal | reference) ~ application.rep ).map {
     case (expr, applications) =>
       applications.foldLeft(expr) {
         case (expr, app) =>
@@ -163,24 +163,27 @@ object Parser {
       Index ~ ws
   ).map {
     case (from, name, expr, to) =>
-      Let(name, expr, Pos(from, to))
+      Let(name, expr, Pos(from, to), ())
   }
 
   def decl[_: P] = P(letDeclaration)
 
   def imports[_: P] = P {
-    "import" ~/ nonZeroWs ~ identifier.rep(min = 1, sep = ".") ~ ("." ~ inBraces(identifier.rep(min = 1, sep = comma./))).?
+    Index ~ "import" ~/ nonZeroWs ~
+      identifier.rep(min = 1, sep = ".") ~
+        ("." ~ inBraces(identifier.rep(min = 1, sep = comma./))).? ~
+        Index ~ ws
   }.map {
-    case (ident, Some(symbols)) =>
+    case (from, ident, Some(symbols), to) =>
       if (ident.length > 1)
-        ImportSymbols(ident.init.toList, ident.last, symbols.toList)
+        ImportSymbols(ident.init.toList, ident.last, symbols.toList, Pos(from, to))
       else
-        ImportSymbols(List.empty, ident.head, symbols.toList)
-    case (ident, None) =>
+        ImportSymbols(List.empty, ident.head, symbols.toList, Pos(from, to))
+    case (from, ident, None, to) =>
       if (ident.length > 1)
-        ImportModule(ident.init.toList, ident.last)
+        ImportModule(ident.init.toList, ident.last, Pos(from, to))
       else
-        ImportModule(List.empty, ident.head)
+        ImportModule(List.empty, ident.head, Pos(from, to))
   }
 
   def bracesBlock[_: P] = P(inBraces(imports.rep(sep = maybeSemi) ~ maybeSemi ~ decl.rep(sep = maybeSemi)))
@@ -194,12 +197,12 @@ object Parser {
     case (from, moduleName, (imports, decls), to) =>
       val pos = Pos(from, to)
       if (moduleName.length > 1)
-        Module(moduleName.dropRight(1).toList, moduleName.lastOption.getOrElse(""), imports.toList, decls.toList, pos)
+        Module(moduleName.dropRight(1).toList, moduleName.lastOption.getOrElse(""), imports.toList, decls.toList, pos, ())
       else
-        Module(List.empty, moduleName.headOption.getOrElse(""), imports.toList, decls.toList, pos)
+        Module(List.empty, moduleName.headOption.getOrElse(""), imports.toList, decls.toList, pos, ())
   }
 
-  def parse(fileContents: String): Either[List[ParserError], Module[Pos]] = {
+  def parse(fileContents: String): Either[List[ParserError], Module[Unit]] = {
     fastparse.parse(fileContents, module(_)) match {
       case Parsed.Success(mod, _) =>
         Right(mod)

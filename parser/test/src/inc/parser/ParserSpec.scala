@@ -1,6 +1,5 @@
 package inc.parser
 
-import cats.implicits._
 import inc.common._
 import org.scalatest._
 import org.scalatest.prop._
@@ -8,11 +7,36 @@ import org.scalatest.prop._
 class ParserSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks {
 
   def parseProgram(prog: String): Module[Unit] =
-    Parser.parse(prog).fold(err => fail(err.head.msg), identity).void
+    Parser.parse(prog).fold(err => fail(err.head.msg), identity)
+
+  def mkMod(name: String, decls: List[TopLevelDeclaration[Unit]]): Module[Unit] =
+    Module(List.empty, name, List.empty, decls, Pos.Empty, ())
+  def mkMod(pkg: List[String], name: String, decls: List[TopLevelDeclaration[Unit]]): Module[Unit] =
+    Module(pkg, name, List.empty, decls, Pos.Empty, ())
+  def mkMod(pkg: List[String], name: String, imports: List[Import], decls: List[TopLevelDeclaration[Unit]]): Module[Unit] =
+    Module(pkg, name, imports, decls, Pos.Empty, ())
+  def mkLet(name: String, binding: Expr[Unit]): Let[Unit] =
+    Let(name, binding, Pos.Empty, ())
+  def mkInt(i: Int): LiteralInt[Unit] =
+    LiteralInt(i, Pos.Empty, ())
+  def mkLong(l: Long): LiteralLong[Unit] =
+    LiteralLong(l, Pos.Empty, ())
+  def mkBool(b: Boolean): LiteralBoolean[Unit] =
+    LiteralBoolean(b, Pos.Empty, ())
+  def mkFloat(l: Float): LiteralFloat[Unit] =
+    LiteralFloat(l, Pos.Empty, ())
+  def mkDouble(l: Double): LiteralDouble[Unit] =
+    LiteralDouble(l, Pos.Empty, ())
+  def mkRef(name: String): Reference[Unit] =
+    Reference(name, Pos.Empty, ())
+  def mkUnit(): LiteralUnit[Unit] =
+    LiteralUnit(Pos.Empty, ())
+  def mkIf(cond: Expr[Unit], thenExpr: Expr[Unit], elseExpr: Expr[Unit]): If[Unit] =
+    If(cond, thenExpr, elseExpr, Pos.Empty, ())
 
   "Parser" should "parse literal integers" in {
-    val mod = Module(List.empty, "Integer", List.empty, List(Let("integer", LiteralInt(42, ()), ())), ())
-    val mod2 = Module(List.empty, "Integer", List.empty, List(Let("integer", LiteralInt(42, ()), ()), Let("integer2", LiteralInt(0, ()), ())), ())
+    val mod = mkMod("Integer", List(mkLet("integer", mkInt(42))))
+    val mod2 = mkMod("Integer", List(mkLet("integer2", mkInt(0))))
 
     parseProgram("module Integer { let integer = 42 }") shouldBe mod
 
@@ -75,8 +99,8 @@ class ParserSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChec
   }
 
   it should "parse literal longs" in {
-    val mod = Module(List.empty, "Long", List.empty, List(Let("long", LiteralLong(42L, ()), ())), ())
-    val mod2 = Module(List.empty, "Long", List.empty, List(Let("long", LiteralLong(42L, ()), ()), Let("long2", LiteralLong(0L, ()), ())), ())
+    val mod = mkMod("Long", List(mkLet("long", mkLong(42L))))
+    val mod2 = mkMod("Long", List(mkLet("long2", mkLong(0L))))
 
     parseProgram("module Long { let long = 42L }") shouldBe mod
 
@@ -139,8 +163,8 @@ class ParserSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChec
   }
 
   it should "parse literal booleans" in {
-    val mod = Module(List.empty, "Boolean", List.empty, List(Let("boolean", LiteralBoolean(true, ()), ())), ())
-    val mod2 = Module(List.empty, "Boolean", List.empty, List(Let("boolean", LiteralBoolean(false, ()), ()), Let("boolean2", LiteralBoolean(true, ()), ())), ())
+    val mod = mkMod("Boolean", List(mkLet("boolean", mkBool(true))))
+    val mod2 = mkMod("Boolean", List(mkLet("boolean", mkBool(false)), mkLet("boolean2", mkBool(true))))
 
     parseProgram(
       """
@@ -154,8 +178,8 @@ class ParserSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChec
   }
 
   it should "parse literal floats and doubles" in {
-    val mod = Module(List.empty, "Float", List.empty, List(Let("float", LiteralFloat(3.142f, ()), ())), ())
-    val mod2 = Module(List.empty, "Double", List.empty, List(Let("double", LiteralDouble(3.142d, ()), ()), Let("double2", LiteralDouble(0.0001d, ()), ())), ())
+    val mod = mkMod("Float", List(mkLet("float", mkFloat(3.142f))))
+    val mod2 = mkMod("Double", List(mkLet("double", mkDouble(3.142d)), mkLet("double2", mkDouble(0.0001D))))
 
     parseProgram(
       """
@@ -174,15 +198,15 @@ class ParserSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChec
   }
 
   it should "parse references to other fields" in {
-    val mod = Module(List.empty, "Float", List.empty, List(
-      Let("float", LiteralFloat(3.142f, ()), ()),
-      Let("float2", Reference("float", ()), ())
-    ), ())
-    val mod2 = Module(List.empty, "Double", List.empty, List(
-      Let("double", LiteralDouble(3.142d, ()), ()),
-      Let("double2", LiteralDouble(0.0001d, ()), ()),
-      Let("double3", Reference("double2", ()), ())
-    ), ())
+    val mod = mkMod("Float", List(
+      mkLet("float", mkFloat(3.142f)),
+      mkLet("float2", mkRef("float"))
+    ))
+    val mod2 = mkMod("Double", List(
+      mkLet("double", mkDouble(3.142d)),
+      mkLet("double2", mkDouble(0.0001d)),
+      mkLet("double3", mkRef("double2"))
+    ))
 
     parseProgram(
       """
@@ -197,8 +221,8 @@ class ParserSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChec
 
 
   it should "parse literal unit" in {
-    val mod = Module(List.empty, "Unit", List.empty, List(Let("unit", LiteralUnit(()), ())), ())
-    val mod2 = Module(List.empty, "Unit", List.empty, List(Let("unit", LiteralUnit(()), ()), Let("unit2", LiteralUnit(()), ())), ())
+    val mod = mkMod("Unit", List(mkLet("unit", mkUnit())))
+    val mod2 = mkMod("Unit", List(mkLet("unit", mkUnit()), mkLet("unit2", mkUnit())))
 
     parseProgram(
       """
@@ -212,8 +236,8 @@ class ParserSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChec
   }
 
   it should "parse package names" in {
-    val mod = Module(List("Test"), "Float", List.empty, List(Let("float", LiteralFloat(3.142f, ()), ())), ())
-    val mod2 = Module(List("Test", "Parser"), "Double", List.empty, List(Let("double", LiteralDouble(3.142d, ()), ()), Let("double2", LiteralDouble(0.0001d, ()), ())), ())
+    val mod = mkMod(List("Test"), "Float", List(mkLet("float", mkFloat(3.142f))))
+    val mod2 = mkMod(List("Test", "Parser"), "Double", List(mkLet("double", mkDouble(3.142d)), mkLet("double2", mkDouble(0.0001d))))
 
     parseProgram(
       """
@@ -227,17 +251,15 @@ class ParserSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChec
   }
 
   it should "parse module imports" in {
-    val mod = Module(
+    val mod = mkMod(
       List("Test"), "Float",
-      List(ImportModule(List("Test"), "Import")),
-      List(Let("float", LiteralFloat(3.142f, ()), ())),
-      ()
+      List(ImportModule(List("Test"), "Import", Pos.Empty)),
+      List(mkLet("float", mkFloat(3.142f)))
     )
-    val mod2 = Module(
+    val mod2 = mkMod(
       List("Test", "Parser"), "Double",
-      List(ImportSymbols(List("Test"), "Import", List("foo", "bar", "Baz"))),
-      List(Let("double", LiteralDouble(3.142d, ()), ()), Let("double2", LiteralDouble(0.0001d, ()), ())),
-      ()
+      List(ImportSymbols(List("Test"), "Import", List("foo", "bar", "Baz"), Pos.Empty)),
+      List(mkLet("double", mkDouble(3.142d)), mkLet("double2", mkDouble(0.0001d)))
     )
 
     parseProgram(
@@ -252,8 +274,13 @@ class ParserSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChec
   }
 
   it should "parse if expressions" in {
-    val mod = Module(List.empty, "Integer", List.empty, List(Let("integer", If(LiteralBoolean(true, ()), LiteralInt(42, ()), LiteralInt(41, ()), ()), ())), ())
-    val mod2 = Module(List.empty, "Integer", List.empty, List(Let("integer", If(LiteralBoolean(true, ()), LiteralInt(42, ()), LiteralInt(41, ()), ()), ()), Let("integer2", If(LiteralBoolean(true, ()), LiteralInt(0, ()), LiteralInt(1, ()), ()), ())), ())
+    val mod = mkMod("Integer", List(
+      mkLet("integer", mkIf(mkBool(true), mkInt(42), mkInt(41)))
+    ))
+    val mod2 = mkMod("Integer", List(
+      mkLet("integer", mkIf(mkBool(true), mkInt(42), mkInt(41))),
+      mkLet("integer2", mkIf(mkBool(true), mkInt(0), mkInt(1)))
+    ))
 
     parseProgram("module Integer { let integer = if true then 42 else 41 }") shouldBe mod
 

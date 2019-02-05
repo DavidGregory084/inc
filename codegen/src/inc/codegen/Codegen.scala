@@ -255,27 +255,27 @@ object Codegen {
       staticInitializer.visitFieldInsn(PUTSTATIC, enclosingClass, fieldName, fieldDescriptor)
     }
 
-  def newExpr(classWriter: ClassWriter, className: String, generator: GeneratorAdapter, outerName: String, arguments: Map[String, Int], locals: Map[String, Int])(expr: Expr[NamePosType]): Either[List[CodegenError], Unit] = expr match {
-    case LiteralInt(i, _) =>
+  def newExpr(classWriter: ClassWriter, className: String, generator: GeneratorAdapter, outerName: String, arguments: Map[String, Int], locals: Map[String, Int])(expr: Expr[NameWithType]): Either[List[CodegenError], Unit] = expr match {
+    case LiteralInt(i, _, _) =>
       Right(generator.visitLdcInsn(i))
-    case LiteralLong(l, _) =>
+    case LiteralLong(l, _, _) =>
       Right(generator.visitLdcInsn(l))
-    case LiteralFloat(f, _) =>
+    case LiteralFloat(f, _, _) =>
       Right(generator.visitLdcInsn(f))
-    case LiteralDouble(d, _) =>
+    case LiteralDouble(d, _, _) =>
       Right(generator.visitLdcInsn(d))
-    case LiteralBoolean(b, _) =>
+    case LiteralBoolean(b, _, _) =>
       Right(generator.visitLdcInsn(b))
-    case LiteralChar(c, _) =>
+    case LiteralChar(c, _, _) =>
       Right(generator.visitLdcInsn(c))
-    case LiteralString(s, _) =>
+    case LiteralString(s, _, _) =>
       Right(generator.visitLdcInsn(s))
-    case LiteralUnit(_) =>
+    case LiteralUnit(_, _) =>
       val unitClass = classOf[IncUnit]
       val descriptor = AsmType.getDescriptor(unitClass)
       val internalName = AsmType.getInternalName(unitClass)
       Right(generator.visitFieldInsn(GETSTATIC, internalName, "instance", descriptor))
-    case If(cond, thenExpr, elseExpr, _) =>
+    case If(cond, thenExpr, elseExpr, _, _) =>
       val trueLabel = new Label
       val falseLabel = new Label
       for {
@@ -287,9 +287,10 @@ object Codegen {
         _ <- newExpr(classWriter, className, generator, outerName, arguments, locals)(elseExpr)
         _ = generator.visitLabel(trueLabel)
       } yield ()
-    case Reference(ref, nameWithType) =>
+    case Reference(ref, _, nameWithType) =>
       for {
         descriptor <- descriptorFor(nameWithType.typ)
+        _ = scala.Predef.println(arguments)
         internalName = getInternalName(nameWithType.name, className)
         _ <- nameWithType.name match {
           case MemberName(_, _, _) =>
@@ -301,7 +302,7 @@ object Codegen {
         }
       } yield ()
 
-    case Apply(fn, args, nameWithType) =>
+    case Apply(fn, args, _, nameWithType) =>
       val TypeScheme(_, TypeConstructor("->", tpArgs)) = fn.meta.typ
       val objectType = AsmType.getType(classOf[Object])
 
@@ -328,7 +329,8 @@ object Codegen {
         if (!nameWithType.typ.typ.isPrimitive) generator.visitTypeInsn(CHECKCAST, retTp.getInternalName)
       }
 
-    case lam @ Lambda(params, body, nameWithType) =>
+    case lam @ Lambda(params, body, _, nameWithType) =>
+      scala.Predef.println(arguments)
       val TypeScheme(_, TypeConstructor("->", tpArgs)) = nameWithType.typ
 
       val capturedVars = lam.capturedVariables.toList
@@ -350,15 +352,20 @@ object Codegen {
       val prependedParams = capturedVarsWithIdx.map {
         case (v, i) =>
           val newName = "captured$" + i
-          Param(newName, v.meta.copy(name = LocalName(newName)))
+          Param(newName, Pos.Empty, v.meta.copy(name = LocalName(newName)))
       }
 
       // Replace all references to the captured variables with the adapted args
       val replaceCaptured = capturedVarsWithIdx.map {
         case (v, i) =>
           val newName = "captured$" + i
-          (v.copy(meta = v.meta.withEmptyPos), Reference(newName, v.meta.copy(name = LocalName(newName))))
+          // val capturedVar = v.copy(pos = Pos.Empty)
+          val adaptedArgMeta = v.meta.copy(name = LocalName(newName))
+          val adaptedArg = Reference(newName, Pos.Empty, adaptedArgMeta)
+          (v, adaptedArg)
       }.toMap
+
+      scala.Predef.println("Replace:" + replaceCaptured)
 
       val typeForLambda = asmTypeOf(nameWithType.typ.typ)
 
@@ -412,45 +419,45 @@ object Codegen {
       }
   }
 
-  def newTopLevelLet(className: String, classWriter: ClassWriter, staticInitializer: GeneratorAdapter, let: Let[NamePosType]): Either[List[CodegenError], Unit] = {
+  def newTopLevelLet(className: String, classWriter: ClassWriter, staticInitializer: GeneratorAdapter, let: Let[NameWithType]): Either[List[CodegenError], Unit] = {
     let.binding match {
-      case LiteralInt(i, _) =>
+      case LiteralInt(i, _, _) =>
         newStaticField(classWriter)(let.name, AsmType.INT_TYPE.getDescriptor, i)
-      case LiteralLong(l, _) =>
+      case LiteralLong(l, _, _) =>
         newStaticField(classWriter)(let.name, AsmType.LONG_TYPE.getDescriptor, l)
-      case LiteralFloat(f, _) =>
+      case LiteralFloat(f, _, _) =>
         newStaticField(classWriter)(let.name, AsmType.FLOAT_TYPE.getDescriptor, f)
-      case LiteralDouble(d, _) =>
+      case LiteralDouble(d, _, _) =>
         newStaticField(classWriter)(let.name, AsmType.DOUBLE_TYPE.getDescriptor, d)
-      case LiteralBoolean(b, _) =>
+      case LiteralBoolean(b, _, _) =>
         newStaticField(classWriter)(let.name, AsmType.BOOLEAN_TYPE.getDescriptor, b)
-      case LiteralChar(c, _) =>
+      case LiteralChar(c, _, _) =>
         newStaticField(classWriter)(let.name, AsmType.CHAR_TYPE.getDescriptor, c)
-      case LiteralString(s, _) =>
+      case LiteralString(s, _, _) =>
         newStaticField(classWriter)(let.name, AsmType.getDescriptor(classOf[String]), s)
-      case LiteralUnit(_) =>
+      case LiteralUnit(_, _) =>
         val unitClass = classOf[IncUnit]
         val descriptor = AsmType.getDescriptor(unitClass)
         val internalName = AsmType.getInternalName(unitClass)
         newStaticFieldFrom(classWriter, className, staticInitializer)(let.name, descriptor, internalName, "instance")
-      case Reference(ref, nameWithType) =>
+      case Reference(ref, _, nameWithType) =>
         descriptorFor(nameWithType.typ).flatMap { descriptor =>
           val internalName = getInternalName(nameWithType.name, enclosingClass = className)
           newStaticFieldFrom(classWriter, className, staticInitializer)(let.name, descriptor, internalName, ref)
         }
-      case ifExpr @ If(_, _, _, nameWithType) =>
+      case ifExpr @ If(_, _, _, _, nameWithType) =>
         for {
           descriptor <- descriptorFor(nameWithType.typ)
           _ <- newStaticField(classWriter)(let.name, descriptor, null)
           _ <- newExpr(classWriter, className, staticInitializer, let.name, Map.empty, Map.empty)(ifExpr)
         } yield staticInitializer.visitFieldInsn(PUTSTATIC, className, let.name, descriptor)
-      case lam @ Lambda(_, _, nameWithType) =>
+      case lam @ Lambda(_, _, _, nameWithType) =>
         for {
           descriptor <- descriptorFor(nameWithType.typ)
           _ <- newStaticField(classWriter)(let.name, descriptor, null)
           _ <- newExpr(classWriter, className, staticInitializer, let.name, Map.empty, Map.empty)(lam)
         } yield staticInitializer.visitFieldInsn(PUTSTATIC, className, let.name, descriptor)
-      case apply @ Apply(_, _, nameWithType) =>
+      case apply @ Apply(_, _, _, nameWithType) =>
         for {
           descriptor <- descriptorFor(nameWithType.typ)
           _ <- newStaticField(classWriter)(let.name, descriptor, null)
@@ -459,9 +466,9 @@ object Codegen {
     }
   }
 
-  def newTopLevelDeclaration(internalName: String, cw: ClassWriter, siv: GeneratorAdapter, decl: TopLevelDeclaration[NamePosType]): Either[List[CodegenError], Unit] =
+  def newTopLevelDeclaration(internalName: String, cw: ClassWriter, siv: GeneratorAdapter, decl: TopLevelDeclaration[NameWithType]): Either[List[CodegenError], Unit] =
     decl match {
-      case let @ Let(_, _, _) =>
+      case let @ Let(_, _, _, _) =>
         newTopLevelLet(internalName, cw, siv, let)
     }
 
@@ -476,7 +483,7 @@ object Codegen {
       pkgName + declaringClass
   }
 
-  def generate(mod: Module[NamePosType]): Either[List[CodegenError], Array[Byte]] = {
+  def generate(mod: Module[NameWithType]): Either[List[CodegenError], Array[Byte]] = {
     val className = getInternalName(mod.meta.name, mod.name)
 
     liftedDefns.set(0)

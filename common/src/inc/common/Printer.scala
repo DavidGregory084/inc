@@ -79,29 +79,29 @@ object Printer {
   }
 
   def print[A](e: Expr[A]): Doc = e match {
-    case LiteralInt(i, _) =>
+    case LiteralInt(i, _, _) =>
       Doc.str(i)
-    case LiteralLong(l, _) =>
+    case LiteralLong(l, _, _) =>
       Doc.str(l + "L")
-    case LiteralFloat(f, _) =>
+    case LiteralFloat(f, _, _) =>
       Doc.str(f + "F")
-    case LiteralDouble(d, _) =>
+    case LiteralDouble(d, _, _) =>
       Doc.str(d)
-    case LiteralBoolean(b, _) =>
+    case LiteralBoolean(b, _, _) =>
       Doc.str(b)
-    case LiteralChar(c, _) =>
+    case LiteralChar(c, _, _) =>
       Doc.char('\'') + Doc.str(c) + Doc.char('\'')
-    case LiteralString(s, _) =>
+    case LiteralString(s, _, _) =>
       Doc.char('"') + Doc.str(s) + Doc.char('"')
-    case LiteralUnit(_) =>
+    case LiteralUnit(_, _) =>
       Doc.text("()")
-    case Reference(ref, _) =>
+    case Reference(ref, _, _) =>
       Doc.text(ref)
-    case If(c, t, e, _) =>
+    case If(c, t, e, _, _) =>
       Doc.text("if") & print(c) /
         (Doc.text("then") & print(t)).nested(2) /
         (Doc.text("else") & print(e)).nested(2)
-    case Lambda(params, b, _) =>
+    case Lambda(params, b, _, _) =>
       val args =
         if (params.length == 1)
           Doc.text(params.head.name)
@@ -113,7 +113,7 @@ object Printer {
 
       args & Doc.text("->") & print(b).nested(2)
 
-    case Apply(fn, args, _) =>
+    case Apply(fn, args, _, _) =>
       val prefix = print(fn) + Doc.char('(')
       val suffix = Doc.char(')')
       val argsList = Doc.intercalate(Doc.char(',') + Doc.line, args.map(print(_)))
@@ -121,19 +121,19 @@ object Printer {
   }
 
   def print[A](decl: TopLevelDeclaration[A]): Doc = decl match {
-    case Let(name, binding, _) =>
+    case Let(name, binding, _, _) =>
       Doc.text("let") & Doc.text(name) & Doc.char('=') & print(binding).nested(2)
   }
 
   def print[A](mod: Module[A]): Doc = {
-    val Module(pkg, name, imports, declarations @ _, _) = mod
+    val Module(pkg, name, imports, declarations @ _, _, _) = mod
     val prefix = Doc.text("module") & Doc.text((pkg :+ name).mkString(".")) & Doc.char('{')
     val suffix = Doc.char('}')
 
     val imps = Doc.intercalate(Doc.char(';') + Doc.line, imports.map {
-      case ImportModule(pkg, name) =>
+      case ImportModule(pkg, name, _) =>
         Doc.text("import") & Doc.text((pkg :+ name).mkString("."))
-      case ImportSymbols(pkg, name, syms) =>
+      case ImportSymbols(pkg, name, syms, _) =>
         val impPrefix = Doc.text("import") & Doc.text((pkg :+ name).mkString(".")) + Doc.char('.') + Doc.char('{')
         val impSuffix = Doc.char('}')
         val impBody = Doc.intercalate(Doc.comma + Doc.line, syms.map(Doc.text))

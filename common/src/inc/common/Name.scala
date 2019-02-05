@@ -3,7 +3,13 @@ package inc.common
 import java.lang.{ Exception, String }
 import scala.collection.immutable.List
 
-sealed trait Name {
+sealed abstract class Name {
+  def withSimpleType(typ: Type): NameWithType =
+    NameWithType(this, TypeScheme(List.empty, typ))
+
+  def withType(typ: TypeScheme): NameWithType =
+    NameWithType(this, typ)
+
   def toProto: proto.Name = this match {
     case NoName => proto.NoName()
     case LocalName(nm) => proto.LocalName(nm)
