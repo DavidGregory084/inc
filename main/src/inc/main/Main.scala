@@ -131,7 +131,6 @@ object Main {
       case (pkg, nm, syms) =>
         val className = pkg.mkString("/") + "/" + nm + ".class"
         val classBytes = readClassBytes(classloader, className)
-
         val maybeInterface = Codegen.readInterface(classBytes)
 
         maybeInterface
