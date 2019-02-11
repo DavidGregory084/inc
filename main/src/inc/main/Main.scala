@@ -22,7 +22,7 @@ object Main {
   def main(args: Array[String]): Unit = {
     val dir = Paths.get(".")
 
-    var prog = ""
+    var mod = ""
 
     val parser = new scopt.OptionParser[Configuration]("inc") {
       head("inc", "0.1.0-SNAPSHOT")
@@ -46,17 +46,17 @@ object Main {
       opt[Unit]("print-timings")
         .action((_, config) => config.copy(printPhaseTiming = true))
 
-      arg[String]("<prog>").action{ (p, config) =>
-        prog = p
+      arg[String]("<module source>").action{ (m, config) =>
+        mod = m
         config
       }
     }
 
     parser.parse(args, Configuration()).foreach { config =>
-      compileProgram(dir, prog, config) match {
+      compileModule(dir, mod, config) match {
         case Left(errors) =>
           errors.map { e =>
-            Printer.withSourceContext(Some("<stdin>"), e.getMessage, e.pos, fansi.Color.Red, prog)
+            Printer.withSourceContext(Some("<stdin>"), e.getMessage, e.pos, fansi.Color.Red, mod)
           }.foreach(scribe.error(_))
           scribe.info(NL + Red("Failure") + NL)
         case Right(_) =>
@@ -158,19 +158,19 @@ object Main {
     }.map(_.iterator.toArray).toEither
   }
 
-  def compileProgram(dest: Path, prog: String, config: Configuration = Configuration.default): Either[List[Error], Path] = {
+  def compileModule(dest: Path, modSource: String, config: Configuration = Configuration.default): Either[List[Error], Path] = {
     val beforeAll = System.nanoTime
 
     for {
       urls <- parseUrls(config.classpath)
 
-      mod <- runPhase[Module[Pos]]("parser", config, _.printParser, Parser.parse(prog))
+      mod <- runPhase[Module[Pos]]("parser", config, _.printParser, Parser.parse(modSource))
 
       importedDecls = readEnvironment(mod.imports, new URLClassLoader(urls))
 
       resolved <- runPhase[Module[NameWithPos]]("resolver", config, _.printResolver, Resolver.resolve(mod, importedDecls))
 
-      checked <- runPhase[Module[NamePosType]]("typechecker", config, _.printTyper, Typechecker.typecheck(resolved, importedDecls, prog))
+      checked <- runPhase[Module[NamePosType]]("typechecker", config, _.printTyper, Typechecker.typecheck(resolved, importedDecls, modSource))
 
       code <- runPhase[Array[Byte]]("codegen", config, _.printCodegen, Codegen.generate(checked), Codegen.print(_))
 
