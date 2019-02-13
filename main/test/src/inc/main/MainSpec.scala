@@ -153,6 +153,15 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
     loadClassFrom(dir, "Test.Main." + classFile.toFile.toScala.nameWithoutExtension)
   }
 
+  it should "compile a function that accepts a function as argument" in withTmpDir { dir =>
+    val config = Configuration.default.copy(classpath = dir.toUri.toURL.toString)
+    val mod = """module Test.Main.Const { let const = (a, b) -> a; let foo = a -> "a"; let bar = f -> foo(f(42, 36)); let baz = foo(const) }"""
+    val result = Main.compileModule(dir, mod, config)
+    result shouldBe 'right
+    val classFile = result.right.get
+    loadClassFrom(dir, "Test.Main." + classFile.toFile.toScala.nameWithoutExtension)
+  }
+
   it should "compile a module that imports from another module" in withTmpDir { dir =>
     val config = Configuration.default.copy(classpath = dir.toUri.toURL.toString)
 

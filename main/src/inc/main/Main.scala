@@ -11,25 +11,45 @@ import cats.syntax.traverse._
 import java.lang.{ ClassLoader, String, System }
 import java.io.{ByteArrayOutputStream, File, InputStream, OutputStream}
 import java.net.{ URL, URLClassLoader }
+import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path, Paths}
 import scala.{ Array, Boolean, Byte, Long, Unit, Either, Left, Right, Option, Some, StringContext }
+import scala.collection.JavaConverters._
 import scala.collection.immutable.{ List, Map }
 import scala.Predef.{ ArrowAssoc, wrapRefArray }
+import scala.util.control.NonFatal
 
 case class ConfigError(private val position: Pos, private val message: String) extends Error(position, message)
 
 object Main {
   def main(args: Array[String]): Unit = {
-    val dir = Paths.get(".")
-
-    var mod = ""
+    var dir = Paths.get(".")
+    var file = ""
 
     val parser = new scopt.OptionParser[Configuration]("inc") {
       head("inc", Build.version)
 
+      help("help")
+
+      version("version")
+
       opt[String]("classpath")
         .abbr("cp")
         .action((cp, config) => config.copy(classpath = cp))
+
+      opt[String]("destination")
+        .abbr("d")
+        .validate { d =>
+          try {
+            Paths.get(d)
+            success
+          } catch {
+            case NonFatal(e) =>
+              failure(s"$d is not a valid path: ${e.getMessage}")
+          }
+        }.foreach { d =>
+          dir = Paths.get(d)
+        }
 
       opt[Unit]("print-parser")
         .action((_, config) => config.copy(printParser = true))
@@ -46,13 +66,26 @@ object Main {
       opt[Unit]("print-timings")
         .action((_, config) => config.copy(printPhaseTiming = true))
 
-      arg[String]("<module source>").action{ (m, config) =>
-        mod = m
-        config
-      }
+      arg[String]("<file>")
+        .validate { f =>
+          try {
+            val path = Paths.get(f)
+            if (Files.exists(path))
+              success
+            else
+              failure(s"The file $f does not exist")
+          } catch {
+            case NonFatal(e) =>
+              failure(s"The file $f is not valid: ${e.getMessage}")
+          }
+        }.foreach { f =>
+          file = f
+        }
     }
 
     parser.parse(args, Configuration()).foreach { config =>
+      val mod = readFileAsString(Paths.get(file))
+
       compileModule(dir, mod, config) match {
         case Left(errors) =>
           errors.map { e =>
@@ -64,6 +97,10 @@ object Main {
       }
     }
   }
+
+  def readFileAsString(path: Path) = Files
+    .readAllLines(path, StandardCharsets.UTF_8)
+    .asScala.mkString
 
   def printPhaseTiming(phase: String, before: Long, after: Long): Unit =
     scribe.info(NL + s"Completed $phase in ${(after - before) / 1000000}ms")
