@@ -5,6 +5,10 @@
 
 Experiments with [An Incremental Approach to Compiler Construction](http://scheme2006.cs.uchicago.edu/11-ghuloum.pdf) on the JVM.
 
+## Disclaimer
+
+This is a hobby project. Expect lots of bugs and don't expect to be able to use this for anything useful.
+
 ## Getting started
 
 This project is built with [mill](https://www.lihaoyi.com/mill/) version 0.3.6 and requires Java 8 or above to be installed.
