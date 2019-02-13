@@ -11,10 +11,22 @@ import mill.contrib.BuildInfo
 import $ivy.`io.github.davidgregory084::mill-tpolecat:0.1.0`
 import io.github.davidgregory084.TpolecatModule
 
-trait ScalaSettingsModule extends TpolecatModule with PublishModule {
-  def scalaVersion = "2.12.8"
-
+trait PublishSettingsModule extends PublishModule {
   def publishVersion = "0.1.0-SNAPSHOT"
+
+  def pomSettings = PomSettings(
+    description = artifactName(),
+    organization = "io.github.davidgregory084",
+    url = "https://github.com/DavidGregory084/inc",
+    licenses = Seq(License.`Apache-2.0`),
+    versionControl = VersionControl.github("DavidGregory084", "inc"),
+    developers = Seq(Developer("DavidGregory084", "David Gregory", "https://github.com/DavidGregory084"))
+  )
+
+}
+
+trait ScalaSettingsModule extends TpolecatModule with PublishSettingsModule {
+  def scalaVersion = "2.12.8"
 
   def scalacPluginIvyDeps = Agg(
     ivy"com.olegpy::better-monadic-for:0.3.0-M4",
@@ -28,15 +40,6 @@ trait ScalaSettingsModule extends TpolecatModule with PublishModule {
       "-Yrangepos"
     )
   }
-
-  def pomSettings = PomSettings(
-    description = artifactName(),
-    organization = "io.github.davidgregory084",
-    url = "https://github.com/DavidGregory084/inc",
-    licenses = Seq(License.`Apache-2.0`),
-    versionControl = VersionControl.github("DavidGregory084", "inc"),
-    developers = Seq(Developer("DavidGregory084", "David Gregory", "https://github.com/DavidGregory084"))
-  )
 
   trait Test extends Tests {
     def ivyDeps = Agg(
@@ -73,7 +76,7 @@ object common extends ScalaSettingsModule {
   object test extends super.Test
 }
 
-object rts extends ScalaSettingsModule
+object rts extends JavaModule with PublishSettingsModule
 
 object parser extends ScalaSettingsModule {
   def moduleDeps = Seq(common)
