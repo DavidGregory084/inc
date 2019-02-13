@@ -45,7 +45,7 @@ object Main {
             success
           } catch {
             case NonFatal(e) =>
-              failure(s"$d is not a valid path: ${e.getMessage}")
+              failure(s"The destination $d is not valid: ${e.getMessage}")
           }
         }.foreach { d =>
           dir = Paths.get(d)
