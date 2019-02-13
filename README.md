@@ -76,7 +76,7 @@ module Test.Id {
 }
 
 module Test.Compose {
-  import Test.Func.{ compose }
+  import Test.Func.{ compose, id }
   let pointless = compose(id)(id)(1)
 }
 ```
