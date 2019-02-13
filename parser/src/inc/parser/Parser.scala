@@ -3,26 +3,26 @@ package inc.parser
 import fastparse._, NoWhitespace._
 import inc.common._
 import java.lang.{ Boolean, Character, Double, Float, Integer, Long, String }
-import scala.{ Either, Right, Some, None }
+import scala.{ Either, Right, Int, Some, None, StringContext }
 import scala.collection.immutable.{ List, Seq }
 import scala.Predef.augmentString
 
 object Parser {
   def ReservedWords[_: P] = P(
-    (
-      "module" |
-      "import" |
-      "let" |
-      "if" |
-      "then" |
+    StringIn(
+      "module",
+      "import",
+      "let",
+      "if",
+      "then",
       "else"
     ) ~/ nonZeroWs
   )
 
   // Whitespace
-  def ws[_: P] = P(CharsWhile(_ == ' ', min = 0))
-  def allWs[_: P] = P(CharsWhile(Character.isWhitespace, min = 0))
-  def nonZeroWs[_: P] = P(CharsWhile(Character.isWhitespace, min = 1))
+  def ws[_: P] = P(CharsWhile(_ == ' ', 0))
+  def allWs[_: P] = P(CharsWhile(Character.isWhitespace, 0))
+  def nonZeroWs[_: P] = P(CharsWhile(Character.isWhitespace, 1))
 
   // Separators
   def maybeSemi[_: P] = P(";".? ~ allWs)
@@ -30,12 +30,12 @@ object Parser {
 
   // Literals
   def zero[_: P] = P("0".!)
-  def oneToNine[_: P] = P(CharIn("1-9"))
-  def zeroToNine[_: P] = P(CharIn("0-9"))
-  def digits[_: P] = P(zeroToNine.rep.!)
-  def digitsLeadingOneToNine[_: P] = P((oneToNine.rep(exactly = 1).! ~ zeroToNine.rep.!).map { case (first, rest) => first + rest })
+  def oneToNine[_: P] = P(CharIn("1-9").!)
+  def zeroToNine[_: P] = P(CharIn("0-9").!)
+  def digits[_: P] = P(CharsWhileIn("0-9", 0).!)
+  def digitsLeadingOneToNine[_: P] = P((oneToNine ~ digits) map { case (first, rest) => first + rest })
 
-  def literalBoolean[_: P] = P(Index ~ ("true" | "false").! ~ Index).map {
+  def literalBoolean[_: P] = P(Index ~ StringIn("true", "false").! ~ Index).map {
     case (from, b, to) =>
       LiteralBoolean(Boolean.parseBoolean(b), Pos(from, to))
   }
@@ -50,7 +50,7 @@ object Parser {
 
   def literalString[_: P] = P(
     Index ~
-      "\"" ~/ CharsWhile(c => !stringDisallowedChars.contains(c), min = 0).! ~ "\"" ~
+      "\"" ~/ CharsWhile(c => !stringDisallowedChars.contains(c), 0).! ~ "\"" ~
       Index
   ).map {
     case (from, s, to) =>
@@ -76,7 +76,7 @@ object Parser {
 
   def literalFloatingPoint[_: P] = P(
     Index ~
-      (zero | digitsLeadingOneToNine) ~ "." ~/ digits ~ exponentPart ~ (CharIn("dD") | CharIn("fF")).?.! ~
+      (zero | digitsLeadingOneToNine) ~ "." ~/ digits ~ exponentPart ~ CharIn("dDfF").?.! ~
       Index
   ).map {
     case (from, wholeNumberPart, fractionPart, exponentPart, "", to) =>
@@ -101,7 +101,7 @@ object Parser {
       literalUnit
 
   // Identifiers
-  def identifier[_: P] = !ReservedWords ~ P((CharPred(Character.isJavaIdentifierStart).! ~ CharsWhile(Character.isJavaIdentifierPart).rep.!).map {
+  def identifier[_: P] = !ReservedWords ~ P((CharPred(Character.isJavaIdentifierStart).! ~ CharsWhile(Character.isJavaIdentifierPart, 0).!).map {
     case (first, rest) => first + rest
   })
 
