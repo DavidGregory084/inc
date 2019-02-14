@@ -1,10 +1,13 @@
 package inc
 
 import java.lang.{ String, System }
+import qq.droste.data.Fix
 import scribe._
 import scribe.format._
 
 package object common {
+  type ExprF[A] = Fix[Expr[A, ?]]
+
   Logger.root
     .clearHandlers()
     .withHandler(formatter = Formatter.simple)

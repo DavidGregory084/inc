@@ -3,6 +3,7 @@ package inc.common
 import cats.data.Chain
 import java.lang.String
 import org.typelevel.paiges._
+import qq.droste._
 import scala.{ Array, Option }
 import scala.collection.immutable.Map
 import scala.Predef.{ArrowAssoc, StringCanBuildFrom, augmentString, genericArrayOps}
@@ -51,24 +52,36 @@ object Printer {
     }.mkString(", ")
   }
 
+  def printArg(typ: Type): String = typ match {
+    case TypeConstructor("->", tyParams) =>
+      val args =
+        if (tyParams.length == 2)
+          printArg(tyParams.head)
+        else
+          tyParams.init.map(printArg).mkString(Yellow("("), ", ", Yellow(")"))
+
+        "(" + args + Yellow(" -> ") + print(tyParams.last) + ")"
+
+    case other =>
+      print(other)
+  }
+
   def print(typ: Type): String = typ match {
     case TypeVariable(i) =>
       Yellow("T" + i)
+    case TypeConstructor("->", tyParams) =>
+      val args =
+        if (tyParams.length == 2)
+          printArg(tyParams.head)
+        else
+          tyParams.init.map(printArg).mkString(Yellow("("), ", ", Yellow(")"))
+
+        args + Yellow(" -> ") + print(tyParams.last)
     case TypeConstructor(nm, tyParams) =>
       if (tyParams.isEmpty)
         Yellow(nm)
-      else if (nm == "->") {
-        val args =
-          if (tyParams.length == 2)
-            print(tyParams.head)
-          else
-            tyParams.init.map(print).mkString(Yellow("("), ", ", Yellow(")"))
-
-        args + Yellow(" -> ") + print(tyParams.last)
-
-      } else {
+       else 
         nm + tyParams.map(print).mkString("[", ", ", "]")
-      }
   }
 
   def print(typ: TypeScheme): String = {
@@ -78,7 +91,7 @@ object Printer {
       typ.bound.map(print).mkString("[", ", ", "]") + "{ " + print(typ.typ) + " }"
   }
 
-  def print[A](e: Expr[A]): Doc = e match {
+  def print[A](e: ExprF[A]): Doc = scheme.cata(Algebra[Expr[A, ?], Doc]({
     case LiteralInt(i, _) =>
       Doc.str(i)
     case LiteralLong(l, _) =>
@@ -98,9 +111,9 @@ object Printer {
     case Reference(ref, _) =>
       Doc.text(ref)
     case If(c, t, e, _) =>
-      Doc.text("if") & print(c) /
-        (Doc.text("then") & print(t)).nested(2) /
-        (Doc.text("else") & print(e)).nested(2)
+      Doc.text("if") & c /
+        (Doc.text("then") & t).nested(2) /
+        (Doc.text("else") & e).nested(2)
     case Lambda(params, b, _) =>
       val args =
         if (params.length == 1)
@@ -111,14 +124,14 @@ object Printer {
             params.map(p => Doc.text(p.name))
           ).tightBracketBy(Doc.char('('), Doc.char(')'))
 
-      args & Doc.text("->") & print(b).nested(2)
+      args & Doc.text("->") & b.nested(2)
 
     case Apply(fn, args, _) =>
-      val prefix = print(fn) + Doc.char('(')
+      val prefix = fn + Doc.char('(')
       val suffix = Doc.char(')')
-      val argsList = Doc.intercalate(Doc.char(',') + Doc.line, args.map(print(_)))
+      val argsList = Doc.intercalate(Doc.char(',') + Doc.line, args)
       argsList.tightBracketBy(prefix, suffix)
-  }
+  })).apply(e)
 
   def print[A](decl: TopLevelDeclaration[A]): Doc = decl match {
     case Let(name, binding, _) =>

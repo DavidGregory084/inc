@@ -22,8 +22,8 @@ final case class Module[A](
     nameWithType = Some(eqv(meta).toProto)
   )
 
-  def substitute(subst: Map[TypeVariable, Type])(implicit eqv: A =:= NamePosType): Module[A] =
-    this.map(a => eqv(a).substitute(subst).asInstanceOf[A])
+  // def substitute(subst: Map[TypeVariable, Type])(implicit eqv: A =:= NamePosType): Module[A] =
+  //   this.map(a => eqv(a).substitute(subst).asInstanceOf[A])
 }
 
 object Module {
@@ -34,12 +34,12 @@ object Module {
     declarations = mod.declarations.toList.map(TopLevelDeclaration.fromProto),
     meta = NameWithType.fromProto(mod.getNameWithType),
   )
-  implicit val moduleFunctor: Functor[Module] = new Functor[Module] {
-    def map[A, B](ma: Module[A])(f: A => B): Module[B] = {
-      ma.copy(
-        meta = f(ma.meta),
-        declarations = ma.declarations.map(_.map(f))
-      )
-    }
-  }
+  // implicit val moduleFunctor: Functor[Module] = new Functor[Module] {
+  //   def map[A, B](ma: Module[A])(f: A => B): Module[B] = {
+  //     ma.copy(
+  //       meta = f(ma.meta),
+  //       declarations = ma.declarations.map(_.map(f))
+  //     )
+  //   }
+  // }
 }

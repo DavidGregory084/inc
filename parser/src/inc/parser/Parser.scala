@@ -37,7 +37,7 @@ object Parser {
 
   def literalBoolean[_: P] = P(Index ~ StringIn("true", "false").! ~ Index).map {
     case (from, b, to) =>
-      LiteralBoolean(Boolean.parseBoolean(b), Pos(from, to))
+      Expr.literalBoolean(Boolean.parseBoolean(b), Pos(from, to))
   }
 
   val disallowedChars = "\\\n\r"
@@ -45,7 +45,7 @@ object Parser {
   val stringDisallowedChars = "\"" + disallowedChars
 
   def literalChar[_: P] = P(Index ~ "'" ~/ CharPred(c => !charDisallowedChars.contains(c)).! ~ "'" ~ Index).map {
-    case (from, s, to) => LiteralChar(s(0), Pos(from, to))
+    case (from, s, to) => Expr.literalChar(s(0), Pos(from, to))
   }
 
   def literalString[_: P] = P(
@@ -54,15 +54,15 @@ object Parser {
       Index
   ).map {
     case (from, s, to) =>
-      LiteralString(s, Pos(from, to))
+      Expr.literalString(s, Pos(from, to))
   }
 
   def literalIntegral[_: P] = P(Index ~ (zero | digitsLeadingOneToNine) ~ CharIn("lL").?.! ~ Index).map {
     case (from, num, suffix, to) =>
       if (suffix.isEmpty)
-        LiteralInt(Integer.parseInt(num), Pos(from, to))
+        Expr.literalInt(Integer.parseInt(num), Pos(from, to))
       else
-        LiteralLong(Long.parseLong(num), Pos(from, to))
+        Expr.literalLong(Long.parseLong(num), Pos(from, to))
   }
 
   def exponentPart[_: P] = P(
@@ -80,16 +80,16 @@ object Parser {
       Index
   ).map {
     case (from, wholeNumberPart, fractionPart, exponentPart, "", to) =>
-      LiteralDouble(Double.parseDouble(wholeNumberPart + "." + fractionPart + exponentPart), Pos(from, to))
+      Expr.literalDouble(Double.parseDouble(wholeNumberPart + "." + fractionPart + exponentPart), Pos(from, to))
     case (from, wholeNumberPart, fractionPart, exponentPart, suffix, to) if suffix.toUpperCase == "D" =>
-      LiteralDouble(Double.parseDouble(wholeNumberPart + "." + fractionPart + exponentPart), Pos(from, to))
+      Expr.literalDouble(Double.parseDouble(wholeNumberPart + "." + fractionPart + exponentPart), Pos(from, to))
     case (from, wholeNumberPart, fractionPart, exponentPart, suffix, to) if suffix.toUpperCase == "F" =>
-      LiteralFloat(Float.parseFloat(wholeNumberPart + "." + fractionPart + exponentPart), Pos(from, to))
+      Expr.literalFloat(Float.parseFloat(wholeNumberPart + "." + fractionPart + exponentPart), Pos(from, to))
   }
 
   def literalUnit[_: P] = P(Index ~ "()" ~ Index).map {
     case (from, to) =>
-      LiteralUnit(Pos(from, to))
+      Expr.literalUnit(Pos(from, to))
   }
 
   def literal[_: P] =
@@ -111,17 +111,17 @@ object Parser {
 
   def reference[_: P] = P(Index ~ identifier ~ Index).map {
     case (from, id, to) =>
-      Reference(id, Pos(from, to))
+      Expr.reference(id, Pos(from, to))
   }
 
-  def ifExpr[_: P] = P(
+  def ifExprF[_: P] = P(
     Index ~
     "if" ~/ nonZeroWs ~ expression ~ nonZeroWs ~
       "then" ~ nonZeroWs ~ expression ~ nonZeroWs ~
       "else" ~ nonZeroWs ~ expression ~ Index ~ ws
   ).map {
-    case (from, cond, thenExpr, elseExpr, to) =>
-      If(cond, thenExpr, elseExpr, Pos(from, to))
+    case (from, cond, thenExprF, elseExprF, to) =>
+      Expr.ifExpr(cond, thenExprF, elseExprF, Pos(from, to))
   }
 
   def param[_: P] = P(
@@ -138,18 +138,18 @@ object Parser {
       Index
   ).map {
     case (from, params, expr, to) =>
-      Lambda(params.toList, expr, Pos(from, to))
+      Expr.lambda(params.toList, expr, Pos(from, to))
   }
 
-  def application[_: P]: P[Expr[Pos] => Expr[Pos]] = P(
+  def application[_: P]: P[ExprF[Pos] => ExprF[Pos]] = P(
     Index ~ inParens(expression.rep(sep = comma./)) ~ Index
   ).map {
     case (from, args, to) =>
-      fn => Apply(fn, args.toList, Pos(from, to))
+      fn => Expr.app(fn, args.toList, Pos(from, to))
   }
 
   // NoCut allows us to backtrack out of a nullary lambda into a unit literal, and from an if statement into an identifier starting with "if"
-  def expression[_: P]: P[Expr[Pos]] = P( (NoCut(lambda) | NoCut(ifExpr) | literal | reference) ~ application.rep ).map {
+  def expression[_: P]: P[ExprF[Pos]] = P( (NoCut(lambda) | NoCut(ifExprF) | literal | reference) ~ application.rep ).map {
     case (expr, applications) =>
       applications.foldLeft(expr) {
         case (expr, app) =>

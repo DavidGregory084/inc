@@ -29,12 +29,13 @@ trait ScalaSettingsModule extends TpolecatModule with PublishSettingsModule {
   def scalaVersion = "2.12.8"
 
   def scalacPluginIvyDeps = Agg(
+    ivy"org.spire-math::kind-projector:0.9.9",
     ivy"com.olegpy::better-monadic-for:0.3.0-M4",
     ivy"org.scalameta:semanticdb-scalac_${scalaVersion()}:4.1.3"
   )
 
   def scalacOptions = T {
-    super.scalacOptions() ++ Seq(
+    super.scalacOptions().filterNot(Set("-Ywarn-unused:imports")) ++ Seq(
       "-Ypartial-unification",
       "-Yno-imports",
       "-Yrangepos"
@@ -69,6 +70,7 @@ object common extends ScalaSettingsModule {
     super.ivyDeps() ++ Agg(
       ivy"org.typelevel::cats-core:1.6.0",
       ivy"org.typelevel::paiges-core:0.2.1",
+      ivy"io.higherkindness::droste-core:0.6.0",
       ivy"com.lihaoyi::fansi:0.2.5",
       ivy"com.outr::scribe:2.7.1"
     )
