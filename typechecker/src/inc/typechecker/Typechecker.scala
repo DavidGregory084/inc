@@ -1,14 +1,17 @@
 package inc.typechecker
 
 import cats.data.Chain
+import cats.syntax.either._
 import cats.syntax.functor._
 import inc.common._
 import java.lang.String
-import scala.{ Either, Right, None, StringContext }
+import scala.{ Boolean, Either, Right, None, StringContext }
 import scala.collection.immutable.{ List, Map }
 import scala.Predef.{ ArrowAssoc, augmentString }
 
-object Typechecker {
+object Typechecker extends Typechecker(true)
+
+class Typechecker(isTraceEnabled: Boolean) {
   type Environment = Map[String, TypeScheme]
   type Substitution = Map[TypeVariable, Type]
 
@@ -18,17 +21,17 @@ object Typechecker {
 
   def trace(name: String, pos: Pos, typ: Type, source: String) = {
     val formattedMsg = name + ": " + Printer.print(typ)
-    scribe.info(Printer.withSourceContext(None, formattedMsg, pos, fansi.Color.Yellow, source))
+    if (isTraceEnabled) scribe.info(Printer.withSourceContext(None, formattedMsg, pos, fansi.Color.Yellow, source))
   }
 
   def trace(name: String, pos: Pos, typ: TypeScheme, source: String) = {
     val formattedMsg = name + ": " + Printer.print(typ)
-    scribe.info(Printer.withSourceContext(None, formattedMsg, pos, fansi.Color.Yellow, source))
+    if (isTraceEnabled) scribe.info(Printer.withSourceContext(None, formattedMsg, pos, fansi.Color.Yellow, source))
   }
 
   def trace(name: String, env: Environment) = {
     val formattedMsg = NL + name + ": " + (NL * 2) + env.map { case (nm, tp) => nm + ": " + Printer.print(tp) }.mkString(NL)
-    scribe.info(formattedMsg)
+    if (isTraceEnabled) scribe.info(formattedMsg)
   }
 
   def bind(pos: Pos, tyVar: TypeVariable, typ: Type): Either[List[TypeError], Substitution] = typ match {
@@ -47,7 +50,7 @@ object Typechecker {
     chainSubstitutions(ss.toList)
 
   def substitute(env: Environment, subst: Substitution): Environment = {
-    if (subst.nonEmpty) scribe.info(NL + "Apply substitution: " + Printer.print(subst))
+    if (subst.nonEmpty && isTraceEnabled) scribe.info(NL + "Apply substitution: " + Printer.print(subst))
     env.mapValues(_.substitute(subst))
   }
 
@@ -55,39 +58,45 @@ object Typechecker {
     s2 ++ s1.mapValues(_.substitute(s2))
 
   def unify(pos: Pos, left: Type, right: Type): Either[List[TypeError], Substitution] = {
-    val ll = Printer.print(left)
-    val rr = Printer.print(right)
+    lazy val ll = Printer.print(left)
+    lazy val rr = Printer.print(right)
+    lazy val llRed = Red(ll)
+    lazy val rrRed = Red(rr)
 
-    val llYellow = Yellow(ll)
-    val rrYellow = Yellow(rr)
+    if (isTraceEnabled) {
+      val llYellow = Yellow(ll)
+      val rrYellow = Yellow(rr)
+      scribe.info(NL + s"Unify $llYellow with $rrYellow")
+    }
 
-    scribe.info(NL + s"Unify $llYellow with $rrYellow")
+    def go(left: Type, right: Type): Either[List[TypeError], Substitution] = {
+      (left, right) match {
+        case (TypeConstructor(_, lvars), TypeConstructor(_, rvars)) if lvars.length != rvars.length =>
+          TypeError.singleton(pos, s"${llRed} does not unify with ${rrRed}")
+        case (TypeConstructor(l, lvars), TypeConstructor(r, rvars)) if l == r =>
+          val emptyRes: Either[List[TypeError], Substitution] = Right(EmptySubst)
 
-    val llRed = Red(ll)
-    val rrRed = Red(rr)
+          lvars.zip(rvars).foldLeft(emptyRes) {
+            case (substSoFar, (ll, rr)) =>
+              for {
+                subst <- substSoFar
+                newSubst <- unify(pos, ll.substitute(subst), rr.substitute(subst))
+              } yield chainSubstitution(subst, newSubst)
+          }
 
-    (left, right) match {
-      case (TypeConstructor(_, lvars), TypeConstructor(_, rvars)) if lvars.length != rvars.length =>
-        TypeError.singleton(pos, s"Cannot unify $llRed with $rrRed")
-      case (TypeConstructor(l, lvars), TypeConstructor(r, rvars)) if l == r =>
-        val emptyRes: Either[List[TypeError], Substitution] = Right(EmptySubst)
+        case (tyVar @ TypeVariable(_), typ) =>
+          bind(pos, tyVar, typ)
 
-        lvars.zip(rvars).foldLeft(emptyRes) {
-          case (substSoFar, (ll, rr)) =>
-            for {
-              subst <- substSoFar
-              newSubst <- unify(pos, ll.substitute(subst), rr.substitute(subst))
-            } yield chainSubstitution(subst, newSubst)
-        }
+        case (typ, tyVar @ TypeVariable(_)) =>
+          bind(pos, tyVar, typ)
 
-       case (tyVar @ TypeVariable(_), typ) =>
-         bind(pos, tyVar, typ)
+        case (_, _) =>
+          TypeError.singleton(pos, s"${llRed} does not unify with ${rrRed}")
+      }
+    }
 
-       case (typ, tyVar @ TypeVariable(_)) =>
-         bind(pos, tyVar, typ)
-
-      case (_, _) =>
-        TypeError.singleton(pos, s"$llRed does not unify with $rrRed")
+    go(left, right).leftFlatMap { _ =>
+      TypeError.singleton(pos, s"${llRed} does not unify with ${rrRed}")
     }
   }
 
@@ -167,7 +176,7 @@ object Typechecker {
 
         s = chainSubstitutions(s1, s2, s3, s4, s5, s6, s7, s8)
 
-        _ = if (s.nonEmpty) scribe.info(NL + "Apply substitution: " + Printer.print(s))
+        _ = if (s.nonEmpty && isTraceEnabled) scribe.info(NL + "Apply substitution: " + Printer.print(s))
 
         expr = If(c, t, e, meta.withType(thenType)).substitute(s)
 
@@ -201,7 +210,7 @@ object Typechecker {
 
         s = chainSubstitution(s1, s2)
 
-        _ = if (s.nonEmpty) scribe.info(NL + "Apply substitution: " + Printer.print(s))
+        _ = if (isTraceEnabled && s.nonEmpty) scribe.info(NL + "Apply substitution: " + Printer.print(s))
 
         // Apply the substitutions from the body
         expr = Lambda(typedParams, b, meta.withSimpleType(tp)).substitute(s)
@@ -221,42 +230,44 @@ object Typechecker {
 
         _ = trace("Function to apply", f.meta.pos, f.meta.typ, source)
 
+        initialResult = Either.right[List[TypeError], (Chain[Expr[NamePosType]], Substitution)]((Chain.empty, s1))
+
         // Typecheck the arg expressions
-        (as, s2) <- args.zipWithIndex.foldLeft(EmptyResult) {
+        (as, s2) <- args.zipWithIndex.foldLeft(initialResult) {
           case (resSoFar, (nextArg, idx)) =>
             for {
               (typedSoFar, substSoFar) <- resSoFar
 
-              (typedArg, newSubst) <- typecheck(nextArg, substitute(env, s1), source)
+              (typedArg, newSubst) <- typecheck(nextArg, substitute(env, substSoFar), source)
 
               _ = trace(s"Argument ${idx + 1}", typedArg.meta.pos, typedArg.meta.typ, source)
 
             } yield (typedSoFar :+ typedArg, chainSubstitution(substSoFar, newSubst))
         }
 
-        s3 = chainSubstitution(s1, s2)
-
         argsList = as.toList
 
-        (argTps, s4) = argsList.foldLeft((Chain.empty[Type], s3)) {
+        (argTps, s3) = argsList.foldLeft((Chain.empty[Type], s2)) {
           case ((tps, subst), arg) =>
             val (argTp, argSubst) = arg.meta.typ.instantiate
             (tps :+ argTp, chainSubstitution(subst, argSubst))
         }
 
         // Create a new function type
-        appliedTp = Type.Function(argTps.toList, tv).substitute(s4)
+        appliedTp = Type.Function(argTps.toList, tv).substitute(s3)
 
         _ = trace("Applied type", meta.pos, appliedTp, source)
 
-        (fnTp, s5) = f.meta.typ.instantiate
+        (fnTp, s4) = f.meta.typ.instantiate
+
+        s5 = chainSubstitution(s3, s4)
 
         // Unify the function type with the actual argument types
-        s6 <- unify(meta.pos, fnTp, appliedTp)
+        s6 <- unify(meta.pos, fnTp.substitute(s5), appliedTp)
 
-        s = chainSubstitutions(s4, s5, s6)
+        s = chainSubstitutions(s3, s4, s5, s6)
 
-        _ = if (s.nonEmpty) scribe.info(NL + "Apply substitution: " + Printer.print(s))
+        _ = if (isTraceEnabled && s.nonEmpty) scribe.info(NL + "Apply substitution: " + Printer.print(s))
 
         expr = Apply(f, argsList, meta.withType(TypeScheme(tv))).substitute(s)
 
@@ -267,8 +278,10 @@ object Typechecker {
     case Let(name, expr, meta) =>
       typecheck(expr, env, source).flatMap {
         case (checkedExpr, subst) =>
-          val (eTp, _) = checkedExpr.meta.typ.instantiate
+          val (eTp, s) = checkedExpr.meta.typ.instantiate
+          if (isTraceEnabled) scribe.info(NL + "Instantiate: " + Printer.print(s))
           val tp = TypeScheme.generalize(env, eTp)
+          if (isTraceEnabled && tp.bound.nonEmpty) scribe.info(NL + "Generalize: " + tp.bound.map(Printer.print(_)).mkString("[", ", ", "]"))
           trace(name, meta.pos, tp, source)
           Right((Let(name, checkedExpr, meta.withType(tp)), substitute(env.updated(name, tp), subst)))
       }

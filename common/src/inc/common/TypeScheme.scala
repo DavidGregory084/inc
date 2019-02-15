@@ -19,7 +19,6 @@ case class TypeScheme(bound: List[TypeVariable], typ: Type) {
     else {
       val freshVars = bound.map(_ => TypeVariable())
       val subst = bound.zip(freshVars).toMap
-      scribe.info(NL + "Instantiate: " + Printer.print(subst))
       (typ.substitute(subst), subst)
     }
 }
@@ -31,7 +30,6 @@ object TypeScheme {
     val freeInEnv = env.values.flatMap(_.freeTypeVariables).toSet
     val bound = typ.freeTypeVariables diff freeInEnv
     val scheme = TypeScheme(bound.toList, typ)
-    if (bound.nonEmpty) scribe.info(NL + "Generalize: " + bound.map(Printer.print(_)).mkString("[", ", ", "]"))
     scheme
   }
 

@@ -13,7 +13,7 @@ import java.io.{ByteArrayOutputStream, File, InputStream, OutputStream}
 import java.net.{ URL, URLClassLoader }
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path, Paths}
-import scala.{ Array, Boolean, Byte, Long, Unit, Either, Left, Right, Option, Some, StringContext }
+import scala.{ Array, Boolean, Byte, Long, Unit, Either, Option, Some, StringContext }
 import scala.collection.JavaConverters._
 import scala.collection.immutable.{ List, Map }
 import scala.Predef.{ ArrowAssoc, wrapRefArray }
@@ -52,6 +52,10 @@ object Main {
         }.foreach { d =>
           dir = Paths.get(d)
         }
+
+      opt[Unit]("trace-typer")
+        .text("Print a trace during the typechecking phase")
+        .action((_, config) => config.copy(traceTyper = true))
 
       opt[Unit]("print-parser")
         .text("Print syntax trees after the parsing phase")
@@ -92,23 +96,20 @@ object Main {
     }
 
     parser.parse(args, Configuration()).foreach { config =>
-      val mod = readFileAsString(Paths.get(file))
-
-      compileModule(dir, mod, config) match {
-        case Left(errors) =>
-          errors.map { e =>
-            Printer.withSourceContext(Some("<stdin>"), e.getMessage, e.pos, fansi.Color.Red, mod)
-          }.foreach(scribe.error(_))
-          scribe.info(NL + Red("Failure") + NL)
-        case Right(_) =>
-          scribe.info(NL + Green("Success") + NL)
+      val path = Paths.get(file)
+      val mod = readFileAsString(path)
+      val fileName = dir.resolve(path).toString
+      compileModule(dir, mod, config).left.foreach { errors =>
+        errors.map { e =>
+          Printer.withSourceContext(Some(fileName), e.getMessage, e.pos, fansi.Color.Red, mod)
+        }.foreach(scribe.error(_))
       }
     }
   }
 
   def readFileAsString(path: Path) = Files
     .readAllLines(path, StandardCharsets.UTF_8)
-    .asScala.mkString
+    .asScala.mkString(System.lineSeparator)
 
   def printPhaseTiming(phase: String, before: Long, after: Long): Unit =
     scribe.info(NL + Blue(s"""Completed ${phase} in """) + White(s"""${(after - before) / 1000000}ms"""))
@@ -206,7 +207,9 @@ object Main {
   def compileModule(dest: Path, modSource: String, config: Configuration = Configuration.default): Either[List[Error], Path] = {
     val beforeAll = System.nanoTime
 
-    for {
+    val typechecker = new Typechecker(config.traceTyper)
+
+    val res = for {
       urls <- parseUrls(config.classpath)
 
       mod <- runPhase[Module[Pos]]("parser", config, _.printParser, Parser.parse(modSource))
@@ -215,7 +218,7 @@ object Main {
 
       resolved <- runPhase[Module[NameWithPos]]("resolver", config, _.printResolver, Resolver.resolve(mod, importedDecls))
 
-      checked <- runPhase[Module[NamePosType]]("typechecker", config, _.printTyper, Typechecker.typecheck(resolved, importedDecls, modSource))
+      checked <- runPhase[Module[NamePosType]]("typechecker", config, _.printTyper, typechecker.typecheck(resolved, importedDecls, modSource))
 
       code <- runPhase[Array[Byte]]("codegen", config, _.printCodegen, Codegen.generate(checked), Codegen.print(_))
 
@@ -240,5 +243,12 @@ object Main {
 
       out
     }
+
+    res.left.foreach { _ =>
+      val afterAll = System.nanoTime
+      scribe.info(NL + Red(s"""Compilation failed after """) + White(s"""${(afterAll - beforeAll) / 1000000}ms"""))
+    }
+
+    res
   }
 }

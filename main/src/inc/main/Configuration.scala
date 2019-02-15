@@ -5,6 +5,7 @@ import scala.Boolean
 
 case class Configuration(
   classpath: String = ".",
+  traceTyper: Boolean = false,
   printParser: Boolean = false,
   printResolver: Boolean = false,
   printTyper: Boolean = false,
