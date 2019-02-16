@@ -5,13 +5,22 @@ import cats.syntax.either._
 import cats.syntax.functor._
 import inc.common._
 import java.lang.String
-import scala.{ Boolean, Either, Right, None, StringContext }
+import scala.{ Boolean, Either, Right, Some, None, StringContext }
 import scala.collection.immutable.{ List, Map }
 import scala.Predef.{ ArrowAssoc, augmentString }
+import scribe._
+import scribe.format._
 
 object Typechecker extends Typechecker(false)
 
 class Typechecker(isTraceEnabled: Boolean) {
+  if (isTraceEnabled) {
+    this.logger.withHandler(
+      formatter = Formatter.simple,
+      minimumLevel = Some(Level.Trace)
+    ).replace()
+  }
+
   type Environment = Map[String, TypeScheme]
   type Substitution = Map[TypeVariable, Type]
 
@@ -21,17 +30,21 @@ class Typechecker(isTraceEnabled: Boolean) {
 
   def trace(name: String, pos: Pos, typ: Type, source: String) = {
     val formattedMsg = name + ": " + Printer.print(typ)
-    if (isTraceEnabled) scribe.info(Printer.withSourceContext(None, formattedMsg, pos, fansi.Color.Yellow, source))
+    scribe.trace(Printer.withSourceContext(None, formattedMsg, pos, fansi.Color.Yellow, source))
   }
 
   def trace(name: String, pos: Pos, typ: TypeScheme, source: String) = {
     val formattedMsg = name + ": " + Printer.print(typ)
-    if (isTraceEnabled) scribe.info(Printer.withSourceContext(None, formattedMsg, pos, fansi.Color.Yellow, source))
+    scribe.trace(Printer.withSourceContext(None, formattedMsg, pos, fansi.Color.Yellow, source))
   }
 
   def trace(name: String, env: Environment) = {
-    val formattedMsg = NL + name + ": " + (NL * 2) + env.map { case (nm, tp) => nm + ": " + Printer.print(tp) }.mkString(NL)
-    if (isTraceEnabled) scribe.info(formattedMsg)
+    val formattedMsg = NL + name + ": " + (NL * 2) + env.map {
+      case (nm, tp) =>
+        nm + ": " + Printer.print(tp)
+    }.mkString(NL)
+
+    scribe.trace(formattedMsg)
   }
 
   def bind(pos: Pos, tyVar: TypeVariable, typ: Type): Either[List[TypeError], Substitution] = typ match {
@@ -50,7 +63,7 @@ class Typechecker(isTraceEnabled: Boolean) {
     chainSubstitutions(ss.toList)
 
   def substitute(env: Environment, subst: Substitution): Environment = {
-    if (subst.nonEmpty && isTraceEnabled) scribe.info(NL + "Apply substitution: " + Printer.print(subst))
+    if (subst.nonEmpty) scribe.trace(NL + "Apply substitution: " + Printer.print(subst))
     env.mapValues(_.substitute(subst))
   }
 
@@ -63,11 +76,7 @@ class Typechecker(isTraceEnabled: Boolean) {
     lazy val llRed = Red(ll)
     lazy val rrRed = Red(rr)
 
-    if (isTraceEnabled) {
-      val llYellow = Yellow(ll)
-      val rrYellow = Yellow(rr)
-      scribe.info(NL + s"Unify $llYellow with $rrYellow")
-    }
+    scribe.trace(NL + s"Unify ${Yellow(ll)} with ${Yellow(rr)}")
 
     def go(left: Type, right: Type): Either[List[TypeError], Substitution] = {
       (left, right) match {
@@ -171,7 +180,7 @@ class Typechecker(isTraceEnabled: Boolean) {
 
         s = chainSubstitutions(s1, s2, s3, s4, s5)
 
-        _ = if (s.nonEmpty && isTraceEnabled) scribe.info(NL + "Apply substitution: " + Printer.print(s))
+        _ = if (s.nonEmpty) scribe.trace(NL + "Apply substitution: " + Printer.print(s))
 
         expr = If(c, t, e, meta.withType(thenType)).substitute(s)
 
@@ -203,7 +212,7 @@ class Typechecker(isTraceEnabled: Boolean) {
         // Create a new function type
         tp = Type.Function(typedParams.map(_.meta.typ.typ), bTp)
 
-        _ = if (isTraceEnabled && s.nonEmpty) scribe.info(NL + "Apply substitution: " + Printer.print(s))
+        _ = if (s.nonEmpty) scribe.trace(NL + "Apply substitution: " + Printer.print(s))
 
         // Apply the substitutions from the body
         expr = Lambda(typedParams, b, meta.withSimpleType(tp)).substitute(s)
@@ -254,7 +263,7 @@ class Typechecker(isTraceEnabled: Boolean) {
 
         s = chainSubstitutions(s2, s3)
 
-        _ = if (isTraceEnabled && s.nonEmpty) scribe.info(NL + "Apply substitution: " + Printer.print(s))
+        _ = if (s.nonEmpty) scribe.trace(NL + "Apply substitution: " + Printer.print(s))
 
         expr = Apply(f, argsList, meta.withType(TypeScheme(tv))).substitute(s)
 
@@ -267,7 +276,7 @@ class Typechecker(isTraceEnabled: Boolean) {
         case (checkedExpr, subst) =>
           val eTp = checkedExpr.meta.typ.typ
           val tp = TypeScheme.generalize(env, eTp)
-          if (isTraceEnabled && tp.bound.nonEmpty) scribe.info(NL + "Generalize: " + tp.bound.map(Printer.print(_)).mkString("[", ", ", "]"))
+          if (tp.bound.nonEmpty) scribe.trace(NL + "Generalize: " + tp.bound.map(Printer.print(_)).mkString("[", ", ", "]"))
           trace(name, meta.pos, tp, source)
           Right((Let(name, checkedExpr, meta.withType(tp)), substitute(env.updated(name, tp), subst)))
       }
