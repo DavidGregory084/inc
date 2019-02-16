@@ -16,9 +16,9 @@ object Printer {
         val nextCharIdx = charIdx + 1 + fansi.Str(line).length
 
         val nextLines =
-          if (pos.from < charIdx || pos.to >= nextCharIdx)
+          if (pos.from > nextCharIdx || pos.to < charIdx) {
             lines
-          else {
+          } else {
             val lineNumber = lineIdx + 1
             val marginWidth = String.valueOf(numberOfLines).length + 1
             val margin = White(lineNumber.toString.padTo(marginWidth, ' ') + '|')

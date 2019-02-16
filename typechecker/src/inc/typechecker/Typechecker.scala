@@ -9,7 +9,7 @@ import scala.{ Boolean, Either, Right, None, StringContext }
 import scala.collection.immutable.{ List, Map }
 import scala.Predef.{ ArrowAssoc, augmentString }
 
-object Typechecker extends Typechecker(true)
+object Typechecker extends Typechecker(false)
 
 class Typechecker(isTraceEnabled: Boolean) {
   type Environment = Map[String, TypeScheme]
@@ -133,10 +133,11 @@ class Typechecker(isTraceEnabled: Boolean) {
     case unit @ LiteralUnit(_) =>
       withSimpleType(unit, Type.Unit)
 
-    case ref @ Reference(name, meta)  =>
+    case _ @ Reference(name, meta)  =>
       env.get(name).map { typ =>
         trace(s"Reference to $name", meta.pos, typ, source)
-        withTypeScheme(ref, typ)
+        val (tp, subst) = typ.instantiate
+        Right((expr.map(_.withSimpleType(tp)), subst))
       }.getOrElse(TypeError.singleton(meta.pos, s"Reference to undefined symbol: $name"))
 
     case If(cond, thenExpr, elseExpr, meta) =>
@@ -162,19 +163,13 @@ class Typechecker(isTraceEnabled: Boolean) {
 
         _ = trace("Else expression", e.meta.pos, elseType, source)
 
-        (cTp, s4) = condType.instantiate
-
         // Unify the condition with Boolean
-        s5 <- unify(c.meta.pos, cTp, Type.Boolean)
-
-        (tTp, s6) = thenType.instantiate
-
-        (eTp, s7) = elseType.instantiate
+        s4 <- unify(c.meta.pos, condType.typ, Type.Boolean)
 
         // Unify the then expression and the else expression
-        s8 <- unify(meta.pos, tTp, eTp)
+        s5 <- unify(meta.pos, thenType.typ.substitute(s4), elseType.typ.substitute(s4))
 
-        s = chainSubstitutions(s1, s2, s3, s4, s5, s6, s7, s8)
+        s = chainSubstitutions(s1, s2, s3, s4, s5)
 
         _ = if (s.nonEmpty && isTraceEnabled) scribe.info(NL + "Apply substitution: " + Printer.print(s))
 
@@ -199,16 +194,14 @@ class Typechecker(isTraceEnabled: Boolean) {
 
       for {
         // Typecheck the body with the params in scope
-        (b, s1) <- typecheck(body, env ++ paramMappings, source)
+        (b, s) <- typecheck(body, env ++ paramMappings, source)
 
         _ = trace("Lambda body", b.meta.pos, b.meta.typ, source)
 
-        (bTp, s2) = b.meta.typ.instantiate
+        bTp = b.meta.typ.typ
 
         // Create a new function type
         tp = Type.Function(typedParams.map(_.meta.typ.typ), bTp)
-
-        s = chainSubstitution(s1, s2)
 
         _ = if (isTraceEnabled && s.nonEmpty) scribe.info(NL + "Apply substitution: " + Printer.print(s))
 
@@ -247,25 +240,19 @@ class Typechecker(isTraceEnabled: Boolean) {
 
         argsList = as.toList
 
-        (argTps, s3) = argsList.foldLeft((Chain.empty[Type], s2)) {
-          case ((tps, subst), arg) =>
-            val (argTp, argSubst) = arg.meta.typ.instantiate
-            (tps :+ argTp, chainSubstitution(subst, argSubst))
-        }
+        argTps = argsList.map(_.meta.typ.typ)
 
         // Create a new function type
-        appliedTp = Type.Function(argTps.toList, tv).substitute(s3)
+        appliedTp = Type.Function(argTps.toList, tv).substitute(s2)
 
         _ = trace("Applied type", meta.pos, appliedTp, source)
 
-        (fnTp, s4) = f.meta.typ.instantiate
-
-        s5 = chainSubstitution(s3, s4)
+        fnTp = f.meta.typ.typ.substitute(s2)
 
         // Unify the function type with the actual argument types
-        s6 <- unify(meta.pos, fnTp.substitute(s5), appliedTp)
+        s3 <- unify(meta.pos, fnTp, appliedTp)
 
-        s = chainSubstitutions(s3, s4, s5, s6)
+        s = chainSubstitutions(s2, s3)
 
         _ = if (isTraceEnabled && s.nonEmpty) scribe.info(NL + "Apply substitution: " + Printer.print(s))
 
@@ -278,8 +265,7 @@ class Typechecker(isTraceEnabled: Boolean) {
     case Let(name, expr, meta) =>
       typecheck(expr, env, source).flatMap {
         case (checkedExpr, subst) =>
-          val (eTp, s) = checkedExpr.meta.typ.instantiate
-          if (isTraceEnabled) scribe.info(NL + "Instantiate: " + Printer.print(s))
+          val eTp = checkedExpr.meta.typ.typ
           val tp = TypeScheme.generalize(env, eTp)
           if (isTraceEnabled && tp.bound.nonEmpty) scribe.info(NL + "Generalize: " + tp.bound.map(Printer.print(_)).mkString("[", ", ", "]"))
           trace(name, meta.pos, tp, source)
