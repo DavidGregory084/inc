@@ -3,43 +3,49 @@ package inc.common
 import cats.data.Chain
 import java.lang.String
 import org.typelevel.paiges._
-import scala.{ Array, Option, StringContext }
-import scala.collection.immutable.Map
-import scala.Predef.{ArrowAssoc, augmentString, genericArrayOps}
+import scala.{ Array, Int, Option, StringContext }
+import scala.collection.immutable.{ List, Map, Nil, :: }
+import scala.Predef.{ augmentString, genericArrayOps }
 
 object Printer {
-  def regionWithMargin(inputLines: Array[String], pos: Pos) = {
-    val numberOfLines = inputLines.length
+  def regionWithMargin(plainInputLines: Array[String], highlightedSource: fansi.Str, pos: Pos) = {
+    val numberOfLines = plainInputLines.length
 
-    val (formattedLines, _) = inputLines.zipWithIndex.foldLeft(Chain.empty[String] -> 0) {
-      case ((lines, charIdx), (line, lineIdx)) =>
-        val nextCharIdx = charIdx + 1 + fansi.Str(line).length
+    def go(plainInputLines: List[(String, Int)], highlightedSource: fansi.Str, charIdx: Int, output: Chain[fansi.Str]): fansi.Str =
+      plainInputLines match {
+        case Nil =>
+          fansi.Str.join(output.toList: _*)
+        case (plainLine, lineIdx) :: plainLines =>
+          val nextCharIdx = charIdx + 1 + plainLine.length
 
-        val nextLines =
-          if (pos.from > nextCharIdx || pos.to < charIdx) {
-            lines
-          } else {
+          val (highlightedLine, highLightedLines) =
+            if (plainLine.length >= highlightedSource.length)
+              (highlightedSource, fansi.Str(""))
+            else
+              highlightedSource.splitAt(plainLine.length + 1)
+
+          if (pos.from > nextCharIdx || pos.to < charIdx)
+            go(plainLines, highLightedLines, nextCharIdx, output)
+          else {
             val lineNumber = lineIdx + 1
             val marginWidth = String.valueOf(numberOfLines).length + 1
-            val margin = White(s"%${marginWidth}d".format(lineNumber) + '|')
-            lines :+ (margin + line)
+            val margin = fansi.Color.White(fansi.Str(s"%${marginWidth}d".format(lineNumber) + '|'))
+            go(plainLines, highLightedLines, nextCharIdx, output :+ margin :+ highlightedLine)
           }
+      }
 
-        (nextLines, nextCharIdx)
-    }
-
-    formattedLines.toList
+    go(plainInputLines.toList.zipWithIndex, highlightedSource, 0, Chain.empty[fansi.Str])
   }
 
   def withSourceContext(header: Option[String], msg: String, pos: Pos, colour: fansi.Attrs, source: String) = {
     if (pos.isEmpty)
       NL + msg
     else {
-      val highlighted = fansi.Str(source, errorMode = fansi.ErrorMode.Sanitize).overlay(colour, pos.from, pos.to)
-      val highlightedLines = highlighted.render.split("\\r?\\n")
-      val formattedLines = regionWithMargin(highlightedLines, pos).mkString(NL)
+      val highlightedSource = fansi.Str(source, errorMode = fansi.ErrorMode.Sanitize).overlay(colour, pos.from, pos.to)
+      val plainSourceLines = source.split('\n')
+      val formattedLines = regionWithMargin(plainSourceLines, highlightedSource, pos)
       val formattedHeader = header.map(h => Blue(h + ":") + NL).getOrElse("")
-      NL + formattedHeader + formattedLines + (NL * 2) + msg
+      NL + formattedHeader + formattedLines + NL + msg
     }
   }
 
