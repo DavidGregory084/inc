@@ -3,9 +3,9 @@ package inc.common
 import cats.data.Chain
 import java.lang.String
 import org.typelevel.paiges._
-import scala.{ Array, Option }
+import scala.{ Array, Option, StringContext }
 import scala.collection.immutable.Map
-import scala.Predef.{ArrowAssoc, StringCanBuildFrom, augmentString, genericArrayOps}
+import scala.Predef.{ArrowAssoc, augmentString, genericArrayOps}
 
 object Printer {
   def regionWithMargin(inputLines: Array[String], pos: Pos) = {
@@ -21,7 +21,7 @@ object Printer {
           } else {
             val lineNumber = lineIdx + 1
             val marginWidth = String.valueOf(numberOfLines).length + 1
-            val margin = White(lineNumber.toString.padTo(marginWidth, ' ') + '|')
+            val margin = White(s"%${marginWidth}d".format(lineNumber) + '|')
             lines :+ (margin + line)
           }
 
