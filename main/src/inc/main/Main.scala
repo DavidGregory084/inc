@@ -18,11 +18,18 @@ import scala.collection.JavaConverters._
 import scala.collection.immutable.{ List, Map }
 import scala.Predef.{ ArrowAssoc, wrapRefArray }
 import scala.util.control.NonFatal
+import scribe._
+import scribe.format._
 
 case class ConfigError(private val position: Pos, private val message: String) extends Error(position, message)
 
 object Main {
   def main(args: Array[String]): Unit = {
+    Logger.root.clearHandlers().withHandler(
+      formatter = Formatter.simple,
+      minimumLevel = Some(Level.Info)
+    ).replace()
+
     var dir = Paths.get(".")
     var file = ""
 
@@ -76,6 +83,10 @@ object Main {
       opt[Unit]("print-timings")
         .text("Print the time taken in each phase")
         .action((_, config) => config.copy(printPhaseTiming = true))
+
+      opt[Unit]("verify-codegen")
+        .text("Run a verifier on the code produced in codegen")
+        .action((_, config) => config.copy(verifyCodegen = true))
 
       arg[String]("<file>")
         .text("The source file to compile")
@@ -208,6 +219,7 @@ object Main {
     val beforeAll = System.nanoTime
 
     val typechecker = new Typechecker(config.traceTyper)
+    val codegen = new Codegen(config.verifyCodegen)
 
     val res = for {
       urls <- parseUrls(config.classpath)
@@ -220,7 +232,7 @@ object Main {
 
       checked <- runPhase[Module[NamePosType]]("typechecker", config, _.printTyper, typechecker.typecheck(resolved, importedDecls, modSource))
 
-      code <- runPhase[Array[Byte]]("codegen", config, _.printCodegen, Codegen.generate(checked), Codegen.print(_))
+      code <- runPhase[Array[Byte]]("codegen", config, _.printCodegen, codegen.generate(checked), codegen.print(_))
 
     } yield {
       val outDir = mod.pkg.foldLeft(dest) {

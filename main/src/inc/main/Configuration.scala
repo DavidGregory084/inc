@@ -10,10 +10,12 @@ case class Configuration(
   printResolver: Boolean = false,
   printTyper: Boolean = false,
   printCodegen: Boolean = false,
-  printPhaseTiming: Boolean = false
+  printPhaseTiming: Boolean = false,
+  verifyCodegen: Boolean = false
 )
 
 object Configuration {
   val default = Configuration()
+  val test = Configuration(verifyCodegen = true)
   val printTimings = Configuration(printPhaseTiming = true)
 }

@@ -39,7 +39,7 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
   }
 
   def shouldCompileField[A](fieldName: String, stringValue: String, expectedValue: A) = withTmpDir { dir =>
-    val config = Configuration.default.copy(classpath = dir.toUri.toURL.toString)
+    val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
     val pkg = "Test.Main."
     val mod = s"module ${pkg}${fieldName.capitalize} { let ${fieldName} = ${stringValue} }"
     val classFile = Main.compileModule(dir, mod, config).fold(err => fail(err.head), identity)
@@ -82,7 +82,7 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
   it should "compile a unit field" in shouldCompileField("unit", "()", IncUnit.instance)
 
   it should "compile a variable reference" in withTmpDir { dir =>
-    val config = Configuration.default.copy(classpath = dir.toUri.toURL.toString)
+    val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
     val pkg = "Test.Main."
     val fieldName = "reference"
     val mod = s"module ${pkg}Reference { let integer = 42; let ${fieldName} = integer }"
@@ -94,7 +94,7 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
   }
 
   it should "compile an if expression and return the then branch when the condition is true" in withTmpDir { dir =>
-    val config = Configuration.default.copy(classpath = dir.toUri.toURL.toString)
+    val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
     val pkg = "Test.Main."
     val fieldName = "z"
     val mod = s"module ${pkg}If { let a = true; let x = 42; let y = 41; let ${fieldName} = if a then x else y }"
@@ -106,7 +106,7 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
   }
 
   it should "compile an if expression and return the else branch when the condition is false" in withTmpDir { dir =>
-    val config = Configuration.default.copy(classpath = dir.toUri.toURL.toString)
+    val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
     val pkg = "Test.Main."
     val fieldName = "z"
     val mod = s"module ${pkg}If { let a = false; let x = 42; let y = 41; let ${fieldName} = if a then x else y }"
@@ -118,7 +118,7 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
   }
 
   it should "compile a lambda expression" in withTmpDir { dir =>
-    val config = Configuration.default.copy(classpath = dir.toUri.toURL.toString)
+    val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
     val mod = "module Test.Main.Lambda { let x = 42; let y = 41; let lam = bool -> if bool then x else y }"
     val result = Main.compileModule(dir, mod, config)
     result shouldBe 'right
@@ -127,7 +127,7 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
   }
 
   it should "compile an identity function" in withTmpDir { dir =>
-    val config = Configuration.default.copy(classpath = dir.toUri.toURL.toString)
+    val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
     val mod = "module Test.Main.Lambda { let id = a -> a }"
     val result = Main.compileModule(dir, mod, config)
     result shouldBe 'right
@@ -136,7 +136,7 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
   }
 
   it should "compile an application of an identity function with a reference type" in withTmpDir { dir =>
-    val config = Configuration.default.copy(classpath = dir.toUri.toURL.toString)
+    val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
     val mod = """module Test.Main.Lambda { let id = a -> a; let str = id("string") }"""
     val result = Main.compileModule(dir, mod, config)
     result shouldBe 'right
@@ -145,7 +145,7 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
   }
 
   it should "compile an application of an identity function with a primitive type" in withTmpDir { dir =>
-    val config = Configuration.default.copy(classpath = dir.toUri.toURL.toString)
+    val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
     val mod = """module Test.Main.Lambda { let id = a -> a; let int = id(1) }"""
     val result = Main.compileModule(dir, mod, config)
     result shouldBe 'right
@@ -154,7 +154,7 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
   }
 
   it should "compile a function that accepts a function as argument" in withTmpDir { dir =>
-    val config = Configuration.default.copy(classpath = dir.toUri.toURL.toString)
+    val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
     val mod = """module Test.Main.Const { let const = (a, b) -> a; let foo = a -> "a"; let bar = f -> foo(f(42, 36)); let baz = foo(const) }"""
     val result = Main.compileModule(dir, mod, config)
     result shouldBe 'right
@@ -163,7 +163,7 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
   }
 
   it should "compile a module that imports from another module" in withTmpDir { dir =>
-    val config = Configuration.default.copy(classpath = dir.toUri.toURL.toString)
+    val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
 
     val mod1 =
       """
@@ -196,7 +196,7 @@ class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks
   it should "compile arbitrary well-typed modules" in withTmpDir { dir =>
     val modGen = arbitraryModule.arbitrary.map(_.copy(pkg = List("Test", "Main")))
     forAll(modGen, minSuccessful(1000)) { generatedMod =>
-      val config = Configuration.default.copy(classpath = dir.toUri.toURL.toString)
+      val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
       val mod = Printer.print(generatedMod).render(80)
       try {
         val result = Main.compileModule(dir, mod, config)

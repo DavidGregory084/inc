@@ -9,14 +9,14 @@ import cats.instances.list._
 import inc.common._
 import inc.rts.{ Unit => IncUnit }
 import java.io.{ OutputStream, PrintWriter }
-import java.lang.{ Class, ClassNotFoundException, Exception, Object, String, System, ThreadLocal }
+import java.lang.{ Class, ClassNotFoundException, Exception, IllegalStateException, Object, String, System, ThreadLocal }
 import java.lang.invoke.{ CallSite, LambdaMetafactory, MethodType, MethodHandle, MethodHandles }
 import java.util.Arrays
 import org.objectweb.asm.{ Attribute, ByteVector, ClassReader, ClassVisitor, ClassWriter, Label, Handle, Type => AsmType }
 import org.objectweb.asm.Opcodes._
-import org.objectweb.asm.util.TraceClassVisitor
+import org.objectweb.asm.util.{ CheckClassAdapter, TraceClassVisitor }
 import org.objectweb.asm.commons.{ GeneratorAdapter, Method }
-import scala.{ Array, Byte, Char, Int, Unit, Option, Either, Right, StringContext }
+import scala.{ Array, Boolean, Byte, Char, Int, Unit, Option, Either, Right, StringContext }
 import scala.collection.immutable.{ List, Map }
 import scala.Predef.classOf
 
@@ -38,7 +38,9 @@ class InterfaceAttributeVisitor extends ClassVisitor(ASM6) {
       buffer = attribute.asInstanceOf[InterfaceAttribute].buffer
 }
 
-object Codegen {
+object Codegen extends Codegen(false)
+
+class Codegen(verifyCodegen: Boolean) {
   val InterfaceAttributePrototype = InterfaceAttribute(Array.empty)
 
   val BootstrapMethodDescriptor = MethodType.methodType(
@@ -476,12 +478,25 @@ object Codegen {
       pkgName + declaringClass
   }
 
+  def verify(bytes: Array[Byte]): Either[List[CodegenError], Array[Byte]] = {
+    // We can't do this while writing the class the first time because the max stack size and
+    // local variables are not calculated in time for CheckClassAdapter by the ClassWriter
+    Either.catchOnly[IllegalStateException] {
+      val classReader = new ClassReader(bytes)
+      val classWriter = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS)
+      val checkClass = new CheckClassAdapter(classWriter, true)
+      classReader.accept(checkClass, 0)
+    }.as(bytes).leftFlatMap { err =>
+      CodegenError.singleton(err.getMessage)
+    }
+  }
+
   def generate(mod: Module[NamePosType]): Either[List[CodegenError], Array[Byte]] = {
     val className = getInternalName(mod.meta.name, mod.name)
 
     liftedDefns.set(0)
 
-    withClassWriter(className) { classWriter =>
+    val classBytes = withClassWriter(className) { classWriter =>
       // Persist the AST to protobuf
       classWriter.visitAttribute(InterfaceAttribute(mod.toProto.toByteArray))
       // Make the static initializer available to set field values
@@ -491,5 +506,10 @@ object Codegen {
         }
       }
     }
+
+    if (verifyCodegen)
+      classBytes.flatMap(verify)
+    else
+      classBytes
   }
 }
