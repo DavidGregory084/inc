@@ -29,17 +29,17 @@ class Typechecker(isTraceEnabled: Boolean) {
   val EmptyResult: Either[List[TypeError], (Chain[Expr[NamePosType]], Substitution)] = Right((Chain.empty, EmptySubst))
 
   def trace(name: String, pos: Pos, typ: Type, source: String) = {
-    val formattedMsg = name + ": " + Printer.print(typ)
+    lazy val formattedMsg = name + ": " + Printer.print(typ)
     scribe.trace(Printer.withSourceContext(None, formattedMsg, pos, fansi.Color.Yellow, source))
   }
 
   def trace(name: String, pos: Pos, typ: TypeScheme, source: String) = {
-    val formattedMsg = name + ": " + Printer.print(typ)
+    lazy val formattedMsg = name + ": " + Printer.print(typ)
     scribe.trace(Printer.withSourceContext(None, formattedMsg, pos, fansi.Color.Yellow, source))
   }
 
   def trace(name: String, env: Environment) = {
-    val formattedMsg = NL + name + ": " + (NL * 2) + env.map {
+    lazy val formattedMsg = NL + name + ": " + (NL * 2) + env.map {
       case (nm, tp) =>
         nm + ": " + Printer.print(tp)
     }.mkString(NL)
