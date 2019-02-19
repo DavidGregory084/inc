@@ -102,7 +102,7 @@ object Printer {
     case LiteralUnit(_) =>
       Doc.text("()")
     case Reference(ref, _) =>
-      Doc.text(ref)
+      Doc.intercalate(Doc.char('.'), ref.map(Doc.text))
     case If(c, t, e, _) =>
       Doc.text("if") & print(c) /
         (Doc.text("then") & print(t)).nested(2) /

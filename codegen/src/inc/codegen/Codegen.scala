@@ -295,11 +295,11 @@ class Codegen(verifyCodegen: Boolean) {
         internalName = getInternalName(nameWithType.name, className)
         _ <- nameWithType.name match {
           case MemberName(_, _, _) =>
-            Right(generator.visitFieldInsn(GETSTATIC, internalName, ref, descriptor))
+            Right(generator.visitFieldInsn(GETSTATIC, internalName, ref.last, descriptor))
           case LocalName(nm) =>
             Right(generator.loadArg(arguments(nm)))
           case NoName | ModuleName(_, _) =>
-            CodegenError.singleton(s"Unable to resolve reference to variable $ref")
+            CodegenError.singleton(s"""Unable to resolve reference to variable ${ref.mkString(".")}""")
         }
       } yield ()
 
@@ -359,7 +359,7 @@ class Codegen(verifyCodegen: Boolean) {
       val replaceCaptured = capturedVarsWithIdx.map {
         case (v, i) =>
           val newName = "captured$" + i
-          (v.copy(meta = v.meta.withEmptyPos), Reference(newName, v.meta.copy(name = LocalName(newName))))
+          (v.copy(meta = v.meta.withEmptyPos), Reference(List(newName), v.meta.copy(name = LocalName(newName))))
       }.toMap
 
       val typeForLambda = asmTypeOf(nameWithType.typ.typ)
@@ -438,7 +438,7 @@ class Codegen(verifyCodegen: Boolean) {
       case Reference(ref, nameWithType) =>
         descriptorFor(nameWithType.typ).flatMap { descriptor =>
           val internalName = getInternalName(nameWithType.name, enclosingClass = className)
-          newStaticFieldFrom(classWriter, className, staticInitializer)(let.name, descriptor, internalName, ref)
+          newStaticFieldFrom(classWriter, className, staticInitializer)(let.name, descriptor, internalName, ref.last)
         }
       case ifExpr @ If(_, _, _, nameWithType) =>
         for {

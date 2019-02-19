@@ -99,12 +99,12 @@ module Test.Func {
 ```scala
 module Test.Id {
   import Test.Func
-  let app = id(1)
+  let app = Func.id(1)
 }
 
 module Test.Compose {
   import Test.Func.{ compose, id }
-  let pointless = compose(id)(id)(1)
+  let pointless = Func.compose(Func.id)(Func.id)(1)
 }
 ```
 

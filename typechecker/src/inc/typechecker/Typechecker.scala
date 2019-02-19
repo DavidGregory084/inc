@@ -1,13 +1,18 @@
 package inc.typechecker
 
+import cats.Show
 import cats.data.Chain
+import cats.instances.string._
 import cats.syntax.either._
 import cats.syntax.functor._
+import cats.syntax.monoid._
+import cats.syntax.show._
+import com.rklaehn.radixtree._
 import inc.common._
 import java.lang.String
-import scala.{ Boolean, Either, Right, Some, None, StringContext }
+import scala.{ Array, Boolean, Either, Right, Some, None, StringContext }
 import scala.collection.immutable.{ List, Map }
-import scala.Predef.{ ArrowAssoc, augmentString }
+import scala.Predef.{ ArrowAssoc, augmentString, genericArrayOps }
 import scribe._
 import scribe.format._
 
@@ -21,12 +26,22 @@ class Typechecker(isTraceEnabled: Boolean) {
     ).replace()
   }
 
-  type Environment = Map[String, TypeScheme]
+  type Environment = RadixTree[Array[String], TypeScheme]
   type Substitution = Map[TypeVariable, Type]
 
-  val EmptyEnv: Environment = Map.empty
+  val EmptyEnv: Environment = RadixTree.empty
   val EmptySubst: Substitution = Map.empty
   val EmptyResult: Either[List[TypeError], (Chain[Expr[NamePosType]], Substitution)] = Right((Chain.empty, EmptySubst))
+
+  def showEnv(env: Environment) = {
+    implicit def showArray[A: Show]: Show[Array[A]] =
+      Show.show { arr => arr.mkString("[", ", ", "]") }
+    implicit def showRadixTree[K: RadixTree.Key: Show, V: Show]: Show[RadixTree[K, V]] =
+      Show.show { _.entries.map { case (k, v) => show"$k->$v" }.mkString("RadixTree(", ", ", ")")}
+    implicit val showTypeScheme: Show[TypeScheme] =
+      Show.fromToString[TypeScheme]
+    scribe.trace(showRadixTree[Array[String], TypeScheme].show(env))
+  }
 
   def trace(name: String, pos: Pos, typ: Type, source: String) = {
     lazy val formattedMsg = name + ": " + Printer.print(typ)
@@ -39,9 +54,9 @@ class Typechecker(isTraceEnabled: Boolean) {
   }
 
   def trace(name: String, env: Environment) = {
-    lazy val formattedMsg = NL + name + ": " + (NL * 2) + env.map {
+    lazy val formattedMsg = NL + name + ": " + (NL * 2) + env.entries.map {
       case (nm, tp) =>
-        nm + ": " + Printer.print(tp)
+        nm.mkString(".") + ": " + Printer.print(tp)
     }.mkString(NL)
 
     scribe.trace(formattedMsg)
@@ -143,11 +158,11 @@ class Typechecker(isTraceEnabled: Boolean) {
       withSimpleType(unit, Type.Unit)
 
     case _ @ Reference(name, meta)  =>
-      env.get(name).map { typ =>
-        trace(s"Reference to $name", meta.pos, typ, source)
+      env.get(name.toArray).map { typ =>
+        trace(s"""Reference to ${name.mkString(".")}""", meta.pos, typ, source)
         val (tp, subst) = typ.instantiate
         Right((expr.map(_.withSimpleType(tp)), subst))
-      }.getOrElse(TypeError.singleton(meta.pos, s"Reference to undefined symbol: $name"))
+      }.getOrElse(TypeError.singleton(meta.pos, s"""Reference to undefined symbol: ${name.mkString(".")}"""))
 
     case If(cond, thenExpr, elseExpr, meta) =>
       for {
@@ -194,7 +209,14 @@ class Typechecker(isTraceEnabled: Boolean) {
           Param(name, meta.withSimpleType(TypeVariable()))
       }
 
-      val paramMappings = typedParams.map(p => p.name -> p.meta.typ)
+      val envWithoutParams = env.filter {
+        case (nm, _) =>
+          val entryName = nm.toList
+          val collidesWithParam = typedParams.exists(p => List(p.name).sameElements(entryName))
+          !collidesWithParam
+      }
+
+      val paramMappings = RadixTree(typedParams.map(p => Array(p.name) -> p.meta.typ): _*)
 
       typedParams.foreach {
         case Param(name, meta) =>
@@ -203,7 +225,7 @@ class Typechecker(isTraceEnabled: Boolean) {
 
       for {
         // Typecheck the body with the params in scope
-        (b, s) <- typecheck(body, env ++ paramMappings, source)
+        (b, s) <- typecheck(body, envWithoutParams |+| paramMappings, source)
 
         _ = trace("Lambda body", b.meta.pos, b.meta.typ, source)
 
@@ -270,21 +292,29 @@ class Typechecker(isTraceEnabled: Boolean) {
       } yield (expr, s)
   }
 
-  def typecheck(decl: TopLevelDeclaration[NameWithPos], env: Environment, source: String): Either[List[TypeError], (TopLevelDeclaration[NamePosType], Environment)] = decl match {
+  def typecheck(
+    mod: Module[NameWithPos],
+    decl: TopLevelDeclaration[NameWithPos],
+    env: Environment,
+    source: String
+  ): Either[List[TypeError], (TopLevelDeclaration[NamePosType], Environment)] = decl match {
     case Let(name, expr, meta) =>
       typecheck(expr, env, source).flatMap {
         case (checkedExpr, subst) =>
+          val unqualifiedName = Array(name)
+          val fullyQualifiedName = (mod.pkg :+ mod.name :+ name).toArray
           val eTp = checkedExpr.meta.typ.typ
           val tp = TypeScheme.generalize(env, eTp)
+          val types = RadixTree(unqualifiedName -> tp, fullyQualifiedName -> tp)
           if (tp.bound.nonEmpty) scribe.trace(NL + "Generalize: " + tp.bound.map(Printer.print(_)).mkString("[", ", ", "]"))
           trace(name, meta.pos, tp, source)
-          Right((Let(name, checkedExpr, meta.withType(tp)), substitute(env.updated(name, tp), subst)))
+          Right((Let(name, checkedExpr, meta.withType(tp)), substitute(env |+| types, subst)))
       }
   }
 
   def typecheck(
     module: Module[NameWithPos],
-    importedDecls: Map[String, TopLevelDeclaration[NameWithType]],
+    importedDecls: RadixTree[Array[String], TopLevelDeclaration[NameWithType]],
     source: String
   ): Either[List[TypeError], Module[NamePosType]] = module match {
     case Module(_, _, _, decls, meta) =>
@@ -298,7 +328,7 @@ class Typechecker(isTraceEnabled: Boolean) {
         case (resSoFar, nextDecl) =>
           for {
             (checkedSoFar, envSoFar) <- resSoFar
-            (checkedDecl, updatedEnv) <- typecheck(nextDecl, envSoFar, source)
+            (checkedDecl, updatedEnv) <- typecheck(module, nextDecl, envSoFar, source)
           } yield (checkedSoFar :+ checkedDecl, updatedEnv)
       }
 

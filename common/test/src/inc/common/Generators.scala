@@ -46,7 +46,7 @@ trait Generators { self: Matchers =>
 
   def referenceGen(decls: Decls): Gen[Expr[NamePosType]] =
     Gen.oneOf(decls).map { existing =>
-      Reference(existing.name, NamePosType(existing.meta.name, Pos.Empty, existing.meta.typ))
+      Reference(List(existing.name), NamePosType(existing.meta.name, Pos.Empty, existing.meta.typ))
     }
 
   def lambdaGen(decls: Decls): Gen[Expr[NamePosType]] =
@@ -68,9 +68,9 @@ trait Generators { self: Matchers =>
           Param(nm, NamePosType(LocalName(nm), Pos.Empty, tp))
       }
       body <- exprGen(
-        // Unpleasant trick to allow later generators to refer to v
+        // Unpleasant trick to allow later generators to refer to p
         decls ++ ps.map { p =>
-          Let(p.name, Reference(p.name, p.meta), p.meta)
+          Let(p.name, Reference(List(p.name), p.meta), p.meta)
         }
       )
       lam <- Gen.const(Lambda(ps, body, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Function(pTps.map(_.typ), body.meta.typ.typ)))))
@@ -79,7 +79,7 @@ trait Generators { self: Matchers =>
   def genArg(tp: Type)(decls: Decls): Gen[Expr[NamePosType]] = {
     val candidateDecls = decls.collect {
       case Let(nm, _, candidateMeta @ NamePosType(_, _, TypeScheme(_, `tp`))) =>
-        Reference(nm, candidateMeta)
+        Reference(List(nm), candidateMeta)
     }
 
     val litGen = tp match {
@@ -110,12 +110,12 @@ trait Generators { self: Matchers =>
 
       args <- tpArgs.init.traverse(tp => genArg(tp)(decls))
 
-    } yield Apply(Reference(nm, lambdaMeta), args, NamePosType(NoName, Pos.Empty, TypeScheme(tpArgs.last)))
+    } yield Apply(Reference(List(nm), lambdaMeta), args, NamePosType(NoName, Pos.Empty, TypeScheme(tpArgs.last)))
 
   def ifGen(decls: Decls): Gen[Expr[NamePosType]] = {
     val condDecls: List[Gen[Expr[NamePosType]]] = boolGen :: decls.collect {
       case Let(nm, _, condMeta @ NamePosType(_, _, TypeScheme(_, Type.Boolean))) =>
-        Reference(nm, condMeta)
+        Reference(List(nm), condMeta)
     }.map(Gen.const)
 
     val condGen = Gen.oneOf(condDecls).flatMap(identity)

@@ -4,7 +4,7 @@ import cats.Functor
 import cats.syntax.functor._
 import java.lang.{ Exception, String }
 import scala.{ Boolean, Char, Double, Float, Int, Long, Product, Serializable, Some }
-import scala.Predef.=:=
+import scala.Predef.{ =:=, genericArrayOps }
 import scala.collection.immutable.{ List, Map, Set }
 
 sealed trait Expr[A] extends Product with Serializable {
@@ -24,7 +24,7 @@ sealed trait Expr[A] extends Product with Serializable {
     case If(cond, thenExpr, elseExpr, _) =>
       cond.capturedVariables ++ thenExpr.capturedVariables ++ elseExpr.capturedVariables
     case Lambda(params, body, _) =>
-      val lambdaParams = params.map(p => Reference(p.name, eqv(p.meta).withEmptyPos))
+      val lambdaParams = params.map(p => Reference(List(p.name), eqv(p.meta).withEmptyPos))
       val capturedInBody = body.capturedVariables.map(v => v.copy(meta = v.meta.withEmptyPos))
       capturedInBody -- lambdaParams
     case Apply(fn, args, _) =>
@@ -85,7 +85,7 @@ sealed trait Expr[A] extends Product with Serializable {
       proto.LiteralUnit(nameWithType)
     case Reference(name, meta) =>
       val nameWithType = Some(eqv(meta).toProto)
-      proto.Reference(name, nameWithType)
+      proto.Reference(name.mkString("."), nameWithType)
     case If(cond, thenExpr, elseExpr, meta) =>
       val nameWithType = Some(eqv(meta).toProto)
       proto.If(cond.toProto, thenExpr.toProto, elseExpr.toProto, nameWithType)
@@ -119,7 +119,7 @@ object Expr {
     case unit @ proto.LiteralUnit(_) =>
       LiteralUnit(NameWithType.fromProto(unit.getNameWithType))
     case ref @ proto.Reference(name, _) =>
-      Reference(name, NameWithType.fromProto(ref.getNameWithType))
+      Reference(name.split("\\.").toList, NameWithType.fromProto(ref.getNameWithType))
     case ifExpr @ proto.If(cond, thenExpr, elseExpr, _) =>
       If(
         Expr.fromProto(cond),
@@ -208,4 +208,4 @@ final case class LiteralChar[A](c: Char, meta: A) extends Expr[A]
 final case class LiteralString[A](s: String, meta: A) extends Expr[A]
 final case class LiteralUnit[A](meta: A) extends Expr[A]
 
-final case class Reference[A](name: String, meta: A) extends Expr[A]
+final case class Reference[A](name: List[String], meta: A) extends Expr[A]

@@ -1,16 +1,20 @@
 package inc.resolver
 
 import cats.data.Chain
+import cats.instances.string._
 import cats.syntax.functor._
+import cats.syntax.monoid._
+import com.rklaehn.radixtree._
 import inc.common._
 import java.lang.String
-import scala.{ Either, Right, StringContext }
-import scala.collection.immutable.{ List, Map }
+import scala.{ Array, Either, Right, StringContext }
+import scala.collection.immutable.List
+import scala.Predef.{ ArrowAssoc, genericArrayOps }
 
 object Resolver {
-  type SymbolTable = Map[String, Name]
+  type SymbolTable = RadixTree[Array[String], Name]
 
-  val EmptyTable: SymbolTable = Map.empty
+  val EmptyTable: SymbolTable = RadixTree.empty
   val EmptyResult: Either[List[ResolverError], Chain[Expr[NameWithPos]]] = Right(Chain.empty)
 
   def withName(expr: Expr[Pos], name: Name, tbl: SymbolTable) =
@@ -42,7 +46,7 @@ object Resolver {
       withName(unit, NoName, tbl)
 
     case ref @ Reference(name, pos)  =>
-      tbl.get(name)
+      tbl.get(name.toArray)
         .map(nm => withName(ref, nm, tbl))
         .getOrElse(ResolverError.singleton(pos, s"Reference to undefined symbol: $name"))
 
@@ -55,20 +59,29 @@ object Resolver {
 
     case Lambda(params, body, pos) =>
       // Allow name shadowing in lambda params
-      val tblWithoutParams = tbl.filterNot { case (nm, _) => params.map(_.name).contains(nm) }
+      val tblWithoutParams = tbl.filter {
+        case (nm, _) =>
+          val entryName = nm.toList
+          val collidesWithParam = params.exists(p => List(p.name).sameElements(entryName))
+          !collidesWithParam
+      }
+
       val emptyParams: Chain[Param[NameWithPos]] = Chain.empty
+
       val emptyRes: Either[List[ResolverError], (Chain[Param[NameWithPos]], SymbolTable)] = Right((emptyParams, tblWithoutParams))
 
       val resolvedParams = params.foldLeft(emptyRes) {
         case (resSoFar, param @ Param(name, pos)) =>
           resSoFar.flatMap {
             case (paramsSoFar, updatedTbl) =>
-              if (updatedTbl.contains(name))
+              val nm = Array(name)
+
+              if (updatedTbl.contains(nm))
                 ResolverError.singleton(pos, s"Symbol $name is already defined")
               else {
                 val localName = LocalName(name)
                 val paramWithName = param.copy(meta = NameWithPos(localName, pos))
-                Right((paramsSoFar :+ paramWithName, updatedTbl.updated(name, localName)))
+                Right((paramsSoFar :+ paramWithName, updatedTbl |+| RadixTree(nm -> localName)))
               }
           }
       }
@@ -100,16 +113,20 @@ object Resolver {
 
       resolve(expr, tbl).flatMap {
         case (resolvedExpr, updatedTbl) =>
-          if (updatedTbl.contains(name))
+          val unqualifiedName = Array(name)
+          val qualifiedName = (mod.pkg :+ mod.name :+ name).toArray
+          val names: SymbolTable = RadixTree(unqualifiedName -> memberName, qualifiedName -> memberName)
+
+          if (updatedTbl.contains(unqualifiedName))
             ResolverError.singleton(resolvedExpr.meta.pos, s"Symbol $name is already defined")
           else
-            Right((Let(name, resolvedExpr, NameWithPos(memberName, pos)), updatedTbl.updated(name, memberName)))
+            Right((Let(name, resolvedExpr, NameWithPos(memberName, pos)), updatedTbl |+| names))
       }
   }
 
   def resolve(
     module: Module[Pos],
-    importedDecls: Map[String, TopLevelDeclaration[NameWithType]] = Map.empty
+    importedDecls: RadixTree[Array[String], TopLevelDeclaration[NameWithType]] = RadixTree.empty
   ): Either[List[ResolverError], Module[NameWithPos]] = module match {
     case Module(pkg, name, _, decls, pos) =>
       val initialTbl = importedDecls.mapValues(_.meta.name)

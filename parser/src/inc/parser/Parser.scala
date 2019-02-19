@@ -26,6 +26,7 @@ object Parser {
 
   // Separators
   def maybeSemi[_: P] = P(";".? ~ allWs)
+  def dot[_: P] = P("." ~ allWs)
   def comma[_: P] = P("," ~ allWs)
 
   // Literals
@@ -109,9 +110,9 @@ object Parser {
   def inBraces[_: P, A](p: => P[A]) = P("{" ~/ allWs ~ p ~ allWs ~ "}")
   def inParens[_: P, A](p: => P[A]) = P("(" ~/ allWs ~ p ~ allWs ~ ")")
 
-  def reference[_: P] = P(Index ~ identifier ~ Index).map {
+  def reference[_: P] = P(Index ~ identifier.rep(sep = dot) ~ Index).map {
     case (from, id, to) =>
-      Reference(id, Pos(from, to))
+      Reference(id.toList, Pos(from, to))
   }
 
   def ifExpr[_: P] = P(

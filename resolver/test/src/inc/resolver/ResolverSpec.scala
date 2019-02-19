@@ -15,7 +15,7 @@ class ResolverSpec extends FlatSpec with Matchers {
     Let(name, binding, Pos.Empty)
 
   def mkInt(i: Int) = LiteralInt(i, Pos.Empty)
-  def mkRef(r: String) = Reference(r, Pos.Empty)
+  def mkRef(r: String) = Reference(List(r), Pos.Empty)
 
   def mkResolvedModule(name: String, decls: List[TopLevelDeclaration[NameWithPos]]) = Module(
     pkg = List("Test", "Resolver"),

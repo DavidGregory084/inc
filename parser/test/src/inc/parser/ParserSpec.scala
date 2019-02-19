@@ -176,12 +176,12 @@ class ParserSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChec
   it should "parse references to other fields" in {
     val mod = Module(List.empty, "Float", List.empty, List(
       Let("float", LiteralFloat(3.142f, ()), ()),
-      Let("float2", Reference("float", ()), ())
+      Let("float2", Reference(List("float"), ()), ())
     ), ())
     val mod2 = Module(List.empty, "Double", List.empty, List(
       Let("double", LiteralDouble(3.142d, ()), ()),
       Let("double2", LiteralDouble(0.0001d, ()), ()),
-      Let("double3", Reference("double2", ()), ())
+      Let("double3", Reference(List("double2"), ()), ())
     ), ())
 
     parseModule(

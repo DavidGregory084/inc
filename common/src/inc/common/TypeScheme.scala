@@ -1,6 +1,9 @@
 package inc.common
 
+import cats.instances.string._
+import com.rklaehn.radixtree._
 import java.lang.String
+import scala.Array
 import scala.collection.immutable.{ List, Map, Set }
 
 case class TypeScheme(bound: List[TypeVariable], typ: Type) {
@@ -26,7 +29,7 @@ case class TypeScheme(bound: List[TypeVariable], typ: Type) {
 object TypeScheme {
   def apply(typ: Type): TypeScheme = TypeScheme(List.empty, typ)
 
-  def generalize(env: Map[String, TypeScheme], typ: Type): TypeScheme = {
+  def generalize(env: RadixTree[Array[String], TypeScheme], typ: Type): TypeScheme = {
     val freeInEnv = env.values.flatMap(_.freeTypeVariables).toSet
     val bound = typ.freeTypeVariables diff freeInEnv
     val scheme = TypeScheme(bound.toList, typ)

@@ -1,5 +1,7 @@
 package inc.typechecker
 
+import cats.instances.string._
+import com.rklaehn.radixtree._
 import inc.common._
 import org.scalatest._
 
@@ -17,7 +19,7 @@ class TypecheckerSpec extends FlatSpec with Matchers {
   def mkInt(i: Int) = LiteralInt(i, NameWithPos(NoName, Pos.Empty))
   def mkDbl(d: Double) = LiteralDouble(d, NameWithPos(NoName, Pos.Empty))
   def mkBool(b: Boolean) = LiteralBoolean(b, NameWithPos(NoName, Pos.Empty))
-  def mkRef(r: String) = Reference(r, NameWithPos(NoName, Pos.Empty))
+  def mkRef(r: String) = Reference(List(r), NameWithPos(NoName, Pos.Empty))
 
   def mkIf(cond: Expr[NameWithPos], thenExpr: Expr[NameWithPos], elseExpr: Expr[NameWithPos]) =
     If(cond, thenExpr, elseExpr, NameWithPos(NoName, Pos.Empty))
@@ -42,9 +44,9 @@ class TypecheckerSpec extends FlatSpec with Matchers {
     Let(name, binding, NamePosType(LocalName(name), Pos.Empty, binding.meta.typ))
 
   def mkCheckedInt(i: Int) = LiteralInt(i, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Int)))
-  def mkCheckedRef(r: String, typ: TypeScheme) = Reference(r, NamePosType(NoName, Pos.Empty, typ))
+  def mkCheckedRef(r: String, typ: TypeScheme) = Reference(List(r), NamePosType(NoName, Pos.Empty, typ))
 
-  val noImports = Map.empty[String, TopLevelDeclaration[NameWithType]]
+  val noImports = RadixTree.empty[Array[String], TopLevelDeclaration[NameWithType]]
 
   "Typechecker" should "typecheck let bound literals successfully" in {
     val mod = mkModule("Int", List(mkLet("int", mkInt(42))))

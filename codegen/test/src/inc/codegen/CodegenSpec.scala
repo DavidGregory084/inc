@@ -22,7 +22,7 @@ class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChe
     Let(name, binding, NamePosType(LocalName(name), Pos.Empty, binding.meta.typ))
 
   def mkInt(i: Int) = LiteralInt(i, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Int)))
-  def mkRef(r: String, typ: TypeScheme) = Reference(r, NamePosType(NoName, Pos.Empty, typ))
+  def mkRef(r: String, typ: TypeScheme) = Reference(List(r), NamePosType(NoName, Pos.Empty, typ))
   def mkUnit() = LiteralUnit(NamePosType(NoName, Pos.Empty, TypeScheme(Type.Unit)))
 
   "Codegen" should "generate code for a simple module" in {

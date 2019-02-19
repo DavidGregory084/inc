@@ -7,7 +7,9 @@ import inc.typechecker.Typechecker
 import inc.codegen.Codegen
 import cats.data.{Chain, Validated}
 import cats.instances.list._
+import cats.instances.string._
 import cats.syntax.traverse._
+import com.rklaehn.radixtree._
 import java.lang.{ ClassLoader, String, System }
 import java.io.{ByteArrayOutputStream, File, InputStream, OutputStream}
 import java.net.{ URL, URLClassLoader }
@@ -15,7 +17,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path, Paths}
 import scala.{ Array, Boolean, Byte, Long, Unit, Either, Option, Some, StringContext }
 import scala.collection.JavaConverters._
-import scala.collection.immutable.{ List, Map }
+import scala.collection.immutable.List
 import scala.Predef.{ ArrowAssoc, wrapRefArray }
 import scala.util.control.NonFatal
 import scribe._
@@ -176,7 +178,7 @@ object Main {
     outputStream.toByteArray
   }
 
-  def readEnvironment(imports: List[Import], classloader: ClassLoader): Map[String, TopLevelDeclaration[NameWithType]] = {
+  def readEnvironment(imports: List[Import], classloader: ClassLoader): RadixTree[Array[String], TopLevelDeclaration[NameWithType]] = {
     val distinctPrefixes = imports.map {
       case ImportModule(pkg, nm) =>
         (pkg, nm, List.empty[String])
@@ -190,20 +192,26 @@ object Main {
         val classBytes = readClassBytes(classloader, className)
         val maybeInterface = Codegen.readInterface(classBytes)
 
-        maybeInterface
-          .toList
-          .flatMap { mod =>
-            val decls =
-              if (syms.isEmpty)
-                mod.declarations
-              else
-                mod.declarations.filter(d => syms.contains(d.name))
+        for {
+          mod <- maybeInterface.toList
 
-            decls.map(d => d.name -> d)
-          }
+          decl <- if (syms.isEmpty)
+              mod.declarations
+            else
+              mod.declarations.filter(d => syms.contains(d.name))
+
+          qualifiedName = Array(mod.name, decl.name)
+
+          fullyQualifiedName = (mod.pkg :+ mod.name :+ decl.name).toArray
+
+          pair <- List(
+            (qualifiedName -> decl),
+            (fullyQualifiedName -> decl)
+          )
+        } yield pair
     }
 
-    importedDecls.toMap
+    RadixTree(importedDecls: _*)
   }
 
   def parseUrls(classpath: String): Either[List[Error], Array[URL]] = {

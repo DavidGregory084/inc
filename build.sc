@@ -68,6 +68,7 @@ object common extends ScalaSettingsModule {
   def ivyDeps = T {
     super.ivyDeps() ++ Agg(
       ivy"org.typelevel::cats-core:1.6.0",
+      ivy"com.rklaehn::radixtree:0.5.1",
       ivy"org.typelevel::paiges-core:0.2.1",
       ivy"com.lihaoyi::fansi:0.2.5",
       ivy"com.outr::scribe:2.7.1"
