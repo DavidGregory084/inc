@@ -21,6 +21,7 @@ sealed trait TopLevelDeclaration[A] extends Product with Serializable {
   def substitute(subst: Map[TypeVariable, Type])(implicit eqv: A =:= NamePosType): TopLevelDeclaration[A] =
     this.map(a => eqv(a).substitute(subst).asInstanceOf[A])
 }
+
 object TopLevelDeclaration {
   def fromProto(decl: proto.TopLevelDeclaration): TopLevelDeclaration[NameWithType] = decl match {
     case let @ proto.Let(name, binding, _) =>
@@ -40,4 +41,9 @@ object TopLevelDeclaration {
     }
   }
 }
-final case class Let[A](name: String, binding: Expr[A], meta: A) extends TopLevelDeclaration[A]
+
+final case class Let[A](
+  name: String,
+  binding: Expr[A],
+  meta: A
+) extends TopLevelDeclaration[A]
