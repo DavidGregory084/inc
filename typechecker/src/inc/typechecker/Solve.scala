@@ -73,7 +73,7 @@ class Solve(isTraceEnabled: Boolean) {
         Right(Right(subst))
       case (Equal(l, r, pos) :: tail, substSoFar) =>
         unify(pos, l, r).map { subst =>
-          Left((tail, chainSubstitution(substSoFar, subst)))
+          Left((tail.map(_.substitute(subst)), chainSubstitution(substSoFar, subst)))
         }
     }
   }
