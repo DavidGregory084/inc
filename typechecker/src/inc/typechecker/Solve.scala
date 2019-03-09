@@ -3,7 +3,6 @@ package inc.typechecker
 import inc.common._
 
 import cats.instances.either._
-// import cats.syntax.either._
 import cats.syntax.flatMap._
 import scala.{ ::, Boolean, Left, Right, Some, Nil, StringContext }
 import scala.collection.immutable.{ List, Map }
@@ -18,6 +17,18 @@ class Solve(isTraceEnabled: Boolean) {
       minimumLevel = Some(Level.Trace)
     ).replace()
   }
+
+  type Substitution = Map[TypeVariable, Type]
+  val EmptySubst: Substitution = Map.empty
+
+  def chainSubstitutions(ss: List[Substitution]): Substitution =
+    ss.foldLeft(EmptySubst)(chainSubstitution)
+
+  def chainSubstitutions(ss: Substitution*): Substitution =
+    chainSubstitutions(ss.toList)
+
+  def chainSubstitution(s1: Substitution, s2: Substitution): Substitution =
+    s2 ++ s1.mapValues(_.substitute(s2))
 
   def bind(pos: Pos, tyVar: TypeVariable, typ: Type): Infer[Substitution] =
     typ match {
