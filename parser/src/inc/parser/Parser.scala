@@ -142,10 +142,10 @@ object Parser {
   }
 
   def application[_: P]: P[Expr[Pos] => Expr[Pos]] = P(
-    Index ~ inParens(expression.rep(sep = comma./)) ~ Index
+    inParens(expression.rep(sep = comma./)) ~ Index
   ).map {
-    case (from, args, to) =>
-      fn => Apply(fn, args.toList, Pos(from, to))
+    case (args, to) =>
+      fn => Apply(fn, args.toList, Pos(fn.meta.from, to))
   }
 
   // NoCut allows us to backtrack out of a nullary lambda into a unit literal, and from an if statement into an identifier starting with "if"

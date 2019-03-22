@@ -32,7 +32,7 @@ class Gather(isTraceEnabled: Boolean) {
 
   def trace(name: String, pos: Pos, constraints: List[Constraint], source: String) = {
     if (constraints.nonEmpty) {
-      lazy val formattedMsg = NL + name + ": " + (NL * 2) +
+      lazy val formattedMsg = name + ": " + (NL * 2) +
         constraints.map(Printer.print).mkString(NL)
       scribe.trace(Printer.withSourceContext(None, formattedMsg, pos, fansi.Color.Yellow, source))
     }
