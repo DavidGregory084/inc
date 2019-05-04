@@ -28,7 +28,7 @@ object Parser {
   def oneToNine[_: P] = P(CharIn("1-9").!)
   def zeroToNine[_: P] = P(CharIn("0-9").!)
   def digits[_: P] = P(CharsWhileIn("0-9", 0).!)
-  def digitsLeadingOneToNine[_: P] = P((oneToNine ~ digits) map { case (first, rest) => first + rest })
+  def digitsLeadingOneToNine[_: P] = P((oneToNine ~~ digits) map { case (first, rest) => first + rest })
 
   def literalBoolean[_: P] = P(Index ~ StringIn("true", "false").! ~ Index).map {
     case (from, b, to) =>
@@ -39,7 +39,7 @@ object Parser {
   val charDisallowedChars = "\'" + disallowedChars
   val stringDisallowedChars = "\"" + disallowedChars
 
-  def literalChar[_: P] = P(Index ~ "'" ~/ CharPred(c => !charDisallowedChars.contains(c)).! ~ "'" ~ Index).map {
+  def literalChar[_: P] = P(Index ~ "'" ~~/ CharPred(c => !charDisallowedChars.contains(c)).! ~~ "'" ~ Index).map {
     case (from, s, to) => LiteralChar(s(0), Pos(from, to))
   }
 
@@ -52,7 +52,7 @@ object Parser {
       LiteralString(s, Pos(from, to))
   }
 
-  def literalIntegral[_: P] = P(Index ~ (zero | digitsLeadingOneToNine) ~ CharIn("lL").?.! ~ Index).map {
+  def literalIntegral[_: P] = P(Index ~ (zero | digitsLeadingOneToNine) ~~ CharIn("lL").?.! ~ Index).map {
     case (from, num, suffix, to) =>
       if (suffix.isEmpty)
         LiteralInt(Integer.parseInt(num), Pos(from, to))
@@ -61,7 +61,7 @@ object Parser {
   }
 
   def exponentPart[_: P] = P(
-    (CharIn("eE").! ~/ CharIn("+\\-").?.! ~ digits).?
+    (CharIn("eE").! ~~/ CharIn("+\\-").?.! ~~ digits).?
   ).map {
     case Some((exponentIndicator, sign, digits)) =>
       exponentIndicator + sign + digits.mkString
@@ -71,7 +71,7 @@ object Parser {
 
   def literalFloatingPoint[_: P] = P(
     Index ~
-      (zero | digitsLeadingOneToNine) ~ "." ~/ digits ~ exponentPart ~ CharIn("dDfF").?.! ~
+      (zero | digitsLeadingOneToNine) ~~ "." ~~/ digits ~~ exponentPart ~~ CharIn("dDfF").?.! ~
       Index
   ).map {
     case (from, wholeNumberPart, fractionPart, exponentPart, "", to) =>
@@ -96,7 +96,7 @@ object Parser {
       literalUnit
 
   // Identifiers
-  def identifier[_: P] = !ReservedWords ~ P((CharPred(Character.isJavaIdentifierStart).! ~ CharsWhile(Character.isJavaIdentifierPart, 0).!).map {
+  def identifier[_: P] = !ReservedWords ~ P((CharPred(Character.isJavaIdentifierStart).! ~~ CharsWhile(Character.isJavaIdentifierPart, 0).!).map {
     case (first, rest) => first + rest
   })
 
