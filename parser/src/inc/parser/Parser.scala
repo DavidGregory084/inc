@@ -16,8 +16,11 @@ object Parser {
       "if",
       "then",
       "else"
-    )
+    ) ~~ nonZeroWs
   )
+  
+  // Whitespace
+  def nonZeroWs[_: P] = P(CharsWhile(Character.isWhitespace, 1))
 
   // Separators
   def maybeSemi[_: P] = P(";".?)
@@ -96,7 +99,7 @@ object Parser {
       literalUnit
 
   // Identifiers
-  def identifier[_: P] = !ReservedWords ~ P((CharPred(Character.isJavaIdentifierStart).! ~~ CharsWhile(Character.isJavaIdentifierPart, 0).!).map {
+  def identifier[_: P] = !ReservedWords ~~ P((CharPred(Character.isJavaIdentifierStart).! ~~ CharsWhile(Character.isJavaIdentifierPart, 0).!).map {
     case (first, rest) => first + rest
   })
 
