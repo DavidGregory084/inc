@@ -1,6 +1,6 @@
 package inc.parser
 
-import fastparse._, NoWhitespace._
+import fastparse._, ScalaWhitespace._
 import inc.common._
 import java.lang.{ Boolean, Character, Double, Float, Integer, Long, String }
 import scala.{ Either, Right, Int, Some, None, StringContext }
@@ -16,17 +16,12 @@ object Parser {
       "if",
       "then",
       "else"
-    ) ~/ nonZeroWs
+    )
   )
 
-  // Whitespace
-  def ws[_: P] = P(CharsWhile(_ == ' ', 0))
-  def allWs[_: P] = P(CharsWhile(Character.isWhitespace, 0))
-  def nonZeroWs[_: P] = P(CharsWhile(Character.isWhitespace, 1))
-
   // Separators
-  def maybeSemi[_: P] = P(";".? ~ allWs)
-  def comma[_: P] = P("," ~ allWs)
+  def maybeSemi[_: P] = P(";".?)
+  def comma[_: P] = P(",")
 
   // Literals
   def zero[_: P] = P("0".!)
@@ -106,8 +101,8 @@ object Parser {
   })
 
   // Blocks
-  def inBraces[_: P, A](p: => P[A]) = P("{" ~/ allWs ~ p ~ allWs ~ "}")
-  def inParens[_: P, A](p: => P[A]) = P("(" ~/ allWs ~ p ~ allWs ~ ")")
+  def inBraces[_: P, A](p: => P[A]) = P("{" ~/ p ~ "}")
+  def inParens[_: P, A](p: => P[A]) = P("(" ~/ p ~ ")")
 
   def reference[_: P] = P(Index ~ identifier ~ Index).map {
     case (from, id, to) =>
@@ -116,9 +111,9 @@ object Parser {
 
   def ifExpr[_: P] = P(
     Index ~
-    "if" ~/ nonZeroWs ~ expression ~ nonZeroWs ~
-      "then" ~ nonZeroWs ~ expression ~ nonZeroWs ~
-      "else" ~ nonZeroWs ~ expression ~ Index ~ ws
+    "if" ~/ expression ~
+      "then" ~ expression ~
+      "else" ~ expression ~ Index
   ).map {
     case (from, cond, thenExpr, elseExpr, to) =>
       If(cond, thenExpr, elseExpr, Pos(from, to))
@@ -133,7 +128,7 @@ object Parser {
 
   def lambda[_: P] = P(
     Index ~
-    (inParens(param.rep(sep = comma./)) | param.map(Seq(_))) ~ nonZeroWs ~ "->" ~/ nonZeroWs ~
+    (inParens(param.rep(sep = comma./)) | param.map(Seq(_))) ~ "->" ~/
       expression ~
       Index
   ).map {
@@ -158,9 +153,9 @@ object Parser {
   }
 
   def letDeclaration[_: P] = P(
-    Index ~ "let" ~/ nonZeroWs ~ identifier ~ nonZeroWs ~ "=" ~ nonZeroWs ~
+    Index ~ "let" ~/ identifier ~ "=" ~
       (inBraces(expression) | expression) ~
-      Index ~ ws
+      Index
   ).map {
     case (from, name, expr, to) =>
       Let(name, expr, Pos(from, to))
@@ -169,7 +164,7 @@ object Parser {
   def decl[_: P] = P(letDeclaration)
 
   def imports[_: P] = P {
-    "import" ~/ nonZeroWs ~ identifier.rep(min = 1, sep = ".") ~ ("." ~ inBraces(identifier.rep(min = 1, sep = comma./))).?
+    "import" ~/ identifier.rep(min = 1, sep = ".") ~ ("." ~ inBraces(identifier.rep(min = 1, sep = comma./))).?
   }.map {
     case (ident, Some(symbols)) =>
       if (ident.length > 1)
@@ -186,10 +181,10 @@ object Parser {
   def bracesBlock[_: P] = P(inBraces(imports.rep(sep = maybeSemi) ~ maybeSemi ~ decl.rep(sep = maybeSemi)))
 
   def module[_: P] = P {
-    allWs ~ Index ~
-    "module" ~/ nonZeroWs ~ identifier.rep(min = 1, sep = ".") ~ allWs ~
+    Index ~
+    "module" ~/ identifier.rep(min = 1, sep = ".") ~
       bracesBlock ~ Index ~
-      allWs ~ End
+      End
   }.map {
     case (from, moduleName, (imports, decls), to) =>
       val pos = Pos(from, to)
