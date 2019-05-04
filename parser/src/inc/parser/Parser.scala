@@ -18,7 +18,7 @@ object Parser {
       "else"
     ) ~~ nonZeroWs
   )
-  
+
   // Whitespace
   def nonZeroWs[_: P] = P(CharsWhile(Character.isWhitespace, 1))
 
