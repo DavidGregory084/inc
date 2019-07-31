@@ -13,20 +13,13 @@ case class TypeScheme(bound: List[TypeVariable], typ: Type) {
   def substitute(subst: Map[TypeVariable, Type]) =
     TypeScheme(bound, typ.substitute(subst -- bound))
 
-  def instantiate(pos: Pos): (Type, List[Constraint]) =
+  def instantiate: Type =
     if (bound.isEmpty)
-      (typ, List.empty)
+      typ
     else {
       val freshVars = bound.map(_ => TypeVariable())
-
       val subst = bound.zip(freshVars)
-
-      val constraints = subst.map {
-        case (l, r) =>
-          Equal(l, r, pos)
-      }
-
-      (typ.substitute(subst.toMap), constraints)
+      typ.substitute(subst.toMap)
     }
 }
 

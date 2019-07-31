@@ -87,14 +87,14 @@ class Gather(isTraceEnabled: Boolean) {
       case Reference(name, meta)  =>
         env.get(name).map { typ =>
 
-          val (tp, cst) = typ.instantiate(meta.pos)
+          val tp = typ.instantiate
 
-          if (cst.nonEmpty)
-            scribe.trace(NL + s"Instantiate ${Printer.print(typ)}:${NL * 2}${cst.map(Printer.print).mkString(NL)}")
+          if (typ.bound.nonEmpty)
+            scribe.trace(NL + s"Instantiate ${Printer.print(typ)} as ${Printer.print(tp)}")
 
           trace(s"Reference to $name", meta.pos, tp, source)
 
-          Right((expr.map(_.withSimpleType(tp)), cst))
+          Right((expr.map(_.withSimpleType(tp)), List.empty))
         }.getOrElse(TypeError.singleton(meta.pos, s"Reference to undefined symbol: $name"))
 
       case If(cond, thenExpr, elseExpr, meta) =>
