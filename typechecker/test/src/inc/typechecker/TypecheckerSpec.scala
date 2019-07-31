@@ -160,7 +160,7 @@ class TypecheckerSpec extends FlatSpec with Matchers {
     result shouldBe 'right
   }
 
-  it should "fail the occurs check when trying to apply a monomorphic function to itself" in {
+  it should "fail the occurs check when trying to apply a function to itself" in {
     val mod = mkModule("Occurs", List(
       mkLet("occ", mkLam(List("f"), mkApp(mkRef("f"), List(mkRef("f")))))
     ))
