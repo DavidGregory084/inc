@@ -15,6 +15,7 @@ class TypecheckerSpec extends FlatSpec with Matchers {
     Let(name, binding, NameWithPos(LocalName(name), Pos.Empty))
 
   def mkInt(i: Int) = LiteralInt(i, NameWithPos(NoName, Pos.Empty))
+  def mkStr(s: String) = LiteralString(s, NameWithPos(NoName, Pos.Empty))
   def mkDbl(d: Double) = LiteralDouble(d, NameWithPos(NoName, Pos.Empty))
   def mkBool(b: Boolean) = LiteralBoolean(b, NameWithPos(NoName, Pos.Empty))
   def mkRef(r: String) = Reference(r, NameWithPos(NoName, Pos.Empty))
@@ -43,6 +44,7 @@ class TypecheckerSpec extends FlatSpec with Matchers {
 
   def mkCheckedInt(i: Int) = LiteralInt(i, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Int)))
   def mkCheckedRef(r: String, typ: TypeScheme) = Reference(r, NamePosType(NoName, Pos.Empty, typ))
+
 
   val noImports = Map.empty[String, TopLevelDeclaration[NameWithType]]
 
@@ -90,8 +92,7 @@ class TypecheckerSpec extends FlatSpec with Matchers {
     ))
 
     val result2 = Typechecker.typecheck(mod2, noImports, "")
-    result2 shouldBe 'left
-    result2.left.get.head shouldBe TypeError(Pos.Empty, Red("Int") + " does not unify with " + Red("Boolean"))
+    result2 shouldBe TypeError.singleton(Pos.Empty, Red("Int") + " does not unify with " + Red("Boolean"))
   }
 
   it should "ensure the expressions provided to both branches of an if are compatible" in {
@@ -107,8 +108,7 @@ class TypecheckerSpec extends FlatSpec with Matchers {
     ))
 
     val result2 = Typechecker.typecheck(mod2, noImports, "")
-    result2 shouldBe 'left
-    result2.left.get.head shouldBe TypeError(Pos.Empty, Red("Int") + " does not unify with " + Red("Double"))
+    result2 shouldBe TypeError.singleton(Pos.Empty, Red("Int") + " does not unify with " + Red("Double"))
   }
 
   it should "infer the parameter and return type of lambda expressions" in {
@@ -143,5 +143,29 @@ class TypecheckerSpec extends FlatSpec with Matchers {
 
     val result2 = Typechecker.typecheck(mod2, noImports, "")
     result2 shouldBe 'right
+  }
+
+  it should "allow a polymorphic function to be instantiated to different types" in {
+    val constAppliedToInt = mkApp(mkRef("const"), List(mkInt(32), mkInt(43)))
+    val intReplaceWithStr = mkApp(mkRef("str"), List(constAppliedToInt))
+    val constAppliedToStr = mkApp(mkRef("const"), List(intReplaceWithStr, mkStr("a")))
+
+    val mod = mkModule("Const", List(
+      mkLet("const", mkLam(List("a", "b"), mkRef("a"))),
+      mkLet("str", mkLam(List("a"), mkStr("a"))),
+      mkLet("app", constAppliedToStr)
+    ))
+
+    val result = Typechecker.typecheck(mod, noImports, "")
+    result shouldBe 'right
+  }
+
+  it should "fail the occurs check when trying to apply a function to itself" in {
+    val mod = mkModule("Occurs", List(
+      mkLet("occ", mkLam(List("f"), mkApp(mkRef("f"), List(mkRef("f")))))
+    ))
+
+    val result = Typechecker.typecheck(mod, noImports, "")
+    result shouldBe TypeError.singleton(Pos.Empty, "Attempt to construct infinite type")
   }
 }
