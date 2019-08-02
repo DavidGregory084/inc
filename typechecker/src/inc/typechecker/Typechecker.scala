@@ -2,9 +2,10 @@ package inc.typechecker
 
 import inc.common._
 import java.lang.String
-import scala.{ Boolean, Some }
+import scala.{ Boolean, Right, Some }
 import scala.collection.immutable.Map
-import scala.Predef.{ ArrowAssoc, augmentString }
+import scala.Predef.{ ArrowAssoc, augmentString, ??? }
+import cats.data.Chain
 import scribe._
 import scribe.format._
 
@@ -27,25 +28,59 @@ class Typechecker(isTraceEnabled: Boolean) {
     scribe.trace(formattedMsg)
   }
 
+  def synth(
+    expr: Expr[NameWithPos],
+    env: Environment,
+    source: String
+  ): Infer[Expr[NamePosType]] = {
+    ???
+  }
+
+  def check(
+    decl: TopLevelDeclaration[NameWithPos],
+    env: Environment,
+    source: String
+  ): Infer[TopLevelDeclaration[NamePosType]] = {
+    ???
+  }
+
+  def synth(
+    mod: Module[NameWithPos],
+    env: Environment,
+    source: String
+  ): Infer[Module[NamePosType]] = {
+    val emptyRes: Infer[(Chain[TopLevelDeclaration[NamePosType]], Environment)] =
+      Right((Chain.empty, env))
+
+    val checkedDecls = mod.declarations.foldLeft(emptyRes) {
+      case (resSoFar, nextDecl) =>
+        for {
+          (checkedSoFar, envSoFar) <- resSoFar
+          checkedDecl <- check(nextDecl, envSoFar, source)
+          updatedEnv = envSoFar.updated(checkedDecl.name, checkedDecl.meta.typ)
+        } yield (checkedSoFar :+ checkedDecl, updatedEnv)
+    }
+
+    checkedDecls.map {
+      case (checked, _) =>
+        mod.copy(
+          declarations = checked.toList,
+          meta = mod.meta.withSimpleType(Type.Module)
+        )
+    }
+
+  }
+
   def typecheck(
     module: Module[NameWithPos],
     importedDecls: Map[String, TopLevelDeclaration[NameWithType]],
     source: String
   ): Infer[Module[NamePosType]] = {
-    val gather = new Gather(isTraceEnabled)
-    val solve = new Solve(isTraceEnabled)
+
+    val initialEnv = importedDecls.mapValues(_.meta.typ)
 
     for {
-      // Gather constraints from the module's definitions
-      (mod, csts) <- gather.gather(module, importedDecls, source)
-
-      // Try to solve the constraints
-      subst       <- solve.solve(csts)
-
-      _ = if (subst.nonEmpty) scribe.trace("Apply substitution: " + Printer.print(subst))
-
-      // Apply the substitution from the constraint solution to the module
-      typedMod = mod.substitute(subst)
+      typedMod <- synth(module, initialEnv, source)
 
       typeEnv = typedMod.declarations.map(decl => decl.name -> decl.meta.typ)
 

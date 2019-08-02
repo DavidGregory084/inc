@@ -3,7 +3,7 @@ package inc.parser
 import fastparse._, NoWhitespace._
 import inc.common._
 import java.lang.{ Boolean, Character, Double, Float, Integer, Long, String }
-import scala.{ Either, Right, Int, Some, None, StringContext }
+import scala.{ Either, Right, Int, Some, None, StringContext, Nil }
 import scala.collection.immutable.{ List, Seq }
 import scala.Predef.augmentString
 
@@ -155,6 +155,37 @@ object Parser {
         case (expr, app) =>
           app(expr)
       }
+  }
+
+  def typeParams[_: P]: P[List[Type]] = P(
+    Index ~ "[" ~ allWs ~
+      typeExpr.rep(min = 1, sep = comma./) ~ allWs ~
+    "]" ~ Index
+  ).map {
+    case (from @ _, params, to @ _) =>
+      params.toList
+  }
+
+  def typeExpr[_: P] = P(
+    Index ~ identifier ~ typeParams.? ~ Index
+  ).map {
+    case (from @ _, nm, params, to @ _) =>
+      TypeConstructor(nm, params.getOrElse(Nil))
+  }
+
+  def typeSchemeExpr[_: P] = P(
+    Index ~ "[" ~
+      identifier.rep(min = 1, sep = comma./) ~
+      "]" ~ allWs ~ "{" ~ allWs ~ typeExpr ~ allWs ~ "}" ~
+      Index
+  ).map {
+    case (from, bound, tExpr, to) =>
+      TypeScheme(bound, tExpr)
+  }
+
+  def typeAnn[_: P] = P(
+    ":" ~ allWs ~ (typeSchemeExpr | typeExpr.map(TypeScheme(List.empty, _)))
+  ).map {
   }
 
   def letDeclaration[_: P] = P(

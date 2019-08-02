@@ -49,11 +49,6 @@ object Printer {
     }
   }
 
-  def print(constraint: Constraint): String = constraint match {
-    case Equal(l, r, _) =>
-      Printer.print(l) + " \u2261 " + Printer.print(r)
-  }
-
   def print(subst: Map[TypeVariable, Type]): String = {
     subst.map {
       case (tyVar, typ) =>
