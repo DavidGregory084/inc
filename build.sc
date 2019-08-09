@@ -11,6 +11,18 @@ import mill.contrib.BuildInfo
 import $ivy.`io.github.davidgregory084::mill-tpolecat:0.1.0`
 import io.github.davidgregory084.TpolecatModule
 
+import $ivy.`org.postgresql:postgresql:42.2.6`
+import org.postgresql.copy.CopyManager
+import org.postgresql.core.BaseConnection
+import java.sql.DriverManager
+
+import $ivy.`com.github.tototoshi::scala-csv:1.3.6`
+import com.github.tototoshi.csv._
+
+import java.io.FileReader
+import java.time._
+import java.time.format._
+
 trait PublishSettingsModule extends PublishModule {
   def publishVersion = "0.1.0-SNAPSHOT"
 
@@ -128,6 +140,164 @@ object main extends ScalaSettingsModule with BuildInfo {
     val script = millSourcePath / up / "inc"
     if (exists! script) rm!(script)
     cp(assembly().path, script)
+  }
+
+  def benchmarkSources = T.sources {
+    millSourcePath / up / "bench"
+  }
+
+  def runBenchmark() = T.command {
+    val dest = T.ctx().dest
+    val assemblyJar = assembly()
+
+    def isTravisCI: Boolean = {
+      T.ctx().env
+        .get("TRAVIS")
+        .nonEmpty
+    }
+
+    def isTravisPR: Boolean = {
+      isTravisCI && T.ctx().env
+        .get("TRAVIS_PULL_REQUEST")
+        .map(_ != "false")
+        .getOrElse(false)
+    }
+
+    def currentBranchName(): String = {
+      if (isTravisPR)
+        T.ctx().env("TRAVIS_PULL_REQUEST_BRANCH")
+      else if (isTravisCI)
+        T.ctx().env("TRAVIS_BRANCH")
+      else
+        os.proc('git, "rev-parse", "--abbrev-ref", 'HEAD)
+          .call(millSourcePath)
+          .out.string.trim
+    }
+
+    def currentCommitRef(): String = {
+      if (isTravisPR)
+        T.ctx().env("TRAVIS_PULL_REQUEST_SHA")
+      else
+        os.proc('git, "rev-parse", 'HEAD)
+          .call(millSourcePath)
+          .out.string.trim
+    }
+
+    def currentCommitTime(): ZonedDateTime = {
+      val result = os.proc(
+        'git, 'show, "-s",
+        "--format=%cd",
+        "--date=iso",
+        currentCommitRef()
+      ).call(millSourcePath)
+
+      val timeStr = result.out.string.trim
+      val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss ZZZ")
+      ZonedDateTime.parse(timeStr, formatter).withZoneSameInstant(ZoneOffset.UTC)
+    }
+
+    def addRunData(baseName: String, time: ZonedDateTime): Unit = {
+      val path = dest / (baseName + ".json")
+      val json = ujson.read(os.read(path))
+      json("results")(0)("executionTime") = time.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+      json("results")(0)("commitRef") = currentCommitRef()
+      json("results")(0)("branchName") = currentBranchName()
+      json("results")(0)("commitTime") = currentCommitTime().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+      os.write.over(path, ujson.write(json, indent = 2))
+    }
+
+    def runHyperfine(src: os.Path): Unit = {
+      T.ctx().log.info(s"Running benchmark $src")
+
+      val executionTime = ZonedDateTime.now(ZoneOffset.UTC)
+
+      os.proc(
+        'hyperfine,
+        s"java -jar ${assemblyJar.path.toIO.getAbsolutePath} ${src.toIO.getAbsolutePath}",
+        s"--export-json",
+        s"${dest / src.baseName}.json"
+      ).call(millSourcePath)
+
+      addRunData(src.baseName, executionTime)
+    }
+
+    def runBenchmark(inputDir: os.Path): Unit = {
+      T.ctx().log.info(s"Running benchmarks in $inputDir")
+      if (inputDir.toIO.exists) {
+        os.walk(inputDir)
+          .filter(_.last.matches(".*.inc"))
+          .foreach(runHyperfine)
+      }
+    }
+
+    benchmarkSources().foreach(src => runBenchmark(src.path))
+
+    mill.api.Result.Success(PathRef(dest))
+  }
+
+  def benchmarkCsv = T {
+    val dest = T.ctx().dest
+    val results = runBenchmark()()
+
+    os.walk(results.path)
+      .filter(_.last.matches(".*.json"))
+      .map { src =>
+        val csvFormat = new DefaultCSVFormat { override val quoting = QUOTE_NONE }
+        val outFile = dest / (src.baseName + ".csv")
+        val writer = CSVWriter.open(outFile.toIO)(csvFormat)
+        val str = os.read(src)
+        val json = ujson.read(str)
+
+        writer.writeRow(List(
+          "execution_time",
+          "branch_name",
+          "commit_ref",
+          "commit_time",
+          "benchmark_name",
+          "benchmark_type",
+          "compilation_mode",
+          "measurement"
+        ))
+
+        json("results")(0)("times").arr.foreach { measurement =>
+          writer.writeRow(List(
+            json("results")(0)("executionTime").str,
+            json("results")(0)("branchName").str,
+            json("results")(0)("commitRef").str,
+            json("results")(0)("commitTime").str,
+            src.baseName,
+            "duration",
+            "command_line_interface",
+            (measurement.num * 1000).toInt
+          ))
+        }
+
+        writer.close()
+      }
+
+    mill.api.Result.Success(PathRef(dest))
+  }
+
+  def publishBenchmarkCsv() = T.command {
+    val benchmarkCsvDir = benchmarkCsv()
+    val env = T.ctx().env
+    val benchmarkDbUrl = env("INC_BENCHMARK_DB_URL")
+    val benchmarkDbUser = env("INC_BENCHMARK_DB_USER")
+    val benchmarkDbPassword = env("INC_BENCHMARK_DB_PASSWORD")
+
+    Class.forName("org.postgresql.Driver")
+    val conn = DriverManager.getConnection(benchmarkDbUrl, benchmarkDbUser, benchmarkDbPassword)
+    val copyManager = new CopyManager(conn.asInstanceOf[BaseConnection])
+
+    if (benchmarkCsvDir.path.toIO.exists) {
+      os.walk(benchmarkCsvDir.path)
+        .filter(_.last.matches(".*.csv"))
+        .foreach { csv =>
+          T.ctx().log.info(s"Uploading benchmark data from $csv")
+          val reader = new FileReader(csv.toIO)
+          copyManager.copyIn("""copy benchmark_results from stdin with csv header quote '"'""", reader)
+        }
+    }
   }
 
   object test extends super.Test {
