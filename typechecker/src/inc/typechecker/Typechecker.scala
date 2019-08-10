@@ -32,8 +32,8 @@ class Typechecker(isTraceEnabled: Boolean) {
     importedDecls: Map[String, TopLevelDeclaration[NameWithType]],
     source: String
   ): Infer[Module[NamePosType]] = {
-    val gather = new Gather(isTraceEnabled)
     val solve = new Solve(isTraceEnabled)
+    val gather = new Gather(solve, isTraceEnabled)
 
     for {
       // Gather constraints from the module's definitions

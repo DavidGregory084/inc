@@ -12,7 +12,7 @@ import scala.Predef.{ ArrowAssoc, augmentString }
 import scribe._
 import scribe.format._
 
-class Gather(isTraceEnabled: Boolean) {
+class Gather(solve: Solve, isTraceEnabled: Boolean) {
   if (isTraceEnabled) {
     this.logger.withHandler(
       formatter = Formatter.simple,
@@ -217,9 +217,16 @@ class Gather(isTraceEnabled: Boolean) {
   ): Infer[(TopLevelDeclaration[NamePosType], List[Constraint])] =
     decl match {
       case let @ Let(name, expr, meta) =>
-        gather(expr, env, source).flatMap {
-          case (checkedExpr, constraints) =>
-            val eTp = checkedExpr.meta.typ.typ
+        for {
+          (checkedExpr, constraints) <- gather(expr, env, source)
+
+          // We have to solve the constraints under a `let` before we generalize
+          subst <- solve.solve(constraints)
+
+          // Otherwise, the constraint substitution could not be applied to any bound type variables
+          solvedExpr = checkedExpr.substitute(subst)
+        } yield {
+            val eTp = solvedExpr.meta.typ.typ
             val tp = TypeScheme.generalize(env, eTp)
 
             if (tp.bound.nonEmpty)
@@ -229,7 +236,7 @@ class Gather(isTraceEnabled: Boolean) {
 
             val checkedLet = let.copy(binding = checkedExpr, meta = meta.withType(tp))
 
-            Right((checkedLet, constraints))
+            (checkedLet, constraints)
         }
     }
 
