@@ -49,7 +49,10 @@ trait ScalaSettingsModule extends TpolecatModule with PublishSettingsModule {
     super.scalacOptions() ++ Seq(
       "-Ypartial-unification",
       "-Yno-imports",
-      "-Yrangepos"
+      "-Yrangepos",
+      "-opt:l:method",
+      "-opt:l:inline",
+      "-opt-inline-from:**"
     )
   }
 
