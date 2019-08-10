@@ -6,10 +6,17 @@ jdk:
   - openjdk8
   - openjdk11
 
+before_install:
+  - wget https://github.com/sharkdp/hyperfine/releases/download/v1.6.0/hyperfine_1.6.0_amd64.deb
+  - sudo dpkg -i hyperfine_1.6.0_amd64.deb
+
 script:
   - curl -L -o ~/bin/mill https://github.com/lihaoyi/mill/releases/download/0.3.6/0.3.6 && chmod +x ~/bin/mill
   - export PATH=~/bin/mill:$PATH
   - mill _.test
+
+after_success:
+  - mill main.publishBenchmarkCsv
 
 cache:
   directories:
