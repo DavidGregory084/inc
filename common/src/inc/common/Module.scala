@@ -4,7 +4,7 @@ import cats.Functor
 import cats.syntax.functor._
 import java.lang.String
 import scala.Some
-import scala.Predef.=:=
+import scala.=:=
 import scala.collection.immutable.{ List, Map }
 
 final case class Module[A](

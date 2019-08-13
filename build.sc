@@ -38,16 +38,15 @@ trait PublishSettingsModule extends PublishModule {
 }
 
 trait ScalaSettingsModule extends TpolecatModule with PublishSettingsModule {
-  def scalaVersion = "2.12.8"
+  def scalaVersion = "2.13.0"
 
   def scalacPluginIvyDeps = Agg(
     ivy"com.olegpy::better-monadic-for:0.3.1",
-    ivy"org.scalameta:semanticdb-scalac_${scalaVersion()}:4.2.0"
+    // ivy"org.scalameta:semanticdb-scalac_${scalaVersion()}:4.2.0"
   )
 
   def scalacOptions = T {
     super.scalacOptions() ++ Seq(
-      "-Ypartial-unification",
       "-Yno-imports",
       "-Yrangepos",
       "-opt:l:method",

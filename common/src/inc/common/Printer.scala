@@ -4,18 +4,18 @@ import cats.data.Chain
 import java.lang.String
 import org.typelevel.paiges._
 import scala.{ Array, Int, Option, StringContext }
-import scala.collection.immutable.{ List, Map, Nil, :: }
+import scala.collection.immutable.{ Map, Seq }
 import scala.Predef.{ augmentString, genericArrayOps }
 
 object Printer {
   def regionWithMargin(plainInputLines: Array[String], highlightedSource: fansi.Str, pos: Pos) = {
     val numberOfLines = plainInputLines.length
 
-    def go(plainInputLines: List[(String, Int)], highlightedSource: fansi.Str, charIdx: Int, output: Chain[fansi.Str]): fansi.Str =
+    def go(plainInputLines: Seq[(String, Int)], highlightedSource: fansi.Str, charIdx: Int, output: Chain[fansi.Str]): fansi.Str =
       plainInputLines match {
-        case Nil =>
+        case Seq() =>
           fansi.Str.join(output.toList: _*)
-        case (plainLine, lineIdx) :: plainLines =>
+        case Seq((plainLine, lineIdx), plainLines @ _*) =>
           val nextCharIdx = charIdx + 1 + plainLine.length
 
           val (highlightedLine, highLightedLines) =
@@ -34,7 +34,7 @@ object Printer {
           }
       }
 
-    go(plainInputLines.toList.zipWithIndex, highlightedSource, 0, Chain.empty[fansi.Str])
+    go(plainInputLines.toIndexedSeq.zipWithIndex, highlightedSource, 0, Chain.empty[fansi.Str])
   }
 
   def withSourceContext(header: Option[String], msg: String, pos: Pos, colour: fansi.Attrs, source: String) = {
@@ -92,9 +92,9 @@ object Printer {
     case LiteralInt(i, _) =>
       Doc.str(i)
     case LiteralLong(l, _) =>
-      Doc.str(l + "L")
+      Doc.str(s"${l}L")
     case LiteralFloat(f, _) =>
-      Doc.str(f + "F")
+      Doc.str(s"${f}F")
     case LiteralDouble(d, _) =>
       Doc.str(d)
     case LiteralBoolean(b, _) =>

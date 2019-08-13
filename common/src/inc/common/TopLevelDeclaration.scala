@@ -4,7 +4,7 @@ import cats.Functor
 import cats.syntax.functor._
 import java.lang.{ Exception, String }
 import scala.{ Product, Serializable, Some }
-import scala.Predef.=:=
+import scala.=:=
 import scala.collection.immutable.Map
 
 sealed trait TopLevelDeclaration[A] extends Product with Serializable {

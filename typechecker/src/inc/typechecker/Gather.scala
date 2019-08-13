@@ -248,7 +248,7 @@ class Gather(solve: Solve, isTraceEnabled: Boolean) {
     module match {
       case Module(_, _, _, decls, meta) =>
 
-        val initialEnv = importedDecls.mapValues(_.meta.typ)
+        val initialEnv = importedDecls.view.map { case (sym, tld) => (sym, tld.meta.typ) }.toMap
 
         val emptyRes: Infer[(Chain[TopLevelDeclaration[NamePosType]], Environment, List[Constraint])] =
           Right((Chain.empty, initialEnv, List.empty))
