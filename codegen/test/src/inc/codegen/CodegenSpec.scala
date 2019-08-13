@@ -7,9 +7,9 @@ import cats.implicits._
 import inc.common._
 import java.net.URLClassLoader
 import org.scalatest._
-import org.scalatest.prop._
+import org.scalatestplus.scalacheck._
 
-class CodegenSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks with Generators {
+class CodegenSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyChecks with Generators {
 
   def mkModule(name: String, decls: List[TopLevelDeclaration[NamePosType]]) = Module(
     pkg = List("Test", "Codegen"),

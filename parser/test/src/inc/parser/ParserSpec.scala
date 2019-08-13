@@ -3,9 +3,9 @@ package inc.parser
 import cats.implicits._
 import inc.common._
 import org.scalatest._
-import org.scalatest.prop._
+import org.scalatestplus.scalacheck._
 
-class ParserSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks {
+class ParserSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyChecks {
 
   def parseModule(src: String): Module[Unit] =
     Parser.parse(src).fold(err => fail(err.head.msg), identity).void

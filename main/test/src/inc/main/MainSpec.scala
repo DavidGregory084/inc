@@ -5,11 +5,11 @@ import java.net.URLClassLoader
 import java.nio.file.{Files, Path}
 
 import org.scalatest._
-import org.scalatest.prop._
+import org.scalatestplus.scalacheck._
 import inc.common._
 import inc.rts.{Unit => IncUnit}
 
-class MainSpec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks with Generators {
+class MainSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyChecks with Generators {
   def loadClassFrom(classFileDir: File, className: String) = {
     val classLoader = Thread.currentThread.getContextClassLoader
     val childLoader = URLClassLoader.newInstance(Array(classFileDir.url), classLoader)
