@@ -11,7 +11,6 @@ import inc.rts.{ Unit => IncUnit }
 import java.io.{ OutputStream, PrintWriter }
 import java.lang.{ Class, ClassNotFoundException, Exception, IllegalStateException, Object, String, System, ThreadLocal }
 import java.lang.invoke.{ CallSite, LambdaMetafactory, MethodType, MethodHandle, MethodHandles }
-import java.util.Arrays
 import org.objectweb.asm.{ Attribute, ByteVector, ClassReader, ClassVisitor, ClassWriter, Label, Handle, Type => AsmType }
 import org.objectweb.asm.Opcodes._
 import org.objectweb.asm.util.{ CheckClassAdapter, TraceClassVisitor }
@@ -22,7 +21,15 @@ import scala.Predef.classOf
 
 case class InterfaceAttribute(buffer: Array[Byte]) extends Attribute("IncInterface") {
   override def read(classReader: ClassReader, offset: Int, length: Int, charBuffer: Array[Char], codeAttributeOffset: Int, labels: Array[Label]) = {
-    InterfaceAttribute(Arrays.copyOfRange(classReader.b, offset, offset + length))
+    var readOffset = offset
+    var bytesRead = 0
+    val attrBytes = new Array[Byte](length)
+    while (readOffset < (offset + length)) {
+      attrBytes(bytesRead) = classReader.readByte(readOffset).toByte
+      readOffset += 1
+      bytesRead += 1
+    }
+    InterfaceAttribute(attrBytes)
   }
   override def write(classWriter: ClassWriter, code: Array[Byte], codeLength: Int, maxStack: Int, maxLocals: Int): ByteVector = {
     val byteVector = new ByteVector(buffer.length)
