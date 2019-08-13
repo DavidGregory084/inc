@@ -15,9 +15,6 @@ script:
   - export PATH=~/bin/mill:$PATH
   - mill _.test
 
-after_success:
-  - mill main.publishBenchmarkCsv
-
 cache:
   directories:
   - $HOME/.coursier
