@@ -153,24 +153,15 @@ object main extends ScalaSettingsModule with BuildInfo {
     val dest = T.ctx().dest
     val assemblyJar = assembly()
 
-    def isTravisCI: Boolean = {
+    def isBuildkiteCI = {
       T.ctx().env
-        .get("TRAVIS")
+        .get("BUILDKITE")
         .nonEmpty
     }
 
-    def isTravisPR: Boolean = {
-      isTravisCI && T.ctx().env
-        .get("TRAVIS_PULL_REQUEST")
-        .map(_ != "false")
-        .getOrElse(false)
-    }
-
     def currentBranchName(): String = {
-      if (isTravisPR)
-        T.ctx().env("TRAVIS_PULL_REQUEST_BRANCH")
-      else if (isTravisCI)
-        T.ctx().env("TRAVIS_BRANCH")
+      if (isBuildkiteCI)
+        T.ctx().env("BUILDKITE_BRANCH")
       else
         os.proc('git, "rev-parse", "--abbrev-ref", 'HEAD)
           .call(millSourcePath)
@@ -178,8 +169,8 @@ object main extends ScalaSettingsModule with BuildInfo {
     }
 
     def currentCommitRef(): String = {
-      if (isTravisPR)
-        T.ctx().env("TRAVIS_PULL_REQUEST_SHA")
+      if (isBuildkiteCI)
+        T.ctx().env("BUILDKITE_COMMIT")
       else
         os.proc('git, "rev-parse", 'HEAD)
           .call(millSourcePath)
