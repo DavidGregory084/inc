@@ -110,7 +110,7 @@ module Test.Compose {
 }
 ```
 
-### Continuous Benchmarks
+## Continuous Benchmarks
 
 This project has a small benchmark suite which runs against every commit.
 
