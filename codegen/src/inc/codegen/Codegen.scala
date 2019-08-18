@@ -6,6 +6,7 @@ import cats.syntax.functor._
 import cats.syntax.traverse._
 import cats.instances.either._
 import cats.instances.list._
+import cats.instances.tuple._
 import inc.common._
 import inc.rts.{ Unit => IncUnit }
 import java.io.{ OutputStream, PrintWriter }
@@ -16,8 +17,9 @@ import org.objectweb.asm.Opcodes._
 import org.objectweb.asm.util.{ CheckClassAdapter, TraceClassVisitor }
 import org.objectweb.asm.commons.{ GeneratorAdapter, Method }
 import scala.{ Array, Boolean, Byte, Char, Int, Unit, Option, Either, Right, StringContext }
-import scala.collection.immutable.{ List, Map }
-import scala.Predef.classOf
+import scala.collection.immutable.{ List, Map, Stream }
+import scala.Predef.{ classOf, augmentString }
+import org.objectweb.asm.signature.SignatureWriter
 
 case class InterfaceAttribute(buffer: Array[Byte]) extends Attribute("IncInterface") {
   override def read(classReader: ClassReader, offset: Int, length: Int, charBuffer: Array[Char], codeAttributeOffset: Int, labels: Array[Label]) = {
@@ -144,9 +146,15 @@ class Codegen(verifyCodegen: Boolean) {
       ALOAD
   }
 
-  def withGeneratorAdapter(classWriter: ClassWriter, methodName: String, methodDescriptor: String, access: Int = ACC_STATIC)(f: GeneratorAdapter => Either[List[CodegenError], Unit]): Either[List[CodegenError], Unit] = {
+  def withGeneratorAdapter(
+    classWriter: ClassWriter,
+    methodName: String,
+    methodDescriptor: String,
+    signature: String = null,
+    access: Int = ACC_STATIC
+  )(f: GeneratorAdapter => Either[List[CodegenError], Unit]): Either[List[CodegenError], Unit] = {
     val generatorAdapter =
-      new GeneratorAdapter(access, new Method(methodName, methodDescriptor), null, null, classWriter)
+      new GeneratorAdapter(access, new Method(methodName, methodDescriptor), signature, null, classWriter)
 
     f(generatorAdapter).map { _ =>
       generatorAdapter.returnValue()
@@ -261,6 +269,52 @@ class Codegen(verifyCodegen: Boolean) {
       }
     case TypeVariable(_) =>
       Right(AsmType.getType(classOf[Object]))
+  }
+
+  val TypeVarMapping = Stream.from(1).take(26).zipWithIndex.map(_.map(i => (i + 65).toChar.toString)).toMap
+
+  def writeSignatureFor(typeScheme: TypeScheme): Either[List[CodegenError], String] = typeScheme match {
+    case TypeScheme(bound, TypeConstructor("->", params)) =>
+      val writer = new SignatureWriter()
+
+      bound.foreach { b =>
+        writer.visitFormalTypeParameter(TypeVarMapping(b.id))
+        scribe.info("Type parameter " + TypeVarMapping(b.id))
+        val typeBoundWriter = writer.visitClassBound()
+        typeBoundWriter.visitClassType(AsmType.getInternalName(classOf[java.lang.Object]))
+        typeBoundWriter.visitEnd()
+      }
+
+      params.init.traverse_ {
+        case TypeVariable(id) =>
+          scribe.info("Type variable " + TypeVarMapping(id))
+          Right(writer.visitParameterType().visitTypeVariable(TypeVarMapping(id)))
+        case tp =>
+          asmTypeOf(tp).map { asmType =>
+            if (asmType.getSort == AsmType.OBJECT)
+              writer.visitParameterType().visitClassType(asmType.getInternalName)
+            else
+              writer.visitParameterType().visitBaseType(asmType.getDescriptor.head)
+          }
+      }.as {
+        params.last match {
+          case TypeVariable(id) =>
+            writer.visitReturnType().visitTypeVariable(TypeVarMapping(id))
+          case tp =>
+            asmTypeOf(tp).map { asmType =>
+              if (asmType.getSort == AsmType.OBJECT)
+                writer.visitReturnType().visitClassType(asmType.getInternalName)
+              else
+                writer.visitReturnType().visitBaseType(asmType.getDescriptor.head)
+            }
+        } 
+
+        writer.visitEnd()
+        writer.toString()
+      }
+
+    case tp =>
+      CodegenError.singleton(s"Signature requested for unexpected type ${Printer.print(tp)}")
   }
 
   def newStaticField[A](classWriter: ClassWriter)(fieldName: String, fieldDescriptor: String, initialValue: A): Either[List[CodegenError], Unit] =
@@ -390,8 +444,10 @@ class Codegen(verifyCodegen: Boolean) {
 
         liftedName = outerName + "$lifted" + liftedDefns.get
 
+        signature <- writeSignatureFor(nameWithType.typ)
+
         // Write out a new static method with adapted arguments
-        _ <- withGeneratorAdapter(classWriter, liftedName, functionDescriptor, ACC_PRIVATE + ACC_STATIC + ACC_SYNTHETIC) { innerGen =>
+        _ <- withGeneratorAdapter(classWriter, liftedName, functionDescriptor, signature, ACC_PRIVATE + ACC_STATIC + ACC_SYNTHETIC) { innerGen =>
           val allParams = prependedParams ++ params
           allParams.foreach(p => innerGen.visitParameter(p.name, ACC_FINAL))
           newExpr(classWriter, className, innerGen, liftedName + "$inner", allParams.map(_.name).zipWithIndex.toMap, locals)(body.replace(replaceCaptured))
