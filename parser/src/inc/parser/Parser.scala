@@ -53,7 +53,7 @@ object Parser {
   ).map {
     case (from, s, to) =>
       LiteralString(s, Pos(from, to))
-  }.log
+  }
 
   def literalIntegral[_: P] = P(Index ~ (zero | digitsLeadingOneToNine) ~~ CharIn("lL").?.! ~ Index).map {
     case (from, num, suffix, to) =>
@@ -137,7 +137,7 @@ object Parser {
   ).map {
     case (from, params, expr, to) =>
       Lambda(params.toList, expr, Pos(from, to))
-  }.log
+  }
 
   def application[_: P]: P[Expr[Pos] => Expr[Pos]] = P(
     inParens(expression.rep(sep = comma./)) ~ Index
