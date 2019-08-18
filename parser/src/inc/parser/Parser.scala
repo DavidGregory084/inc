@@ -202,7 +202,7 @@ object Parser {
       case Parsed.Success(mod, _) =>
         Right(mod)
       case f @ Parsed.Failure(_, _, _) =>
-        val errorMessage = "\n\n" + f.trace().longMsg
+        val errorMessage = f.trace().longMsg
         ParserError.singleton(errorMessage)
     }
   }
