@@ -48,12 +48,12 @@ object Parser {
 
   def literalString[_: P] = P(
     Index ~
-      "\"" ~/ CharsWhile(c => !stringDisallowedChars.contains(c), 0).! ~ "\"" ~
+      "\"" ~~/ CharsWhile(c => !stringDisallowedChars.contains(c), 0).! ~~ "\"" ~
       Index
   ).map {
     case (from, s, to) =>
       LiteralString(s, Pos(from, to))
-  }
+  }.log
 
   def literalIntegral[_: P] = P(Index ~ (zero | digitsLeadingOneToNine) ~~ CharIn("lL").?.! ~ Index).map {
     case (from, num, suffix, to) =>
@@ -137,7 +137,7 @@ object Parser {
   ).map {
     case (from, params, expr, to) =>
       Lambda(params.toList, expr, Pos(from, to))
-  }
+  }.log
 
   def application[_: P]: P[Expr[Pos] => Expr[Pos]] = P(
     inParens(expression.rep(sep = comma./)) ~ Index
@@ -202,7 +202,7 @@ object Parser {
       case Parsed.Success(mod, _) =>
         Right(mod)
       case f @ Parsed.Failure(_, _, _) =>
-        val errorMessage = f.trace().msg
+        val errorMessage = "\n\n" + f.trace().longAggregateMsg + "\n\n" + f.trace().longTerminalsMsg
         ParserError.singleton(errorMessage)
     }
   }
