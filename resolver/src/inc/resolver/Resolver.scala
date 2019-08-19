@@ -41,6 +41,11 @@ object Resolver {
     case unit @ LiteralUnit(_) =>
       withName(unit, NoName, tbl)
 
+    case Ascription(expr, ascribedAs, pos) =>
+      for {
+        (e, _) <- resolve(expr, tbl)
+      } yield (Ascription(e, ascribedAs, NameWithPos(NoName, pos)), tbl)
+
     case ref @ Reference(name, pos)  =>
       tbl.get(name)
         .map(nm => withName(ref, nm, tbl))

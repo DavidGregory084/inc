@@ -21,27 +21,27 @@ class Gather(solve: Solve, isTraceEnabled: Boolean) {
   }
 
   def trace(name: String, pos: Pos, typ: Type, source: String) = {
-    lazy val formattedMsg = name + ": " + Printer.print(typ)
-    scribe.trace(Printer.withSourceContext(None, formattedMsg, pos, fansi.Color.Yellow, source))
+    lazy val formattedMsg = name + ": " + Trace.print(typ)
+    scribe.trace(Trace.withSourceContext(None, formattedMsg, pos, fansi.Color.Yellow, source))
   }
 
   def trace(name: String, pos: Pos, typ: TypeScheme, source: String) = {
-    lazy val formattedMsg = name + ": " + Printer.print(typ)
-    scribe.trace(Printer.withSourceContext(None, formattedMsg, pos, fansi.Color.Yellow, source))
+    lazy val formattedMsg = name + ": " + Trace.print(typ)
+    scribe.trace(Trace.withSourceContext(None, formattedMsg, pos, fansi.Color.Yellow, source))
   }
 
   def trace(name: String, pos: Pos, constraints: List[Constraint], source: String) = {
     if (constraints.nonEmpty) {
       lazy val formattedMsg = name + ": " + (NL * 2) +
-        constraints.map(Printer.print).mkString(NL)
-      scribe.trace(Printer.withSourceContext(None, formattedMsg, pos, fansi.Color.Yellow, source))
+        constraints.map(Trace.print).mkString(NL)
+      scribe.trace(Trace.withSourceContext(None, formattedMsg, pos, fansi.Color.Yellow, source))
     }
   }
 
   def trace(name: String, constraints: List[Constraint]) = {
     if (constraints.nonEmpty) {
       lazy val formattedMsg = NL + name + ": " + (NL * 2) +
-        constraints.map(Printer.print).mkString(NL)
+        constraints.map(Trace.print).mkString(NL)
       scribe.trace(formattedMsg)
     }
   }
@@ -83,6 +83,25 @@ class Gather(solve: Solve, isTraceEnabled: Boolean) {
 
       case unit @ LiteralUnit(_) =>
         withSimpleType(unit, Type.Unit)
+
+      case Ascription(expr, ascribedAs, meta) =>
+        for {
+          (e, exprCst) <- gather(expr, env, source)
+
+          _ = scribe.info(expr.toString)
+
+          _ = trace(s"Ascribed expression", e.meta.pos, exprCst, source)
+
+          // Emit a constraint that the expression's type must match the ascription
+          ascriptionCst = List(Equal(e.meta.typ.typ, ascribedAs.typ, meta.pos))
+
+          constraints = exprCst ++ ascriptionCst
+
+          ascription = Ascription(e, ascribedAs, e.meta)
+
+          _ = trace("Ascription", ascription.meta.pos, ascriptionCst, source)
+
+        } yield (ascription, constraints)
 
       case Reference(name, meta)  =>
         env.get(name).map { typ =>

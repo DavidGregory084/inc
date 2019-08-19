@@ -7,7 +7,7 @@ import scala.{ Boolean, Char, Double, Float, Int, Long, Product, Serializable, S
 import scala.Predef.=:=
 import scala.collection.immutable.{ List, Map, Set }
 
-sealed trait Expr[A] extends Product with Serializable {
+sealed abstract class Expr[A](val isAtom: Boolean) extends Product with Serializable {
   def meta: A
 
   def capturedVariables(implicit eqv: A =:= NamePosType): Set[Reference[NamePosType]] = this match {
@@ -29,6 +29,8 @@ sealed trait Expr[A] extends Product with Serializable {
       capturedInBody -- lambdaParams
     case Apply(fn, args, _) =>
       fn.capturedVariables ++ args.flatMap(_.capturedVariables)
+    case Ascription(expr, _, _) =>
+      expr.capturedVariables
   }
 
   def replace(mapping: Map[Reference[A], Reference[A]])(implicit eqv: A =:= NamePosType): Expr[A] = this match {
@@ -56,6 +58,8 @@ sealed trait Expr[A] extends Product with Serializable {
       app.copy(
         fn = fn.replace(mapping),
         args = args.map(_.replace(mapping)))
+    case asc @ Ascription(expr, _, _) => 
+      asc.copy(expr = expr.replace(mapping))
   }
 
   def toProto(implicit eqv: A =:= NamePosType): proto.Expr = this match {
@@ -95,6 +99,9 @@ sealed trait Expr[A] extends Product with Serializable {
     case Apply(fn, args, meta) =>
       val nameWithType = Some(eqv(meta).toProto)
       proto.Apply(fn.toProto, args.map(_.toProto), nameWithType)
+    case Ascription(expr, ascribedAs, meta) => 
+      val nameWithType = Some(eqv(meta).toProto)
+      proto.Ascription(expr.toProto, Some(ascribedAs.toProto), nameWithType)
   }
 
   def substitute(subst: Map[TypeVariable, Type])(implicit eqv: A =:= NamePosType): Expr[A] =
@@ -136,6 +143,11 @@ object Expr {
         Expr.fromProto(fn),
         args.toList.map(Expr.fromProto),
         NameWithType.fromProto(app.getNameWithType))
+    case asc @ proto.Ascription(expr, _, _) =>
+      Ascription(
+        Expr.fromProto(expr),
+        TypeScheme.fromProto(asc.getAscribedAs),
+        NameWithType.fromProto(asc.getNameWithType))
     case proto.Expr.Empty =>
       throw new Exception("Empty Expr in protobuf")
   }
@@ -176,6 +188,10 @@ object Expr {
           fn = map(app.fn)(f),
           args = app.args.map(map(_)(f)),
           meta = f(app.meta))
+      case asc @ Ascription(_, _, _) =>
+        asc.copy(
+          expr = map(asc.expr)(f),
+          meta = f(asc.meta))
     }
   }
 }
@@ -185,27 +201,33 @@ final case class If[A](
   thenExpr: Expr[A],
   elseExpr: Expr[A],
   meta: A
-) extends Expr[A]
+) extends Expr[A](false)
 
 final case class Lambda[A](
   params: List[Param[A]],
   body: Expr[A],
   meta: A
-) extends Expr[A]
+) extends Expr[A](false)
 
 final case class Apply[A](
   fn: Expr[A],
   args: List[Expr[A]],
   meta: A
-) extends Expr[A]
+) extends Expr[A](false)
 
-final case class LiteralInt[A](i: Int, meta: A) extends Expr[A]
-final case class LiteralLong[A](l: Long, meta: A) extends Expr[A]
-final case class LiteralFloat[A](f: Float, meta: A) extends Expr[A]
-final case class LiteralDouble[A](d: Double, meta: A) extends Expr[A]
-final case class LiteralBoolean[A](b: Boolean, meta: A) extends Expr[A]
-final case class LiteralChar[A](c: Char, meta: A) extends Expr[A]
-final case class LiteralString[A](s: String, meta: A) extends Expr[A]
-final case class LiteralUnit[A](meta: A) extends Expr[A]
+final case class Ascription[A](
+  expr: Expr[A],
+  ascribedAs: TypeScheme,
+  meta: A
+) extends Expr[A](false)
 
-final case class Reference[A](name: String, meta: A) extends Expr[A]
+final case class LiteralInt[A](i: Int, meta: A) extends Expr[A](true)
+final case class LiteralLong[A](l: Long, meta: A) extends Expr[A](true)
+final case class LiteralFloat[A](f: Float, meta: A) extends Expr[A](true)
+final case class LiteralDouble[A](d: Double, meta: A) extends Expr[A](true)
+final case class LiteralBoolean[A](b: Boolean, meta: A) extends Expr[A](true)
+final case class LiteralChar[A](c: Char, meta: A) extends Expr[A](true)
+final case class LiteralString[A](s: String, meta: A) extends Expr[A](true)
+final case class LiteralUnit[A](meta: A) extends Expr[A](true)
+
+final case class Reference[A](name: String, meta: A) extends Expr[A](true)

@@ -42,7 +42,7 @@ class Typechecker(isTraceEnabled: Boolean) {
       // Try to solve the constraints
       subst       <- solve.solve(csts)
 
-      _ = if (subst.nonEmpty) scribe.trace("Apply substitution: " + Printer.print(subst))
+      _ = if (subst.nonEmpty) scribe.trace("Apply substitution: " + Trace.print(subst))
 
       // Apply the substitution from the constraint solution to the module
       typedMod = mod.substitute(subst)

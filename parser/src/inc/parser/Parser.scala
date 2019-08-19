@@ -3,7 +3,7 @@ package inc.parser
 import fastparse._, ScalaWhitespace._
 import inc.common._
 import java.lang.{ Boolean, Character, Double, Float, Integer, Long, String }
-import scala.{ Either, Right, Int, Some, None, StringContext }
+import scala.{ Either, Right, Int, Nil, Some, None, StringContext }
 import scala.collection.immutable.{ List, Seq }
 import scala.Predef.augmentString
 
@@ -110,7 +110,7 @@ object Parser {
   def reference[_: P] = P(Index ~ identifier ~ Index).map {
     case (from, id, to) =>
       Reference(id, Pos(from, to))
-  }
+  }.log
 
   def ifExpr[_: P] = P(
     Index ~
@@ -120,7 +120,7 @@ object Parser {
   ).map {
     case (from, cond, thenExpr, elseExpr, to) =>
       If(cond, thenExpr, elseExpr, Pos(from, to))
-  }
+  }.log
 
   def param[_: P] = P(
     Index ~ identifier ~ Index
@@ -137,23 +137,58 @@ object Parser {
   ).map {
     case (from, params, expr, to) =>
       Lambda(params.toList, expr, Pos(from, to))
-  }
+  }.log
 
   def application[_: P]: P[Expr[Pos] => Expr[Pos]] = P(
-    inParens(expression.rep(sep = comma./)) ~ Index
+    inParens(expression.rep(sep = comma./)) ~ Index ~ ws
   ).map {
     case (args, to) =>
-      fn => Apply(fn, args.toList, Pos(fn.meta.from, to))
-  }
+      (fn: Expr[Pos]) => Apply(fn, args.toList, Pos(fn.meta.from, to))
+  }.log
+
+  def functionType[_: P] = {
+    (inParens(typeExpression.rep(sep = comma./)) | typeConstructor.map(Seq(_))) ~ nonZeroWs ~ "->" ~/ nonZeroWs ~
+      typeExpression
+  }.map {
+    case (params, result) =>
+      TypeConstructor("->", (params :+ result).toList)
+  }.log
+
+  def typeConstructor[_: P] = {
+    identifier.rep(min = 1, sep = "."./) ~ allWs ~ ("[" ~/ allWs ~
+      typeExpression.rep(min = 1, sep = comma./) ~ allWs ~
+    "]").? ~ ws
+  }.map {
+    case (id, typs) =>
+      TypeConstructor(id.mkString("."), typs.map(_.toList).getOrElse(Nil))
+  }.log
+
+  def typeExpression[_: P]: P[Type] = {
+    NoCut(functionType) | typeConstructor
+  }.log
+
+  def ascription[_: P] = {
+    ":" ~ allWs ~ typeExpression ~ Index ~ ws
+  }.log
 
   // NoCut allows us to backtrack out of a nullary lambda into a unit literal, and from an if statement into an identifier starting with "if"
-  def expression[_: P]: P[Expr[Pos]] = P( (NoCut(lambda) | NoCut(ifExpr) | literal | reference) ~ application.rep ).map {
-    case (expr, applications) =>
-      applications.foldLeft(expr) {
+  def expression[_: P]: P[Expr[Pos]] = P {
+    (NoCut(inParens(expression)) | NoCut(lambda) | NoCut(ifExpr) | literal | reference) ~ application.rep ~ ascription.?
+  }.map {
+    case (expr, applications, ascription) =>
+
+      val appliedExpr = applications.foldLeft(expr) {
         case (expr, app) =>
           app(expr)
       }
-  }
+
+      ascription match {
+        case None =>
+          appliedExpr
+        case Some((ascribedAs, to)) =>
+          Ascription(appliedExpr, TypeScheme(Nil, ascribedAs), Pos(appliedExpr.meta.from, to))
+      }
+  }.log
 
   def letDeclaration[_: P] = P(
     Index ~ "let" ~/ identifier ~ "=" ~

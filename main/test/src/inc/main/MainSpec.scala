@@ -42,7 +42,7 @@ class MainSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCheck
     val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
     val pkg = "Test.Main."
     val mod = s"module ${pkg}${fieldName.capitalize} { let ${fieldName} = ${stringValue} }"
-    val classFile = Main.compileModule(dir, mod, config).fold(err => fail(err.head), identity)
+    val classFile = Main.compileModule(dir, mod, config).fold(err => fail(err.head.getMessage), identity)
     val clazz = loadClassFrom(dir, pkg + classFile.toFile.toScala.nameWithoutExtension)
     getStatic(clazz, fieldName) shouldBe expectedValue
   }

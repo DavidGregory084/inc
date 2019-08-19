@@ -337,6 +337,9 @@ class Codegen(verifyCodegen: Boolean) {
         if (!nameWithType.typ.typ.isPrimitive) generator.visitTypeInsn(CHECKCAST, retTp.getInternalName)
       }
 
+    case Ascription(expr, _, _) =>
+      newExpr(classWriter, className, generator, outerName, arguments, locals)(expr)
+
     case lam @ Lambda(params, body, nameWithType) =>
       val TypeScheme(_, TypeConstructor("->", tpArgs)) = nameWithType.typ
 
@@ -437,6 +440,8 @@ class Codegen(verifyCodegen: Boolean) {
         newStaticField(classWriter)(let.name, AsmType.CHAR_TYPE.getDescriptor, c)
       case LiteralString(s, _) =>
         newStaticField(classWriter)(let.name, AsmType.getDescriptor(classOf[String]), s)
+      case Ascription(e, _, _) =>
+        newTopLevelLet(className, classWriter, staticInitializer, let.copy(binding = e))
       case LiteralUnit(_) =>
         val unitClass = classOf[IncUnit]
         val descriptor = AsmType.getDescriptor(unitClass)

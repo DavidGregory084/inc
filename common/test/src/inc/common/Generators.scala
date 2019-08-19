@@ -127,6 +127,12 @@ trait Generators { self: Matchers =>
     } yield If(condExpr, thenExpr, elseExpr, NamePosType(NoName, Pos.Empty, thenExpr.meta.typ))
   }
 
+  def ascriptionGen(decls: Decls): Gen[Ascription[NamePosType]] = Gen.delay {
+    exprGen(decls).flatMap { expr =>
+      Gen.const(Ascription(expr, expr.meta.typ, NamePosType(NoName, Pos.Empty, expr.meta.typ)))
+    }
+  }
+
   def exprGen(decls: Decls): Gen[Expr[NamePosType]] = {
     val lambdaDecls = decls.collect {
       case lambdaDecl @ Let(_, Lambda(_, _, _), _) => lambdaDecl
@@ -137,9 +143,9 @@ trait Generators { self: Matchers =>
 
     val exprGens =
       if (decls.isEmpty)
-        literalGens ++ applyGens :+ lambdaGen(decls) :+ ifGen(decls)
+        literalGens ++ applyGens :+ lambdaGen(decls) :+ ifGen(decls) :+ ascriptionGen(decls)
       else
-        literalGens ++ applyGens :+ lambdaGen(decls) :+ referenceGen(decls) :+ ifGen(decls)
+        literalGens ++ applyGens :+ lambdaGen(decls) :+ referenceGen(decls) :+ ifGen(decls) :+ ascriptionGen(decls)
 
     Gen.oneOf(exprGens)
       .flatMap(identity)
