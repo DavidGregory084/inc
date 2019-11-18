@@ -42,7 +42,7 @@ trait ScalaSettingsModule extends TpolecatModule with PublishSettingsModule {
 
   def scalacPluginIvyDeps = Agg(
     ivy"com.olegpy::better-monadic-for:0.3.1",
-    // ivy"org.scalameta:semanticdb-scalac_${scalaVersion()}:4.2.0"
+    ivy"org.scalameta:semanticdb-scalac_${scalaVersion()}:4.2.5"
   )
 
   def scalacOptions = T {
