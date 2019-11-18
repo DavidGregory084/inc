@@ -38,7 +38,7 @@ trait PublishSettingsModule extends PublishModule {
 }
 
 trait ScalaSettingsModule extends TpolecatModule with PublishSettingsModule {
-  def scalaVersion = "2.13.0"
+  def scalaVersion = "2.13.1"
 
   def scalacPluginIvyDeps = Agg(
     ivy"com.olegpy::better-monadic-for:0.3.1",
