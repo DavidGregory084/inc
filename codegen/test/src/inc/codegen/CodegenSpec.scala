@@ -98,7 +98,7 @@ class CodegenSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCh
       identity
     )
 
-    Codegen.readInterface(result) shouldBe Some(mod.map(_.forgetPos))
+    Codegen.readInterface(result) shouldBe Right(mod.map(_.forgetPos))
   }
 
   def withTmpDir[A](test: File => A) = {
@@ -115,7 +115,7 @@ class CodegenSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCh
           identity
         )
 
-        Codegen.readInterface(result) shouldBe Some(mod.map(_.forgetPos))
+        Codegen.readInterface(result) shouldBe Right(mod.map(_.forgetPos))
 
         val outDir = mod.pkg.foldLeft(dir) {
           case (path, next) => path / next

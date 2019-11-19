@@ -6,7 +6,9 @@ import inc.resolver.Resolver
 import inc.typechecker.Typechecker
 import inc.codegen.Codegen
 import cats.data.{Chain, Validated}
+import cats.instances.either._
 import cats.instances.list._
+import cats.syntax.either._
 import cats.syntax.traverse._
 import java.lang.{ ClassLoader, String, System }
 import java.io.{ByteArrayOutputStream, File, InputStream, OutputStream}
@@ -150,7 +152,7 @@ object Main {
     } yield out
   }
 
-  def readClassBytes(classloader: ClassLoader, className: String): Array[Byte] = {
+  def readClassBytes(classloader: ClassLoader, className: String, pos: Pos): Either[List[ConfigError], Array[Byte]] = {
     val classStream = Option(classloader.getResourceAsStream(className))
     val outputStream = new ByteArrayOutputStream()
 
@@ -165,34 +167,35 @@ object Main {
       }
     }
 
-    classStream.foreach { inputStream =>
+    lazy val classNotFound = List(ConfigError(pos, s"The class ${className} was not found on the classpath")).asLeft[Array[Byte]]
+
+    classStream.fold(classNotFound) { inputStream =>
       try pipe(inputStream, outputStream, buf)
       finally {
         inputStream.close()
         outputStream.close()
       }
-    }
 
-    outputStream.toByteArray
+      Either.right(buf)
+    }
   }
 
-  def readEnvironment(imports: List[Import], classloader: ClassLoader): Map[String, TopLevelDeclaration[NameWithType]] = {
+  def readEnvironment(imports: List[Import], classloader: ClassLoader): Either[List[Error], Map[String, TopLevelDeclaration[NameWithType]]] = {
     val distinctPrefixes = imports.map {
-      case ImportModule(pkg, nm) =>
-        (pkg, nm, List.empty[String])
-      case ImportSymbols(pkg, nm, syms) =>
-        (pkg, nm, syms)
+      case ImportModule(pkg, nm, pos) =>
+        (pkg, nm, List.empty[String], pos)
+      case ImportSymbols(pkg, nm, syms, pos) =>
+        (pkg, nm, syms, pos)
     }.distinct
 
-    val importedDecls = distinctPrefixes.flatMap {
-      case (pkg, nm, syms) =>
+    val declarations = distinctPrefixes.flatTraverse {
+      case (pkg, nm, syms, pos) =>
         val className = pkg.mkString("/") + "/" + nm + ".class"
-        val classBytes = readClassBytes(classloader, className)
-        val maybeInterface = Codegen.readInterface(classBytes)
 
-        maybeInterface
-          .toList
-          .flatMap { mod =>
+        for {
+          classBytes <- readClassBytes(classloader, className, pos)
+          mod <- Codegen.readInterface(classBytes)
+        } yield {
             val decls =
               if (syms.isEmpty)
                 mod.declarations
@@ -200,10 +203,10 @@ object Main {
                 mod.declarations.filter(d => syms.contains(d.name))
 
             decls.map(d => d.name -> d)
-          }
+        }
     }
 
-    importedDecls.toMap
+    declarations.map(_.toMap)
   }
 
   def parseUrls(classpath: String): Either[List[Error], Array[URL]] = {
@@ -226,7 +229,7 @@ object Main {
 
       mod <- runPhase[Module[Pos]]("parser", config, _.printParser, Parser.parse(modSource))
 
-      importedDecls = readEnvironment(mod.imports, new URLClassLoader(urls))
+      importedDecls <- readEnvironment(mod.imports, new URLClassLoader(urls))
 
       resolved <- runPhase[Module[NameWithPos]]("resolver", config, _.printResolver, Resolver.resolve(mod, importedDecls))
 

@@ -167,18 +167,21 @@ object Parser {
   def decl[_: P] = P(letDeclaration)
 
   def imports[_: P] = P {
-    "import" ~/ identifier.rep(min = 1, sep = ".") ~ ("." ~ inBraces(identifier.rep(min = 1, sep = comma./))).?
+    Index ~
+      "import" ~/ identifier.rep(min = 1, sep = ".") ~
+      ("." ~ inBraces(identifier.rep(min = 1, sep = comma./))).? ~
+      Index
   }.map {
-    case (ident, Some(symbols)) =>
+    case (from, ident, Some(symbols), to) =>
       if (ident.length > 1)
-        ImportSymbols(ident.init.toList, ident.last, symbols.toList)
+        ImportSymbols(ident.init.toList, ident.last, symbols.toList, Pos(from, to))
       else
-        ImportSymbols(List.empty, ident.head, symbols.toList)
-    case (ident, None) =>
+        ImportSymbols(List.empty, ident.head, symbols.toList, Pos(from, to))
+    case (from, ident, None, to) =>
       if (ident.length > 1)
-        ImportModule(ident.init.toList, ident.last)
+        ImportModule(ident.init.toList, ident.last, Pos(from, to))
       else
-        ImportModule(List.empty, ident.head)
+        ImportModule(List.empty, ident.head, Pos(from, to))
   }
 
   def bracesBlock[_: P] = P(inBraces(imports.rep(sep = maybeSemi) ~ maybeSemi ~ decl.rep(sep = maybeSemi)))

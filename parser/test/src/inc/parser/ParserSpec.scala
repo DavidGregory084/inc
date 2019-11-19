@@ -229,13 +229,13 @@ class ParserSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyChe
   it should "parse module imports" in {
     val mod = Module(
       List("Test"), "Float",
-      List(ImportModule(List("Test"), "Import")),
+      List(ImportModule(List("Test"), "Import", Pos(20, 38))),
       List(Let("float", LiteralFloat(3.142f, ()), ())),
       ()
     )
     val mod2 = Module(
       List("Test", "Parser"), "Double",
-      List(ImportSymbols(List("Test"), "Import", List("foo", "bar", "Baz"))),
+      List(ImportSymbols(List("Test"), "Import", List("foo", "bar", "Baz"), Pos(28, 64))),
       List(Let("double", LiteralDouble(3.142d, ()), ()), Let("double2", LiteralDouble(0.0001d, ()), ())),
       ()
     )
