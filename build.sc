@@ -51,14 +51,16 @@ trait ScalaSettingsModule extends TpolecatModule with PublishSettingsModule {
       "-Yrangepos",
       "-opt:l:method",
       "-opt:l:inline",
-      "-opt-inline-from:**"
+      // Inlining Float.parseFloat and Double.parseDouble causes
+      // IllegalAccessError to jdk.internal.math.FloatingDecimal on JDK11
+      "-opt-inline-from:**:!java.lang.Double:!java.lang.Float"
     )
   }
 
   trait Test extends Tests {
     def ivyDeps = Agg(
       ivy"io.chrisdavenport::cats-scalacheck:0.2.0",
-      ivy"com.lihaoyi::pprint:0.5.5",
+      ivy"com.lihaoyi::pprint:0.5.6",
       ivy"com.github.pathikrit::better-files:3.8.0",
       ivy"org.scalatest::scalatest:3.0.8",
       ivy"org.scalacheck::scalacheck:1.14.2"
