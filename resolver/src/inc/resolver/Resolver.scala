@@ -112,7 +112,7 @@ object Resolver {
     importedDecls: Map[String, TopLevelDeclaration[NameWithType]] = Map.empty
   ): Either[List[ResolverError], Module[NameWithPos]] = module match {
     case Module(pkg, name, _, decls, pos) =>
-      val initialTbl = importedDecls.mapValues(_.meta.name)
+      val initialTbl = importedDecls.view.map { case (sym, tld) => (sym, tld.meta.name) }.toMap
 
       val emptyDecls = Chain.empty[TopLevelDeclaration[NameWithPos]]
       val emptyRes: Either[List[ResolverError], (Chain[TopLevelDeclaration[NameWithPos]], SymbolTable)] = Right((emptyDecls, initialTbl))

@@ -38,31 +38,32 @@ trait PublishSettingsModule extends PublishModule {
 }
 
 trait ScalaSettingsModule extends TpolecatModule with PublishSettingsModule {
-  def scalaVersion = "2.12.8"
+  def scalaVersion = "2.13.1"
 
   def scalacPluginIvyDeps = Agg(
     ivy"com.olegpy::better-monadic-for:0.3.1",
-    ivy"org.scalameta:semanticdb-scalac_${scalaVersion()}:4.2.0"
+    ivy"org.scalameta:semanticdb-scalac_${scalaVersion()}:4.2.5"
   )
 
   def scalacOptions = T {
     super.scalacOptions() ++ Seq(
-      "-Ypartial-unification",
       "-Yno-imports",
       "-Yrangepos",
       "-opt:l:method",
       "-opt:l:inline",
-      "-opt-inline-from:**"
+      // Inlining Float.parseFloat and Double.parseDouble causes
+      // IllegalAccessError to jdk.internal.math.FloatingDecimal on JDK11
+      "-opt-inline-from:**:!java.lang.Double:!java.lang.Float"
     )
   }
 
   trait Test extends Tests {
     def ivyDeps = Agg(
-      ivy"io.chrisdavenport::cats-scalacheck:0.2.0-M1",
-      ivy"com.lihaoyi::pprint:0.5.5",
+      ivy"io.chrisdavenport::cats-scalacheck:0.2.0",
+      ivy"com.lihaoyi::pprint:0.5.6",
       ivy"com.github.pathikrit::better-files:3.8.0",
       ivy"org.scalatest::scalatest:3.0.8",
-      ivy"org.scalacheck::scalacheck:1.14.0"
+      ivy"org.scalacheck::scalacheck:1.14.2"
     )
     def testFrameworks = Seq("org.scalatest.tools.Framework")
     def scalacOptions = T { super.scalacOptions().filterNot(Set("-Yno-imports")) }
@@ -72,7 +73,7 @@ trait ScalaSettingsModule extends TpolecatModule with PublishSettingsModule {
 object decompiled extends JavaModule
 
 object proto extends ScalaPBModule with ScalaSettingsModule {
-  def scalaPBVersion = "0.9.0"
+  def scalaPBVersion = "0.9.6"
   def scalaPBFlatPackage = true
   def scalaPBGrpc = false
   def scalacOptions = T { super.scalacOptions().filterNot(Set("-Yno-imports")) }
@@ -82,8 +83,8 @@ object common extends ScalaSettingsModule {
   def moduleDeps = Seq(proto)
   def ivyDeps = T {
     super.ivyDeps() ++ Agg(
-      ivy"org.typelevel::cats-core:2.0.0-RC1",
-      ivy"org.typelevel::paiges-core:0.2.4",
+      ivy"org.typelevel::cats-core:2.0.0",
+      ivy"org.typelevel::paiges-core:0.3.0",
       ivy"com.lihaoyi::fansi:0.2.7",
       ivy"com.outr::scribe:2.7.9"
     )
@@ -111,7 +112,7 @@ object typechecker extends ScalaSettingsModule {
 
 object codegen extends ScalaSettingsModule {
   def moduleDeps = Seq(common, rts)
-  def asmVersion = T { "7.1" }
+  def asmVersion = T { "7.2" }
   def ivyDeps = Agg(
     ivy"org.ow2.asm:asm:${asmVersion()}",
     ivy"org.ow2.asm:asm-commons:${asmVersion()}",
@@ -130,7 +131,7 @@ object main extends ScalaSettingsModule with BuildInfo {
 
   def ivyDeps = Agg(
     ivy"com.github.scopt::scopt:3.7.1",
-    ivy"com.lihaoyi::pprint:0.5.5",
+    ivy"com.lihaoyi::pprint:0.5.6",
     // PPrint definitely requires scala-reflect
     ivy"org.scala-lang:scala-reflect:${scalaVersion()}"
   )

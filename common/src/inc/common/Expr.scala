@@ -4,7 +4,7 @@ import cats.Functor
 import cats.syntax.functor._
 import java.lang.{ Exception, String }
 import scala.{ Boolean, Char, Double, Float, Int, Long, Product, Serializable, Some }
-import scala.Predef.=:=
+import scala.=:=
 import scala.collection.immutable.{ List, Map, Set }
 
 sealed trait Expr[A] extends Product with Serializable {

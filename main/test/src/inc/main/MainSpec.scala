@@ -86,10 +86,11 @@ class MainSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCheck
     val pkg = "Test.Main."
     val fieldName = "reference"
     val mod = s"module ${pkg}Reference { let integer = 42; let ${fieldName} = integer }"
-    val result = Main.compileModule(dir, mod, config)
-    result shouldBe 'right
-    val classFile = result.right.get
-    val clazz = loadClassFrom(dir, pkg + classFile.toFile.toScala.nameWithoutExtension)
+    val result = Main.compileModule(dir, mod, config).fold(
+      errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
+      identity
+    )
+    val clazz = loadClassFrom(dir, pkg + result.toFile.toScala.nameWithoutExtension)
     getStatic(clazz, fieldName) shouldBe 42
   }
 
@@ -98,10 +99,11 @@ class MainSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCheck
     val pkg = "Test.Main."
     val fieldName = "z"
     val mod = s"module ${pkg}If { let a = true; let x = 42; let y = 41; let ${fieldName} = if a then x else y }"
-    val result = Main.compileModule(dir, mod, config)
-    result shouldBe 'right
-    val classFile = result.right.get
-    val clazz = loadClassFrom(dir, pkg + classFile.toFile.toScala.nameWithoutExtension)
+    val result = Main.compileModule(dir, mod, config).fold(
+      errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
+      identity
+    )
+    val clazz = loadClassFrom(dir, pkg + result.toFile.toScala.nameWithoutExtension)
     getStatic(clazz, fieldName) shouldBe 42
   }
 
@@ -110,56 +112,62 @@ class MainSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCheck
     val pkg = "Test.Main."
     val fieldName = "z"
     val mod = s"module ${pkg}If { let a = false; let x = 42; let y = 41; let ${fieldName} = if a then x else y }"
-    val result = Main.compileModule(dir, mod, config)
-    result shouldBe 'right
-    val classFile = result.right.get
-    val clazz = loadClassFrom(dir, pkg + classFile.toFile.toScala.nameWithoutExtension)
+    val result = Main.compileModule(dir, mod, config).fold(
+      errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
+      identity
+    )
+    val clazz = loadClassFrom(dir, pkg + result.toFile.toScala.nameWithoutExtension)
     getStatic(clazz, fieldName) shouldBe 41
   }
 
   it should "compile a lambda expression" in withTmpDir { dir =>
     val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
     val mod = "module Test.Main.Lambda { let x = 42; let y = 41; let lam = bool -> if bool then x else y }"
-    val result = Main.compileModule(dir, mod, config)
-    result shouldBe 'right
-    val classFile = result.right.get
-    loadClassFrom(dir, "Test.Main." + classFile.toFile.toScala.nameWithoutExtension)
+    val result = Main.compileModule(dir, mod, config).fold(
+      errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
+      identity
+    )
+    loadClassFrom(dir, "Test.Main." + result.toFile.toScala.nameWithoutExtension)
   }
 
   it should "compile an identity function" in withTmpDir { dir =>
     val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
     val mod = "module Test.Main.Lambda { let id = a -> a }"
-    val result = Main.compileModule(dir, mod, config)
-    result shouldBe 'right
-    val classFile = result.right.get
-    loadClassFrom(dir, "Test.Main." + classFile.toFile.toScala.nameWithoutExtension)
+    val result = Main.compileModule(dir, mod, config).fold(
+      errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
+      identity
+    )
+    loadClassFrom(dir, "Test.Main." + result.toFile.toScala.nameWithoutExtension)
   }
 
   it should "compile an application of an identity function with a reference type" in withTmpDir { dir =>
     val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
     val mod = """module Test.Main.Lambda { let id = a -> a; let str = id("string") }"""
-    val result = Main.compileModule(dir, mod, config)
-    result shouldBe 'right
-    val classFile = result.right.get
-    loadClassFrom(dir, "Test.Main." + classFile.toFile.toScala.nameWithoutExtension)
+    val result = Main.compileModule(dir, mod, config).fold(
+      errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
+      identity
+    )
+    loadClassFrom(dir, "Test.Main." + result.toFile.toScala.nameWithoutExtension)
   }
 
   it should "compile an application of an identity function with a primitive type" in withTmpDir { dir =>
     val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
     val mod = """module Test.Main.Lambda { let id = a -> a; let int = id(1) }"""
-    val result = Main.compileModule(dir, mod, config)
-    result shouldBe 'right
-    val classFile = result.right.get
-    loadClassFrom(dir, "Test.Main." + classFile.toFile.toScala.nameWithoutExtension)
+    val result = Main.compileModule(dir, mod, config).fold(
+      errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
+      identity
+    )
+    loadClassFrom(dir, "Test.Main." + result.toFile.toScala.nameWithoutExtension)
   }
 
   it should "compile a function that accepts a function as argument" in withTmpDir { dir =>
     val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
     val mod = """module Test.Main.Const { let const = (a, b) -> a; let foo = a -> "a"; let bar = f -> foo(f(42, 36)); let baz = foo(const) }"""
-    val result = Main.compileModule(dir, mod, config)
-    result shouldBe 'right
-    val classFile = result.right.get
-    loadClassFrom(dir, "Test.Main." + classFile.toFile.toScala.nameWithoutExtension)
+    val result = Main.compileModule(dir, mod, config).fold(
+      errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
+      identity
+    )
+    loadClassFrom(dir, "Test.Main." + result.toFile.toScala.nameWithoutExtension)
   }
 
   it should "compile a module that imports from another module" in withTmpDir { dir =>
@@ -171,8 +179,10 @@ class MainSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCheck
       |  let id = a -> a
       |}""".trim.stripMargin
 
-    val result1 = Main.compileModule(dir, mod1, config)
-    result1 shouldBe 'right
+    Main.compileModule(dir, mod1, config).fold(
+      errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
+      _    => succeed
+    )
 
     val mod2 =
       """
@@ -183,12 +193,12 @@ class MainSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCheck
       |}
       """.trim.stripMargin
 
-    val result2 = Main.compileModule(dir, mod2, config)
-    result2 shouldBe 'right
+    val result2 = Main.compileModule(dir, mod2, config).fold(
+      errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
+      identity
+    )
 
-    val classFile = result2.right.get
-
-    val clazz = loadClassFrom(dir, "Test." + classFile.toFile.toScala.nameWithoutExtension)
+    val clazz = loadClassFrom(dir, "Test." + result2.toFile.toScala.nameWithoutExtension)
 
     getStatic(clazz, "int") shouldBe 1
   }
@@ -199,10 +209,11 @@ class MainSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCheck
       val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
       val mod = Printer.print(generatedMod).render(80)
       try {
-        val result = Main.compileModule(dir, mod, config)
-        result shouldBe 'right
-        val classFile = result.right.get
-        loadClassFrom(dir, "Test.Main." + classFile.toFile.toScala.nameWithoutExtension)
+        val result = Main.compileModule(dir, mod, config).fold(
+          errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
+          identity
+        )
+        loadClassFrom(dir, "Test.Main." + result.toFile.toScala.nameWithoutExtension)
       } catch {
         case e: Throwable =>
           println(NL + mod)

@@ -14,8 +14,8 @@ import java.net.{ URL, URLClassLoader }
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path, Paths}
 import scala.{ Array, Boolean, Byte, Long, Unit, Either, Option, Some, StringContext }
-import scala.collection.JavaConverters._
 import scala.collection.immutable.{ List, Map }
+import scala.jdk.CollectionConverters._
 import scala.Predef.{ ArrowAssoc, wrapRefArray }
 import scala.util.control.NonFatal
 import scribe._
@@ -208,7 +208,7 @@ object Main {
 
   def parseUrls(classpath: String): Either[List[Error], Array[URL]] = {
     val urlStrings = classpath.split(File.pathSeparator)
-    Chain.fromSeq(urlStrings).traverse { p =>
+    Chain.fromSeq(urlStrings.toIndexedSeq).traverse { p =>
       val path = Validated.catchNonFatal(Paths.get(p))
       val url = path.map(_.toUri.toURL)
       url.leftMap(t => List(ConfigError(Pos.Empty, t.getMessage)))

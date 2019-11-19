@@ -28,7 +28,7 @@ class Solve(isTraceEnabled: Boolean) {
     chainSubstitutions(ss.toList)
 
   def chainSubstitution(s1: Substitution, s2: Substitution): Substitution =
-    s2 ++ s1.mapValues(_.substitute(s2))
+    s2 ++ s1.view.map { case (tyVar, typ) =>  (tyVar, typ.substitute(s2)) }.toMap
 
   def bind(pos: Pos, tyVar: TypeVariable, typ: Type): Infer[Substitution] =
     typ match {

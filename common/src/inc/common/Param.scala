@@ -3,7 +3,7 @@ package inc.common
 import cats.Functor
 import java.lang.String
 import scala.Some
-import scala.Predef.=:=
+import scala.=:=
 import scala.collection.immutable.Map
 
 final case class Param[A](name: String, meta: A) {

@@ -31,13 +31,15 @@ class CodegenSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCh
       mkLet("int2", mkRef("int", TypeScheme(Type.Int))),
       mkLet("int3", mkRef("int2", TypeScheme(Type.Int)))
     ))
-    val result = Codegen.generate(mod)
 
-    result shouldBe 'right
+    val result = Codegen.generate(mod).fold(
+      errs => fail(s"""Code generation failed with errors ${errs.mkString(", ")}"""),
+      identity
+    )
 
     val baos = new ByteArrayOutputStream()
 
-    Codegen.print(result.right.get, baos)
+    Codegen.print(result, baos)
 
     baos.toString shouldBe (
       """// class version 52.0 (52)
@@ -75,8 +77,13 @@ class CodegenSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCh
       mkLet("unit", mkUnit()),
       mkLet("unit2", mkRef("unit", TypeScheme(Type.Unit)))
     ))
+
     val result = Codegen.generate(mod)
-    result shouldBe 'right
+
+    result.fold(
+      errs => fail(s"""Code generation failed with errors ${errs.mkString(", ")}"""),
+      _    => succeed
+    )
   }
 
   it should "parse a module definition from a generated class file" in {
@@ -86,11 +93,12 @@ class CodegenSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCh
       mkLet("int3", mkRef("int2", TypeScheme(Type.Int)))
     ))
 
-    val result = Codegen.generate(mod)
+    val result = Codegen.generate(mod).fold(
+      errs => fail(s"""Code generation failed with errors ${errs.mkString(", ")}"""),
+      identity
+    )
 
-    result shouldBe 'right
-
-    Codegen.readInterface(result.right.get) shouldBe Some(mod.map(_.forgetPos))
+    Codegen.readInterface(result) shouldBe Some(mod.map(_.forgetPos))
   }
 
   def withTmpDir[A](test: File => A) = {
@@ -102,10 +110,12 @@ class CodegenSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCh
   it should "round trip arbitrary module files" in forAll(minSuccessful(1000)) { mod: Module[NamePosType] =>
     withTmpDir { dir =>
       try {
-        val result = Codegen.generate(mod)
-        result shouldBe 'right
+        val result = Codegen.generate(mod).fold(
+          errs => fail(s"""Code generation failed with errors ${errs.mkString(", ")}"""),
+          identity
+        )
 
-        Codegen.readInterface(result.right.get) shouldBe Some(mod.map(_.forgetPos))
+        Codegen.readInterface(result) shouldBe Some(mod.map(_.forgetPos))
 
         val outDir = mod.pkg.foldLeft(dir) {
           case (path, next) => path / next
@@ -115,7 +125,7 @@ class CodegenSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCh
 
         out
           .createIfNotExists(createParents = true)
-          .writeByteArray(result.right.get)
+          .writeByteArray(result)
 
         val classLoader = Thread.currentThread.getContextClassLoader.asInstanceOf[URLClassLoader]
 
@@ -127,7 +137,7 @@ class CodegenSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCh
           Class.forName(s"${pkg + out.nameWithoutExtension}", true, childLoader)
         } catch {
           case e: Throwable =>
-            Codegen.print(result.right.get)
+            Codegen.print(result)
             throw e
         }
       } catch {

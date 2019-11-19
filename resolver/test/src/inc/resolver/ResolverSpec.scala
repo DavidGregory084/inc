@@ -34,9 +34,10 @@ class ResolverSpec extends FlatSpec with Matchers {
     val expected = mkResolvedModule("Int", List(
       mkResolvedLet("Int", "int", mkResolvedInt(42))
     ))
-    val result = Resolver.resolve(mod)
-    result shouldBe 'right
-    result.right.get shouldBe expected
+    Resolver.resolve(mod).fold(
+      errs => fail(s"""Name resolution failed with errors ${errs.mkString(", ")}"""),
+      mod => mod shouldBe expected
+    )
   }
 
   it should "return an error when there is a reference to a field which doesn't exist" in {
@@ -44,8 +45,10 @@ class ResolverSpec extends FlatSpec with Matchers {
       mkLet("int", mkInt(42)),
       mkLet("int2", mkRef("int3"))
     ))
-    val result = Resolver.resolve(mod)
-    result shouldBe 'left
+    Resolver.resolve(mod).fold(
+      _ => succeed,
+      _ => fail("Resolution should fail as 'int3' is not defined")
+    )
   }
 
   it should "return an error when there is a field which is defined twice" in {
@@ -53,7 +56,9 @@ class ResolverSpec extends FlatSpec with Matchers {
       mkLet("int", mkInt(42)),
       mkLet("int", mkInt(43))
     ))
-    val result = Resolver.resolve(mod)
-    result shouldBe 'left
+    Resolver.resolve(mod).fold(
+      _ => succeed,
+      _ => fail("Resolution should fail as the field 'int' is defined twice")
+    )
   }
 }
