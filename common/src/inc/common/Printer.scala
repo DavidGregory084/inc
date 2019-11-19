@@ -141,9 +141,9 @@ object Printer {
     val suffix = Doc.char('}')
 
     val imps = Doc.intercalate(Doc.char(';') + Doc.line, imports.map {
-      case ImportModule(pkg, name) =>
+      case ImportModule(pkg, name, _) =>
         Doc.text("import") & Doc.text((pkg :+ name).mkString("."))
-      case ImportSymbols(pkg, name, syms) =>
+      case ImportSymbols(pkg, name, syms, _) =>
         val impPrefix = Doc.text("import") & Doc.text((pkg :+ name).mkString(".")) + Doc.char('.') + Doc.char('{')
         val impSuffix = Doc.char('}')
         val impBody = Doc.intercalate(Doc.comma + Doc.line, syms.map(Doc.text))

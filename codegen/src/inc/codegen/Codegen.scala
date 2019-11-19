@@ -82,14 +82,23 @@ class Codegen(verifyCodegen: Boolean) {
     reader.accept(visitor, ClassReader.SKIP_DEBUG)
   }
 
-  def readInterface(code: Array[Byte]): Option[Module[NameWithType]] = {
+  def readInterface(code: Array[Byte]): Either[List[Error], Module[NameWithType]] = {
     val reader = new ClassReader(code)
     val visitor = new InterfaceAttributeVisitor()
+
     reader.accept(visitor, Array(InterfaceAttributePrototype), 0)
-    Option(visitor.buffer).map { buf =>
-      val protobuf = proto.Module.parseFrom(buf)
-      Module.fromProto(protobuf)
-    }
+
+    val buffer = Either.fromOption(
+      Option(visitor.buffer),
+      List(CodegenError("Unable to find inc module data in class file"))
+    )
+
+    for {
+      buf <- buffer
+      protobuf <- proto.Module.validate(buf).toEither.leftMap { t =>
+        List(CodegenError("Error while decoding inc module data from class file", t))
+      }
+    } yield Module.fromProto(protobuf)
   }
 
   def withClassWriter(className: String)(f: ClassWriter => Either[List[CodegenError], Unit]): Either[List[CodegenError], Array[Byte]] = {
