@@ -14,7 +14,7 @@ import scribe.format._
 
 class Gather(solve: Solve, isTraceEnabled: Boolean) {
   if (isTraceEnabled) {
-    this.logger.withHandler(
+    this.logger.clearHandlers().withHandler(
       formatter = Formatter.simple,
       minimumLevel = Some(Level.Trace)
     ).replace()
