@@ -18,7 +18,7 @@ import org.objectweb.asm.signature.{ SignatureVisitor, SignatureWriter }
 import org.objectweb.asm.util.{ CheckClassAdapter, TraceClassVisitor }
 import scala.{ Array, Boolean, Byte, Char, Int, Unit, Option, Either, Right, StringContext }
 import scala.collection.immutable.{ List, Map }
-import scala.Predef.{ ArrowAssoc, classOf }
+import scala.Predef.{ ArrowAssoc, augmentString, classOf }
 
 case class InterfaceAttribute(buffer: Array[Byte]) extends Attribute("IncInterface") {
   override def read(classReader: ClassReader, offset: Int, length: Int, charBuffer: Array[Char], codeAttributeOffset: Int, labels: Array[Label]) = {
@@ -270,7 +270,7 @@ class Codegen(verifyCodegen: Boolean) {
       Right(AsmType.getType(classOf[Object]))
   }
 
-  def writeParamType(visitor: SignatureVisitor, paramType: Type): Either[List[CodegenError], Unit] = paramType match {
+  def writeType(visitor: SignatureVisitor, typ: Type): Either[List[CodegenError], Unit] = typ match {
     case tv @ TypeVariable(_) =>
       Right(visitor.visitTypeVariable(tv.name))
     case tc @ TypeConstructor(_, params) =>
@@ -278,44 +278,60 @@ class Codegen(verifyCodegen: Boolean) {
         visitor.visitClassType(asmType.getInternalName)
         params.traverse_ { paramType =>
           val argVisitor = visitor.visitTypeArgument(SignatureVisitor.INSTANCEOF)
-          writeParamType(argVisitor, paramType)
+          writeType(argVisitor, paramType)
         }.as {
           visitor.visitEnd()
         }
       }
   }
 
-  def writeSignatureFor(typeScheme: TypeScheme): Either[List[CodegenError], String] = typeScheme match {
-    case TypeScheme(bound, TypeConstructor("->", params)) =>
-      val writer = new SignatureWriter()
+  def writeSignatureFor(typeScheme: TypeScheme): Either[List[CodegenError], String] = {
+    val writer = new SignatureWriter()
 
-      bound.foreach { b =>
-        writer.visitFormalTypeParameter(b.name)
-        val typeBoundWriter = writer.visitClassBound()
-        typeBoundWriter.visitClassType(AsmType.getInternalName(classOf[java.lang.Object]))
-        typeBoundWriter.visitEnd()
-      }
+    typeScheme match {
+      case TypeScheme(bound, TypeConstructor("->", params)) =>
 
-      params.init.traverse_ { paramType =>
-        val paramVisitor = writer.visitParameterType()
-        writeParamType(paramVisitor, paramType)
-      }.flatMap { _ =>
-        val returnTypeWriter = writer.visitReturnType()
-        writeParamType(returnTypeWriter, params.last)
-      }.as {
-        writer.toString()
-      }
+        bound.foreach { b =>
+          writer.visitFormalTypeParameter(b.name)
+          val typeBoundWriter = writer.visitClassBound()
+          typeBoundWriter.visitClassType(AsmType.getInternalName(classOf[java.lang.Object]))
+          typeBoundWriter.visitEnd()
+        }
 
-    case tp =>
-      CodegenError.singleton(s"Attempt to build Java generic signature for unsupported type: ${Printer.print(tp)}")
+        params.init.traverse_ { paramType =>
+          val paramVisitor = writer.visitParameterType()
+          writeType(paramVisitor, paramType)
+        }.flatMap { _ =>
+          val returnTypeWriter = writer.visitReturnType()
+          writeType(returnTypeWriter, params.last)
+        }.as {
+          writer.toString()
+        }
+
+      case TypeScheme(_, tc @ TypeConstructor(_, _)) =>
+        if (tc.isPrimitive)
+          asmTypeOf(tc).map { asmType =>
+            writer.visitBaseType(asmType.getDescriptor.head)
+            writer.toString()
+          }
+        else
+          writeType(writer, tc).as {
+            writer.toString()
+          }
+
+      case TypeScheme(_, tv @ TypeVariable(_)) =>
+        writeType(writer, tv).as {
+          writer.toString()
+        }
+    }
   }
 
-  def newStaticField[A](classWriter: ClassWriter)(fieldName: String, fieldDescriptor: String, initialValue: A): Either[List[CodegenError], Unit] =
-    Right(classWriter.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, fieldName, fieldDescriptor, null, initialValue).visitEnd())
+  def newStaticField[A](classWriter: ClassWriter)(fieldName: String, fieldDescriptor: String, signature: String, initialValue: A): Either[List[CodegenError], Unit] =
+    Right(classWriter.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, fieldName, fieldDescriptor, signature, initialValue).visitEnd())
 
-  def newStaticFieldFrom(classWriter: ClassWriter, enclosingClass: String, staticInitializer: GeneratorAdapter)(fieldName: String, fieldDescriptor: String, referencedClass: String, referencedField: String): Either[List[CodegenError], Unit] =
+  def newStaticFieldFrom(classWriter: ClassWriter, enclosingClass: String, staticInitializer: GeneratorAdapter)(fieldName: String, fieldDescriptor: String, signature: String, referencedClass: String, referencedField: String): Either[List[CodegenError], Unit] =
     Right {
-      classWriter.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, fieldName, fieldDescriptor, null, null).visitEnd()
+      classWriter.visitField(ACC_PUBLIC + ACC_STATIC + ACC_FINAL, fieldName, fieldDescriptor, signature, null).visitEnd()
       staticInitializer.visitFieldInsn(GETSTATIC, referencedClass, referencedField, fieldDescriptor)
       staticInitializer.visitFieldInsn(PUTSTATIC, enclosingClass, fieldName, fieldDescriptor)
     }
@@ -481,45 +497,45 @@ class Codegen(verifyCodegen: Boolean) {
   def newTopLevelLet(className: String, classWriter: ClassWriter, staticInitializer: GeneratorAdapter, let: Let[NamePosType], typeEnv: Map[String, TypeScheme]): Either[List[CodegenError], Unit] = {
     let.binding match {
       case LiteralInt(i, _) =>
-        newStaticField(classWriter)(let.name, AsmType.INT_TYPE.getDescriptor, i)
+        newStaticField(classWriter)(let.name, AsmType.INT_TYPE.getDescriptor, signature = null, i)
       case LiteralLong(l, _) =>
-        newStaticField(classWriter)(let.name, AsmType.LONG_TYPE.getDescriptor, l)
+        newStaticField(classWriter)(let.name, AsmType.LONG_TYPE.getDescriptor, signature = null, l)
       case LiteralFloat(f, _) =>
-        newStaticField(classWriter)(let.name, AsmType.FLOAT_TYPE.getDescriptor, f)
+        newStaticField(classWriter)(let.name, AsmType.FLOAT_TYPE.getDescriptor, signature = null, f)
       case LiteralDouble(d, _) =>
-        newStaticField(classWriter)(let.name, AsmType.DOUBLE_TYPE.getDescriptor, d)
+        newStaticField(classWriter)(let.name, AsmType.DOUBLE_TYPE.getDescriptor, signature = null, d)
       case LiteralBoolean(b, _) =>
-        newStaticField(classWriter)(let.name, AsmType.BOOLEAN_TYPE.getDescriptor, b)
+        newStaticField(classWriter)(let.name, AsmType.BOOLEAN_TYPE.getDescriptor, signature = null, b)
       case LiteralChar(c, _) =>
-        newStaticField(classWriter)(let.name, AsmType.CHAR_TYPE.getDescriptor, c)
+        newStaticField(classWriter)(let.name, AsmType.CHAR_TYPE.getDescriptor, signature = null, c)
       case LiteralString(s, _) =>
-        newStaticField(classWriter)(let.name, AsmType.getDescriptor(classOf[String]), s)
+        newStaticField(classWriter)(let.name, AsmType.getDescriptor(classOf[String]), signature = null, s)
       case LiteralUnit(_) =>
         val unitClass = classOf[IncUnit]
         val descriptor = AsmType.getDescriptor(unitClass)
         val internalName = AsmType.getInternalName(unitClass)
-        newStaticFieldFrom(classWriter, className, staticInitializer)(let.name, descriptor, internalName, "instance")
+        newStaticFieldFrom(classWriter, className, staticInitializer)(let.name, descriptor, signature = null, internalName, "instance")
       case Reference(ref, nameWithType) =>
         descriptorFor(nameWithType.typ).flatMap { descriptor =>
           val internalName = getInternalName(nameWithType.name, enclosingClass = className)
-          newStaticFieldFrom(classWriter, className, staticInitializer)(let.name, descriptor, internalName, ref)
+          newStaticFieldFrom(classWriter, className, staticInitializer)(let.name, descriptor, signature = null, internalName, ref)
         }
       case ifExpr @ If(_, _, _, nameWithType) =>
         for {
           descriptor <- descriptorFor(nameWithType.typ)
-          _ <- newStaticField(classWriter)(let.name, descriptor, null)
+          _ <- newStaticField(classWriter)(let.name, descriptor, signature = null, null)
           _ <- newExpr(classWriter, className, staticInitializer, let.name, Map.empty, Map.empty, typeEnv)(ifExpr)
         } yield staticInitializer.visitFieldInsn(PUTSTATIC, className, let.name, descriptor)
       case lam @ Lambda(_, _, nameWithType) =>
         for {
           descriptor <- descriptorFor(nameWithType.typ)
-          _ <- newStaticField(classWriter)(let.name, descriptor, null)
+          _ <- newStaticField(classWriter)(let.name, descriptor, signature = null, null)
           _ <- newExpr(classWriter, className, staticInitializer, let.name, Map.empty, Map.empty, typeEnv)(lam)
         } yield staticInitializer.visitFieldInsn(PUTSTATIC, className, let.name, descriptor)
       case apply @ Apply(_, _, nameWithType) =>
         for {
           descriptor <- descriptorFor(nameWithType.typ)
-          _ <- newStaticField(classWriter)(let.name, descriptor, null)
+          _ <- newStaticField(classWriter)(let.name, descriptor, signature = null, null)
           _ <- newExpr(classWriter, className, staticInitializer, let.name, Map.empty, Map.empty, typeEnv)(apply)
         } yield staticInitializer.visitFieldInsn(PUTSTATIC, className, let.name, descriptor)
     }
