@@ -6,7 +6,6 @@ import cats.syntax.functor._
 import cats.syntax.traverse._
 import cats.instances.either._
 import cats.instances.list._
-import cats.instances.tuple._
 import inc.common._
 import inc.rts.{ Unit => IncUnit }
 import java.io.{ OutputStream, PrintWriter }
@@ -14,12 +13,12 @@ import java.lang.{ Class, ClassNotFoundException, Exception, IllegalStateExcepti
 import java.lang.invoke.{ CallSite, LambdaMetafactory, MethodType, MethodHandle, MethodHandles }
 import org.objectweb.asm.{ Attribute, ByteVector, ClassReader, ClassVisitor, ClassWriter, Label, Handle, Type => AsmType }
 import org.objectweb.asm.Opcodes._
-import org.objectweb.asm.util.{ CheckClassAdapter, TraceClassVisitor }
 import org.objectweb.asm.commons.{ GeneratorAdapter, Method }
+import org.objectweb.asm.signature.{ SignatureVisitor, SignatureWriter }
+import org.objectweb.asm.util.{ CheckClassAdapter, TraceClassVisitor }
 import scala.{ Array, Boolean, Byte, Char, Int, Unit, Option, Either, Right, StringContext }
-import scala.collection.immutable.{ List, Map, Stream }
-import scala.Predef.{ classOf, augmentString }
-import org.objectweb.asm.signature.SignatureWriter
+import scala.collection.immutable.{ List, Map }
+import scala.Predef.{ ArrowAssoc, classOf }
 
 case class InterfaceAttribute(buffer: Array[Byte]) extends Attribute("IncInterface") {
   override def read(classReader: ClassReader, offset: Int, length: Int, charBuffer: Array[Char], codeAttributeOffset: Int, labels: Array[Label]) = {
@@ -271,50 +270,44 @@ class Codegen(verifyCodegen: Boolean) {
       Right(AsmType.getType(classOf[Object]))
   }
 
-  val TypeVarMapping = Stream.from(1).take(26).zipWithIndex.map(_.map(i => (i + 65).toChar.toString)).toMap
+  def writeParamType(visitor: SignatureVisitor, paramType: Type): Either[List[CodegenError], Unit] = paramType match {
+    case tv @ TypeVariable(_) =>
+      Right(visitor.visitTypeVariable(tv.name))
+    case tc @ TypeConstructor(_, params) =>
+      boxedAsmTypeOf(tc).flatMap { asmType =>
+        visitor.visitClassType(asmType.getInternalName)
+        params.traverse_ { paramType =>
+          val argVisitor = visitor.visitTypeArgument(SignatureVisitor.INSTANCEOF)
+          writeParamType(argVisitor, paramType)
+        }.as {
+          visitor.visitEnd()
+        }
+      }
+  }
 
   def writeSignatureFor(typeScheme: TypeScheme): Either[List[CodegenError], String] = typeScheme match {
     case TypeScheme(bound, TypeConstructor("->", params)) =>
       val writer = new SignatureWriter()
 
       bound.foreach { b =>
-        writer.visitFormalTypeParameter(TypeVarMapping(b.id))
-        scribe.info("Type parameter " + TypeVarMapping(b.id))
+        writer.visitFormalTypeParameter(b.name)
         val typeBoundWriter = writer.visitClassBound()
         typeBoundWriter.visitClassType(AsmType.getInternalName(classOf[java.lang.Object]))
         typeBoundWriter.visitEnd()
       }
 
-      params.init.traverse_ {
-        case TypeVariable(id) =>
-          scribe.info("Type variable " + TypeVarMapping(id))
-          Right(writer.visitParameterType().visitTypeVariable(TypeVarMapping(id)))
-        case tp =>
-          asmTypeOf(tp).map { asmType =>
-            if (asmType.getSort == AsmType.OBJECT)
-              writer.visitParameterType().visitClassType(asmType.getInternalName)
-            else
-              writer.visitParameterType().visitBaseType(asmType.getDescriptor.head)
-          }
+      params.init.traverse_ { paramType =>
+        val paramVisitor = writer.visitParameterType()
+        writeParamType(paramVisitor, paramType)
+      }.flatMap { _ =>
+        val returnTypeWriter = writer.visitReturnType()
+        writeParamType(returnTypeWriter, params.last)
       }.as {
-        params.last match {
-          case TypeVariable(id) =>
-            writer.visitReturnType().visitTypeVariable(TypeVarMapping(id))
-          case tp =>
-            asmTypeOf(tp).map { asmType =>
-              if (asmType.getSort == AsmType.OBJECT)
-                writer.visitReturnType().visitClassType(asmType.getInternalName)
-              else
-                writer.visitReturnType().visitBaseType(asmType.getDescriptor.head)
-            }
-        } 
-
-        writer.visitEnd()
         writer.toString()
       }
 
     case tp =>
-      CodegenError.singleton(s"Signature requested for unexpected type ${Printer.print(tp)}")
+      CodegenError.singleton(s"Attempt to build Java generic signature for unsupported type: ${Printer.print(tp)}")
   }
 
   def newStaticField[A](classWriter: ClassWriter)(fieldName: String, fieldDescriptor: String, initialValue: A): Either[List[CodegenError], Unit] =
@@ -327,7 +320,7 @@ class Codegen(verifyCodegen: Boolean) {
       staticInitializer.visitFieldInsn(PUTSTATIC, enclosingClass, fieldName, fieldDescriptor)
     }
 
-  def newExpr(classWriter: ClassWriter, className: String, generator: GeneratorAdapter, outerName: String, arguments: Map[String, Int], locals: Map[String, Int])(expr: Expr[NamePosType]): Either[List[CodegenError], Unit] = expr match {
+  def newExpr(classWriter: ClassWriter, className: String, generator: GeneratorAdapter, outerName: String, arguments: Map[String, Int], locals: Map[String, Int], typeEnv: Map[String, TypeScheme])(expr: Expr[NamePosType]): Either[List[CodegenError], Unit] = expr match {
     case LiteralInt(i, _) =>
       Right(generator.visitLdcInsn(i))
     case LiteralLong(l, _) =>
@@ -351,12 +344,12 @@ class Codegen(verifyCodegen: Boolean) {
       val trueLabel = new Label
       val falseLabel = new Label
       for {
-        _ <- newExpr(classWriter, className, generator, outerName, arguments, locals)(cond)
+        _ <- newExpr(classWriter, className, generator, outerName, arguments, locals, typeEnv)(cond)
         _ = generator.visitJumpInsn(IFEQ, falseLabel)
-        _ <- newExpr(classWriter, className, generator, outerName, arguments, locals)(thenExpr)
+        _ <- newExpr(classWriter, className, generator, outerName, arguments, locals, typeEnv)(thenExpr)
         _ = generator.visitJumpInsn(GOTO, trueLabel)
         _ = generator.visitLabel(falseLabel)
-        _ <- newExpr(classWriter, className, generator, outerName, arguments, locals)(elseExpr)
+        _ <- newExpr(classWriter, className, generator, outerName, arguments, locals, typeEnv)(elseExpr)
         _ = generator.visitLabel(trueLabel)
       } yield ()
     case Reference(ref, nameWithType) =>
@@ -383,12 +376,12 @@ class Codegen(verifyCodegen: Boolean) {
 
         descriptor = AsmType.getMethodDescriptor(objectType, tpArgs.init.as(objectType): _*)
 
-        _ <- newExpr(classWriter, className, generator, outerName, arguments, locals)(fn)
+        _ <- newExpr(classWriter, className, generator, outerName, arguments, locals, typeEnv)(fn)
 
         _ <- args.traverse_ { arg =>
           for {
             actualArgTp <- asmTypeOf(arg.meta.typ.typ)
-            _ <- newExpr(classWriter, className, generator, outerName, arguments, locals)(arg)
+            _ <- newExpr(classWriter, className, generator, outerName, arguments, locals, typeEnv)(arg)
           } yield {
             if (arg.meta.typ.typ.isPrimitive) generator.box(actualArgTp)
           }
@@ -432,30 +425,29 @@ class Codegen(verifyCodegen: Boolean) {
           (v.copy(meta = v.meta.withEmptyPos), Reference(newName, v.meta.copy(name = LocalName(newName))))
       }.toMap
 
-      val typeForLambda = asmTypeOf(nameWithType.typ.typ)
-
       for {
         functionDescriptor <- descriptorForFunction
         instantiatedFunctionType <- boxedTypeForFunction
 
-        lambdaType <- typeForLambda
+        lambdaType <- asmTypeOf(nameWithType.typ.typ)
 
         capturedArgTps <- capturedVarTypes.traverse(asmTypeOf)
 
         liftedName = outerName + "$lifted" + liftedDefns.get
 
-        signature <- writeSignatureFor(nameWithType.typ)
+        // We need to generalize the lifted lambdas in the type environment to write the Java generic signature
+        signature <- writeSignatureFor(TypeScheme.generalize(typeEnv, nameWithType.typ.typ))
 
         // Write out a new static method with adapted arguments
         _ <- withGeneratorAdapter(classWriter, liftedName, functionDescriptor, signature, ACC_PRIVATE + ACC_STATIC + ACC_SYNTHETIC) { innerGen =>
           val allParams = prependedParams ++ params
           allParams.foreach(p => innerGen.visitParameter(p.name, ACC_FINAL))
-          newExpr(classWriter, className, innerGen, liftedName + "$inner", allParams.map(_.name).zipWithIndex.toMap, locals)(body.replace(replaceCaptured))
+          newExpr(classWriter, className, innerGen, liftedName + "$inner", allParams.map(_.name).zipWithIndex.toMap, locals, typeEnv)(body.replace(replaceCaptured))
         }
 
         // Stack the captured variables for invokedynamic
         _ <- capturedVars.traverse_ { v =>
-          newExpr(classWriter, className, generator, outerName, arguments, locals)(v)
+          newExpr(classWriter, className, generator, outerName, arguments, locals, typeEnv)(v)
         }
 
       } yield {
@@ -486,7 +478,7 @@ class Codegen(verifyCodegen: Boolean) {
       }
   }
 
-  def newTopLevelLet(className: String, classWriter: ClassWriter, staticInitializer: GeneratorAdapter, let: Let[NamePosType]): Either[List[CodegenError], Unit] = {
+  def newTopLevelLet(className: String, classWriter: ClassWriter, staticInitializer: GeneratorAdapter, let: Let[NamePosType], typeEnv: Map[String, TypeScheme]): Either[List[CodegenError], Unit] = {
     let.binding match {
       case LiteralInt(i, _) =>
         newStaticField(classWriter)(let.name, AsmType.INT_TYPE.getDescriptor, i)
@@ -516,27 +508,27 @@ class Codegen(verifyCodegen: Boolean) {
         for {
           descriptor <- descriptorFor(nameWithType.typ)
           _ <- newStaticField(classWriter)(let.name, descriptor, null)
-          _ <- newExpr(classWriter, className, staticInitializer, let.name, Map.empty, Map.empty)(ifExpr)
+          _ <- newExpr(classWriter, className, staticInitializer, let.name, Map.empty, Map.empty, typeEnv)(ifExpr)
         } yield staticInitializer.visitFieldInsn(PUTSTATIC, className, let.name, descriptor)
       case lam @ Lambda(_, _, nameWithType) =>
         for {
           descriptor <- descriptorFor(nameWithType.typ)
           _ <- newStaticField(classWriter)(let.name, descriptor, null)
-          _ <- newExpr(classWriter, className, staticInitializer, let.name, Map.empty, Map.empty)(lam)
+          _ <- newExpr(classWriter, className, staticInitializer, let.name, Map.empty, Map.empty, typeEnv)(lam)
         } yield staticInitializer.visitFieldInsn(PUTSTATIC, className, let.name, descriptor)
       case apply @ Apply(_, _, nameWithType) =>
         for {
           descriptor <- descriptorFor(nameWithType.typ)
           _ <- newStaticField(classWriter)(let.name, descriptor, null)
-          _ <- newExpr(classWriter, className, staticInitializer, let.name, Map.empty, Map.empty)(apply)
+          _ <- newExpr(classWriter, className, staticInitializer, let.name, Map.empty, Map.empty, typeEnv)(apply)
         } yield staticInitializer.visitFieldInsn(PUTSTATIC, className, let.name, descriptor)
     }
   }
 
-  def newTopLevelDeclaration(internalName: String, cw: ClassWriter, siv: GeneratorAdapter, decl: TopLevelDeclaration[NamePosType]): Either[List[CodegenError], Unit] =
+  def newTopLevelDeclaration(internalName: String, cw: ClassWriter, siv: GeneratorAdapter, decl: TopLevelDeclaration[NamePosType], typeEnv: Map[String, TypeScheme]): Either[List[CodegenError], Unit] =
     decl match {
       case let @ Let(_, _, _) =>
-        newTopLevelLet(internalName, cw, siv, let)
+        newTopLevelLet(internalName, cw, siv, let, typeEnv)
     }
 
   def getInternalName(name: Name, enclosingClass: String) = name match {
@@ -568,13 +560,15 @@ class Codegen(verifyCodegen: Boolean) {
 
     liftedDefns.set(0)
 
+    val typeEnv = mod.declarations.map(decl => decl.name -> decl.meta.typ).toMap
+
     val classBytes = withClassWriter(className) { classWriter =>
       // Persist the AST to protobuf
       classWriter.visitAttribute(InterfaceAttribute(mod.toProto.toByteArray))
       // Make the static initializer available to set field values
       withGeneratorAdapter(classWriter, "<clinit>", AsmType.getMethodDescriptor(AsmType.VOID_TYPE)) { staticInitializer =>
         mod.declarations.traverse_ { decl =>
-          newTopLevelDeclaration(className, classWriter, staticInitializer, decl)
+          newTopLevelDeclaration(className, classWriter, staticInitializer, decl, typeEnv)
         }
       }
     }

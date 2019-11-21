@@ -59,6 +59,7 @@ object Type {
 }
 
 case class TypeVariable(id: Int) extends Type {
+  def name: String = "T" + id.toString
   def occursIn(typ: Type) = typ.freeTypeVariables.contains(this)
 }
 

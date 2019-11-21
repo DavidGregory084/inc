@@ -12,7 +12,7 @@ object Typechecker extends Typechecker(false)
 
 class Typechecker(isTraceEnabled: Boolean) {
   if (isTraceEnabled) {
-    this.logger.withHandler(
+    this.logger.clearHandlers().withHandler(
       formatter = Formatter.simple,
       minimumLevel = Some(Level.Trace)
     ).replace()

@@ -74,7 +74,7 @@ object Printer {
           else
             tyParams.init.map(print).mkString(Yellow("("), ", ", Yellow(")"))
 
-        args + Yellow(" -> ") + print(tyParams.last)
+        "(" + args + Yellow(" -> ") + print(tyParams.last) + ")"
 
       } else {
         nm + tyParams.map(print).mkString("[", ", ", "]")

@@ -32,6 +32,9 @@ case class NamePosType(name: Name, pos: Pos, typ: TypeScheme) {
     `type` = Some(typ.toProto)
   )
 
+  def withType(typ: TypeScheme): NamePosType =
+    NamePosType(name, pos, typ)
+
   def withEmptyPos = copy(pos = Pos.Empty)
 
   def forgetPos = NameWithType(name, typ)
