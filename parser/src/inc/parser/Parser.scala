@@ -2,7 +2,7 @@ package inc.parser
 
 import fastparse._, ScalaWhitespace._
 import inc.common._
-import java.lang.{ Boolean, Character, Double, Float, Integer, Long, String, System }
+import java.lang.{ Boolean, Character, Double, Float, Integer, Long, String }
 import scala.{ Either, Right, Int, Some, None, StringContext }
 import scala.collection.immutable.{ List, Seq }
 import scala.Predef.augmentString
@@ -186,7 +186,7 @@ object Parser {
 
   def letDeclaration[_: P] = P(
     Index ~ "let" ~/ identifier ~ "=" ~
-      (NoCut(inBraces(expression)) | expression) ~
+      (inBraces(expression) | expression) ~
       Index
   ).map {
     case (from, name, expr, to) =>
@@ -235,10 +235,7 @@ object Parser {
         Right(mod)
       case f @ Parsed.Failure(_, _, _) =>
         val errorMessage = f.trace().longMsg
-        val terminalsMsg = f.trace().longTerminalsMsg
-        val aggregateMsg = f.trace().longAggregateMsg
-        val NL2 = System.lineSeparator + System.lineSeparator
-        ParserError.singleton(errorMessage + NL2 + terminalsMsg + NL2 + aggregateMsg)
+        ParserError.singleton(errorMessage)
     }
   }
 }
