@@ -319,6 +319,9 @@ class Codegen(verifyCodegen: Boolean) {
         }
       } yield ()
 
+    case Ascription(expr, _, _) =>
+      newExpr(classWriter, className, generator, outerName, arguments, locals)(expr)
+
     case Apply(fn, args, nameWithType) =>
       val TypeScheme(_, TypeConstructor("->", tpArgs)) = fn.meta.typ
       val objectType = AsmType.getType(classOf[Object])
@@ -451,6 +454,8 @@ class Codegen(verifyCodegen: Boolean) {
         val descriptor = AsmType.getDescriptor(unitClass)
         val internalName = AsmType.getInternalName(unitClass)
         newStaticFieldFrom(classWriter, className, staticInitializer)(let.name, descriptor, internalName, "instance")
+      case Ascription(expr, _, _) =>
+        newTopLevelLet(className, classWriter, staticInitializer, let.copy(binding = expr))
       case Reference(ref, nameWithType) =>
         descriptorFor(nameWithType.typ).flatMap { descriptor =>
           val internalName = getInternalName(nameWithType.name, enclosingClass = className)

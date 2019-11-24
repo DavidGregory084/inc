@@ -106,6 +106,7 @@ object Parser {
   // Blocks
   def inBraces[_: P, A](p: => P[A]) = P("{" ~/ p ~ "}")
   def inParens[_: P, A](p: => P[A]) = P("(" ~/ p ~ ")")
+  def inSquareBraces[_: P, A](p: => P[A]) = P("[" ~/ p ~ "]")
 
   def reference[_: P] = P(Index ~ identifier ~ Index).map {
     case (from, id, to) =>
@@ -139,6 +140,26 @@ object Parser {
       Lambda(params.toList, expr, Pos(from, to))
   }
 
+  def funTypeExpr[_: P]: P[Type] = P(
+    (inParens(typeExpr.rep(sep = comma./)) | primaryTypeExpr.map(Seq(_))) ~ "->" ~/ typeExpr
+  ).map {
+    case (paramTyps, returnTyp) if paramTyps.isEmpty =>
+      TypeConstructor("->", List(TypeConstructor("inc.rts.Unit", List.empty), returnTyp))
+    case (paramTyps, returnTyp) =>
+      TypeConstructor("->", (paramTyps :+ returnTyp).toList)
+  }
+
+  def primaryTypeExpr[_: P]: P[Type] = P(
+    identifier.rep(min = 1, sep = ".") ~ inSquareBraces(typeExpr.rep(min = 1, sep = comma./)).?
+  ).map {
+    case (id, Some(params)) =>
+      TypeConstructor(id.mkString("."), params.toList)
+    case (id, None) =>
+      TypeConstructor(id.mkString("."), List.empty)
+  }
+
+  def typeExpr[_: P]: P[Type] = P( NoCut(funTypeExpr) | primaryTypeExpr | inParens(typeExpr) )
+
   def application[_: P]: P[Expr[Pos] => Expr[Pos]] = P(
     inParens(expression.rep(sep = comma./)) ~ Index
   ).map {
@@ -147,12 +168,20 @@ object Parser {
   }
 
   // NoCut allows us to backtrack out of a nullary lambda into a unit literal, and from an if statement into an identifier starting with "if"
-  def expression[_: P]: P[Expr[Pos]] = P( (NoCut(lambda) | NoCut(ifExpr) | literal | reference) ~ application.rep ).map {
+  def primaryExpr[_:P] = P( (NoCut(lambda) | NoCut(ifExpr) | literal | reference | inParens(expression)) ~ application.rep ).map {
     case (expr, applications) =>
-      applications.foldLeft(expr) {
-        case (expr, app) =>
-          app(expr)
-      }
+      applications.foldLeft(expr) { case (expr, app) => app(expr) }
+  }
+
+  def expression[_: P]: P[Expr[Pos]] = P(
+    Index ~
+      primaryExpr ~ (":" ~ typeExpr).? ~
+      Index
+  ).map {
+    case (from, expr, Some(ascribedAs), to) =>
+      Ascription(expr, TypeScheme(List.empty, ascribedAs), Pos(from, to))
+    case (_, expr, None, _) =>
+      expr
   }
 
   def letDeclaration[_: P] = P(

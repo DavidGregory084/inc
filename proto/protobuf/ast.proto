@@ -132,6 +132,12 @@ message Apply {
   NameWithType nameWithType = 3;
 }
 
+message Ascription {
+  Expr expr = 1;
+  TypeScheme ascribedAs = 2;
+  NameWithType nameWithType = 3;
+}
+
 message Expr {
   oneof sealed_value {
     Reference ref = 2;
@@ -146,6 +152,7 @@ message Expr {
     If if = 11;
     Lambda lambda = 12;
     Apply apply = 13;
+    Ascription ascription = 14;
   }
 }
 
