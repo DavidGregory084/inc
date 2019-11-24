@@ -92,6 +92,12 @@ object Resolver {
         }
 
       } yield (Apply(f, ra.toList, NameWithPos(NoName, pos)), tbl)
+
+    case Ascription(expr, ascribedAs, pos) =>
+      resolve(expr, tbl).map {
+        case (e, _) =>
+          (Ascription(e, ascribedAs, NameWithPos(NoName, pos)), tbl)
+      }
   }
 
   def resolve(mod: Module[Pos], decl: TopLevelDeclaration[Pos], tbl: SymbolTable): Either[List[ResolverError], (TopLevelDeclaration[NameWithPos], SymbolTable)] = decl match {

@@ -41,8 +41,8 @@ class Solve(isTraceEnabled: Boolean) {
     }
 
   def unify(pos: Pos, left: Type, right: Type): Infer[Substitution] = {
-    lazy val ll = Printer.print(left)
-    lazy val rr = Printer.print(right)
+    lazy val ll = Printer.print(left).render(80)
+    lazy val rr = Printer.print(right).render(80)
     lazy val llRed = Red(ll)
     lazy val rrRed = Red(rr)
 

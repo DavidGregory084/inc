@@ -49,43 +49,47 @@ object Printer {
     }
   }
 
-  def print(constraint: Constraint): String = constraint match {
+  def print(constraint: Constraint): Doc = constraint match {
     case Equal(l, r, _) =>
-      Printer.print(l) + " \u2261 " + Printer.print(r)
+      print(l) + Doc.text(" \u2261 ") + print(r)
   }
 
-  def print(subst: Map[TypeVariable, Type]): String = {
-    subst.map {
+  def print(subst: Map[TypeVariable, Type]): Doc = {
+    Doc.intercalate(Doc.char(',') + Doc.space, subst.map {
       case (tyVar, typ) =>
-        print(tyVar) + White(" |-> ") + print(typ)
-    }.mkString(", ")
+        print(tyVar) + Doc.text(" |-> ") + print(typ)
+    })
   }
 
-  def print(typ: Type): String = typ match {
+  def print(typ: Type): Doc = typ match {
     case TypeVariable(i) =>
-      Yellow("T" + i)
+      Doc.text("T" + i.toString)
     case TypeConstructor(nm, tyParams) =>
       if (tyParams.isEmpty)
-        Yellow(nm)
+        Doc.text(nm)
       else if (nm == "->") {
         val args =
           if (tyParams.length == 2)
             print(tyParams.head)
-          else
-            tyParams.init.map(print).mkString(Yellow("("), ", ", Yellow(")"))
+          else {
+            Doc.intercalate(Doc.char(',') + Doc.space, tyParams.init.map(print))
+              .tightBracketBy(Doc.char('('), Doc.char(')'))
+          }
 
-        "(" + args + Yellow(" -> ") + print(tyParams.last) + ")"
-
+        Doc.char('(') + args + Doc.text(" -> ") + print(tyParams.last) + Doc.char(')')
       } else {
-        nm + tyParams.map(print).mkString("[", ", ", "]")
+        Doc.text(nm) + Doc.intercalate(Doc.char(',') + Doc.space, tyParams.init.map(print))
+          .tightBracketBy(Doc.char('['), Doc.char(']'))
       }
   }
 
-  def print(typ: TypeScheme): String = {
+  def print(typ: TypeScheme): Doc = {
     if (typ.bound.isEmpty)
       print(typ.typ)
-    else
-      typ.bound.map(print).mkString("[", ", ", "]") + "{ " + print(typ.typ) + " }"
+    else {
+      val bound = Doc.intercalate(Doc.char(',') + Doc.space, typ.bound.map(print))
+      bound.tightBracketBy(Doc.char('['), Doc.char(']')) & print(typ.typ).bracketBy(Doc.char('{'), Doc.char('}'))
+    }
   }
 
   def print[A](e: Expr[A]): Doc = e match {
@@ -128,6 +132,9 @@ object Printer {
       val suffix = Doc.char(')')
       val argsList = Doc.intercalate(Doc.char(',') + Doc.line, args.map(print(_)))
       argsList.tightBracketBy(prefix, suffix)
+
+    case Ascription(expr, ascribedAs, _) =>
+      Doc.char('(') + print(expr) + Doc.char(')') + Doc.text(": ") + print(ascribedAs)
   }
 
   def print[A](decl: TopLevelDeclaration[A]): Doc = decl match {

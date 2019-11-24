@@ -165,6 +165,23 @@ class Gather(solve: Solve, isTraceEnabled: Boolean) {
 
         } yield (expr, bodyCst)
 
+      case Ascription(expr, ascribedAs, meta) =>
+        for {
+          (e, exprCst) <- gather(expr, env, source)
+
+          _ = trace("Ascribed expression", e.meta.pos, exprCst, source)
+
+          // Emit a constraint that the expression's type must match the ascription
+          ascriptionCst = List(Equal(e.meta.typ.typ, ascribedAs.typ, meta.pos))
+
+          constraints = exprCst ++ ascriptionCst
+
+          ascription = Ascription(e, ascribedAs, e.meta)
+
+          _ = trace("Ascription", ascription.meta.pos, ascriptionCst, source)
+
+        } yield (ascription, constraints)
+
       case Apply(fn, args, meta) =>
         val tv = TypeVariable()
 

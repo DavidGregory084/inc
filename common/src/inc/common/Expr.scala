@@ -29,6 +29,8 @@ sealed trait Expr[A] extends Product with Serializable {
       capturedInBody -- lambdaParams
     case Apply(fn, args, _) =>
       fn.capturedVariables ++ args.flatMap(_.capturedVariables)
+    case Ascription(expr, _, _) =>
+      expr.capturedVariables
   }
 
   def replace(mapping: Map[Reference[A], Reference[A]])(implicit eqv: A =:= NamePosType): Expr[A] = this match {
@@ -56,6 +58,8 @@ sealed trait Expr[A] extends Product with Serializable {
       app.copy(
         fn = fn.replace(mapping),
         args = args.map(_.replace(mapping)))
+    case asc @ Ascription(expr, _, _) =>
+      asc.copy(expr = expr.replace(mapping))
   }
 
   def toProto(implicit eqv: A =:= NamePosType): proto.Expr = this match {
@@ -95,6 +99,9 @@ sealed trait Expr[A] extends Product with Serializable {
     case Apply(fn, args, meta) =>
       val nameWithType = Some(eqv(meta).toProto)
       proto.Apply(fn.toProto, args.map(_.toProto), nameWithType)
+    case Ascription(expr, ascribedAs, meta) =>
+      val nameWithType = Some(eqv(meta).toProto)
+      proto.Ascription(expr.toProto, Some(ascribedAs.toProto), nameWithType)
   }
 
   def substitute(subst: Map[TypeVariable, Type])(implicit eqv: A =:= NamePosType): Expr[A] =
@@ -136,6 +143,11 @@ object Expr {
         Expr.fromProto(fn),
         args.toList.map(Expr.fromProto),
         NameWithType.fromProto(app.getNameWithType))
+    case asc @ proto.Ascription(_, _, _) =>
+      Ascription(
+        Expr.fromProto(asc.expr),
+        TypeScheme.fromProto(asc.getAscribedAs),
+        NameWithType.fromProto(asc.getNameWithType))
     case proto.Expr.Empty =>
       throw new Exception("Empty Expr in protobuf")
   }
@@ -176,6 +188,10 @@ object Expr {
           fn = map(app.fn)(f),
           args = app.args.map(map(_)(f)),
           meta = f(app.meta))
+      case asc @ Ascription(_, _, _) =>
+        asc.copy(
+          expr = map(asc.expr)(f),
+          meta = f(asc.meta))
     }
   }
 }
@@ -196,6 +212,12 @@ final case class Lambda[A](
 final case class Apply[A](
   fn: Expr[A],
   args: List[Expr[A]],
+  meta: A
+) extends Expr[A]
+
+final case class Ascription[A](
+  expr: Expr[A],
+  ascribedAs: TypeScheme,
   meta: A
 ) extends Expr[A]
 
