@@ -21,19 +21,19 @@ class Gather(solve: Solve, isTraceEnabled: Boolean) {
   }
 
   def trace(name: String, pos: Pos, typ: Type, source: String) = {
-    lazy val formattedMsg = name + ": " + Printer.print(typ)
+    lazy val formattedMsg = NL + name + ": " + Printer.print(typ).render(80)
     scribe.trace(Printer.withSourceContext(None, formattedMsg, pos, fansi.Color.Yellow, source))
   }
 
   def trace(name: String, pos: Pos, typ: TypeScheme, source: String) = {
-    lazy val formattedMsg = name + ": " + Printer.print(typ)
+    lazy val formattedMsg = NL + name + ": " + Printer.print(typ).render(80)
     scribe.trace(Printer.withSourceContext(None, formattedMsg, pos, fansi.Color.Yellow, source))
   }
 
   def trace(name: String, pos: Pos, constraints: List[Constraint], source: String) = {
     if (constraints.nonEmpty) {
-      lazy val formattedMsg = name + ": " + (NL * 2) +
-        constraints.map(Printer.print).mkString(NL)
+      lazy val formattedMsg = NL + name + ": " + (NL * 2) +
+        constraints.map(Printer.print).map(_.render(80)).mkString(NL)
       scribe.trace(Printer.withSourceContext(None, formattedMsg, pos, fansi.Color.Yellow, source))
     }
   }
@@ -41,7 +41,7 @@ class Gather(solve: Solve, isTraceEnabled: Boolean) {
   def trace(name: String, constraints: List[Constraint]) = {
     if (constraints.nonEmpty) {
       lazy val formattedMsg = NL + name + ": " + (NL * 2) +
-        constraints.map(Printer.print).mkString(NL)
+        constraints.map(Printer.print).map(_.render(80)).mkString(NL)
       scribe.trace(formattedMsg)
     }
   }

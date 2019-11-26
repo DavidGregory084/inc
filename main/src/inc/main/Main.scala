@@ -114,7 +114,7 @@ object Main {
       val fileName = dir.resolve(path).toString
       compileModule(dir, mod, config).left.foreach { errors =>
         errors.map { e =>
-          Printer.withSourceContext(Some(fileName), e.getMessage, e.pos, fansi.Color.Red, mod)
+          Printer.withSourceContext(Some(fileName), NL + e.getMessage, e.pos, fansi.Color.Red, mod)
         }.foreach(scribe.error(_))
       }
     }

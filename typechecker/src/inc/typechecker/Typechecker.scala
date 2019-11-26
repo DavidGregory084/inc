@@ -21,7 +21,7 @@ class Typechecker(isTraceEnabled: Boolean) {
   def trace(name: String, env: Environment) = {
     lazy val formattedMsg = NL + name + ": " + (NL * 2) + env.map {
       case (nm, tp) =>
-        nm + ": " + Printer.print(tp)
+        nm + ": " + Printer.print(tp).render(80)
     }.mkString(NL)
 
     scribe.trace(formattedMsg)
