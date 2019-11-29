@@ -5,25 +5,17 @@ import inc.parser.Parser
 import inc.resolver.Resolver
 import inc.typechecker.Typechecker
 import inc.codegen.Codegen
-import cats.data.{Chain, Validated}
-import cats.instances.either._
-import cats.instances.list._
-import cats.syntax.either._
-import cats.syntax.traverse._
-import java.lang.{ ClassLoader, String, System }
-import java.io.{ByteArrayOutputStream, File, InputStream, OutputStream}
-import java.net.{ URL, URLClassLoader }
+import java.lang.{ String, System }
+import java.net.URLClassLoader
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path, Paths}
-import scala.{ Array, Boolean, Byte, Long, Unit, Either, Option, Some, StringContext }
-import scala.collection.immutable.{ List, Map }
+import scala.{ Array, Boolean, Byte, Long, Unit, Either, Some, StringContext }
+import scala.collection.immutable.List
 import scala.jdk.CollectionConverters._
-import scala.Predef.{ ArrowAssoc, wrapRefArray }
+import scala.Predef.wrapRefArray
 import scala.util.control.NonFatal
 import scribe._
 import scribe.format._
-
-case class ConfigError(private val position: Pos, private val message: String) extends Error(position, message)
 
 object Main {
   def main(args: Array[String]): Unit = {
@@ -152,72 +144,6 @@ object Main {
     } yield out
   }
 
-  def readClassBytes(classloader: ClassLoader, className: String, pos: Pos): Either[List[ConfigError], Array[Byte]] = {
-    val classStream = Option(classloader.getResourceAsStream(className))
-    val outputStream = new ByteArrayOutputStream()
-
-    val bufSize = 8192
-    val buf = new Array[Byte](bufSize)
-
-    def pipe(is: InputStream, os: OutputStream, buf: Array[Byte]): Unit = {
-      val num = is.read(buf)
-      if (num > 0) {
-        os.write(buf)
-        pipe(is, os, buf)
-      }
-    }
-
-    lazy val classNotFound = List(ConfigError(pos, s"The class ${className} was not found on the classpath")).asLeft[Array[Byte]]
-
-    classStream.fold(classNotFound) { inputStream =>
-      try pipe(inputStream, outputStream, buf)
-      finally {
-        inputStream.close()
-        outputStream.close()
-      }
-
-      Either.right(buf)
-    }
-  }
-
-  def readEnvironment(imports: List[Import], classloader: ClassLoader): Either[List[Error], Map[String, TopLevelDeclaration[NameWithType]]] = {
-    val distinctPrefixes = imports.map {
-      case ImportModule(pkg, nm, pos) =>
-        (pkg, nm, List.empty[String], pos)
-      case ImportSymbols(pkg, nm, syms, pos) =>
-        (pkg, nm, syms, pos)
-    }.distinct
-
-    val declarations = distinctPrefixes.flatTraverse {
-      case (pkg, nm, syms, pos) =>
-        val className = pkg.mkString("/") + "/" + nm + ".class"
-
-        for {
-          classBytes <- readClassBytes(classloader, className, pos)
-          mod <- Codegen.readInterface(classBytes)
-        } yield {
-            val decls =
-              if (syms.isEmpty)
-                mod.declarations
-              else
-                mod.declarations.filter(d => syms.contains(d.name))
-
-            decls.map(d => d.name -> d)
-        }
-    }
-
-    declarations.map(_.toMap)
-  }
-
-  def parseUrls(classpath: String): Either[List[Error], Array[URL]] = {
-    val urlStrings = classpath.split(File.pathSeparator)
-    Chain.fromSeq(urlStrings.toIndexedSeq).traverse { p =>
-      val path = Validated.catchNonFatal(Paths.get(p))
-      val url = path.map(_.toUri.toURL)
-      url.leftMap(t => List(ConfigError(Pos.Empty, t.getMessage)))
-    }.map(_.iterator.toArray).toEither
-  }
-
   def compileModule(dest: Path, modSource: String, config: Configuration = Configuration.default): Either[List[Error], Path] = {
     val beforeAll = System.nanoTime
 
@@ -225,11 +151,11 @@ object Main {
     val codegen = new Codegen(config.verifyCodegen)
 
     val res = for {
-      urls <- parseUrls(config.classpath)
+      urls <- Classpath.parseUrls(config.classpath)
 
       mod <- runPhase[Module[Pos]]("parser", config, _.printParser, Parser.parse(modSource))
 
-      importedDecls <- readEnvironment(mod.imports, new URLClassLoader(urls))
+      importedDecls <- Classpath.readEnvironment(mod.imports, new URLClassLoader(urls))
 
       resolved <- runPhase[Module[NameWithPos]]("resolver", config, _.printResolver, Resolver.resolve(mod, importedDecls))
 

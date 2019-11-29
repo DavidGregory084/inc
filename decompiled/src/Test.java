@@ -4,6 +4,9 @@ import java.util.Random;
 import java.util.function.Function;
 
 class Test {
-    public static Function<Integer, Function<Integer, Function<Integer, Integer>>> add1 = i -> j -> k -> Integer.valueOf(i.intValue() + j.intValue() + k.intValue());
-    public static final int six = add1.apply(1).apply(2).apply(3);
+    public static Integer add1(Integer x) {
+        return x.intValue() + 1;
+    }
+
+    public static Function<Integer, Integer> fn = Test::add1;
 }
