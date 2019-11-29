@@ -31,9 +31,16 @@ trait Generators { self: Matchers =>
   val boolGen: Gen[Expr[NamePosType]] =
     Arbitrary.arbitrary[Boolean].map(LiteralBoolean(_, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Boolean))))
   val charGen: Gen[Expr[NamePosType]] =
-    Arbitrary.arbitrary[Char].map(LiteralChar(_, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Char))))
+    Gen.asciiPrintableChar.filterNot { chr =>
+      // Parsing char and string escapes is not implemented yet
+      chr == '\n' ||
+        chr == '\r' ||
+        chr == '\\' ||
+        chr == '\''
+    }.map(LiteralChar(_, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Char))))
   val strGen: Gen[Expr[NamePosType]] =
     Gen.asciiPrintableStr.filterNot { str =>
+      // Parsing char and string escapes is not implemented yet
       str.contains('\n') ||
       str.contains('\r') ||
       str.contains('\\') ||
@@ -68,8 +75,10 @@ trait Generators { self: Matchers =>
           Param(nm, NamePosType(LocalName(nm), Pos.Empty, tp))
       }
       body <- exprGen(
-        // Unpleasant trick to allow later generators to refer to v
-        decls ++ ps.map { p =>
+        // Trick to allow later generators to refer to params;
+        // we need to filter out any existing declarations that
+        // clash with our params, since params can shadow top level declarations
+        decls.filterNot(d => ps.exists(_.name == d.name)) ++ ps.map { p =>
           Let(p.name, Reference(p.name, p.meta), p.meta)
         }
       )

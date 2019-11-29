@@ -1,4 +1,4 @@
-module Test.Church {
+module Test/Church {
     let zero = a -> a
     let one = f -> a -> f(a)
     let two = f -> a -> f(f(a))

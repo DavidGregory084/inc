@@ -144,14 +144,14 @@ object Printer {
 
   def print[A](mod: Module[A]): Doc = {
     val Module(pkg, name, imports, declarations @ _, _) = mod
-    val prefix = Doc.text("module") & Doc.text((pkg :+ name).mkString(".")) & Doc.char('{')
+    val prefix = Doc.text("module") & Doc.text((pkg :+ name).mkString("/")) & Doc.char('{')
     val suffix = Doc.char('}')
 
     val imps = Doc.intercalate(Doc.char(';') + Doc.line, imports.map {
       case ImportModule(pkg, name, _) =>
-        Doc.text("import") & Doc.text((pkg :+ name).mkString("."))
+        Doc.text("import") & Doc.text((pkg :+ name).mkString("/"))
       case ImportSymbols(pkg, name, syms, _) =>
-        val impPrefix = Doc.text("import") & Doc.text((pkg :+ name).mkString(".")) + Doc.char('.') + Doc.char('{')
+        val impPrefix = Doc.text("import") & Doc.text((pkg :+ name).mkString("/")) + Doc.char('.') + Doc.char('{')
         val impSuffix = Doc.char('}')
         val impBody = Doc.intercalate(Doc.comma + Doc.line, syms.map(Doc.text))
         impBody.bracketBy(impPrefix, impSuffix)

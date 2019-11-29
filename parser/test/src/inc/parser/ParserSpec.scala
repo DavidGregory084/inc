@@ -217,12 +217,12 @@ class ParserSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyChe
 
     parseModule(
       """
-      |module Test.Float { let float = 3.142f }
+      |module Test/Float { let float = 3.142f }
       |""".trim.stripMargin) shouldBe mod
 
     parseModule(
       """
-      |module Test.Parser.Double { let double = 3.142; let double2 = 0.0001 }
+      |module Test/Parser/Double { let double = 3.142; let double2 = 0.0001 }
       |""".trim.stripMargin) shouldBe mod2
   }
 
@@ -242,12 +242,12 @@ class ParserSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyChe
 
     parseModule(
       """
-      |module Test.Float { import Test.Import; let float = 3.142f }
+      |module Test/Float { import Test/Import; let float = 3.142f }
       |""".trim.stripMargin) shouldBe mod
 
     parseModule(
       """
-      |module Test.Parser.Double { import Test.Import.{ foo, bar, Baz }; let double = 3.142; let double2 = 0.0001 }
+      |module Test/Parser/Double { import Test/Import.{ foo, bar, Baz }; let double = 3.142; let double2 = 0.0001 }
       |""".trim.stripMargin) shouldBe mod2
   }
 

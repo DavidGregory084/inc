@@ -195,10 +195,12 @@ object Parser {
 
   def decl[_: P] = P(letDeclaration)
 
+  def importedSymbols[_: P] = P( inBraces(identifier.rep(min = 1, sep = comma./)) | identifier.map(Seq(_)) )
+
   def imports[_: P] = P {
     Index ~
-      "import" ~/ identifier.rep(min = 1, sep = ".") ~
-      ("." ~ inBraces(identifier.rep(min = 1, sep = comma./))).? ~
+      "import" ~/ identifier.rep(min = 1, sep = "/") ~
+      ("." ~ importedSymbols).? ~
       Index
   }.map {
     case (from, ident, Some(symbols), to) =>
@@ -217,7 +219,7 @@ object Parser {
 
   def module[_: P] = P {
     Index ~
-    "module" ~/ identifier.rep(min = 1, sep = ".") ~
+    "module" ~/ identifier.rep(min = 1, sep = "/") ~
       bracesBlock ~ Index ~
       End
   }.map {
