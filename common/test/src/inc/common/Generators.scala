@@ -31,9 +31,16 @@ trait Generators { self: Matchers =>
   val boolGen: Gen[Expr[NamePosType]] =
     Arbitrary.arbitrary[Boolean].map(LiteralBoolean(_, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Boolean))))
   val charGen: Gen[Expr[NamePosType]] =
-    Arbitrary.arbitrary[Char].map(LiteralChar(_, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Char))))
+    Gen.asciiPrintableChar.filterNot { chr =>
+      // Parsing char and string escapes is not implemented yet
+      chr == '\n' ||
+        chr == '\r' ||
+        chr == '\\' ||
+        chr == '\''
+    }.map(LiteralChar(_, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Char))))
   val strGen: Gen[Expr[NamePosType]] =
     Gen.asciiPrintableStr.filterNot { str =>
+      // Parsing char and string escapes is not implemented yet
       str.contains('\n') ||
       str.contains('\r') ||
       str.contains('\\') ||
