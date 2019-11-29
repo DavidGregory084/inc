@@ -118,4 +118,4 @@ module Test.Compose {
 
 ~~The results are charted [here](http://ec2-3-8-136-202.eu-west-2.compute.amazonaws.com:3000/d/v0rJ3CvZk/benchmark-results?orgId=1&refresh=1m).~~
 
-Bare metal benchmarking agents are too expensive for the moment!~~
+Bare metal benchmarking agents are too expensive for the moment!
