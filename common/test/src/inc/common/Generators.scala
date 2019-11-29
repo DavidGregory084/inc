@@ -78,7 +78,7 @@ trait Generators { self: Matchers =>
         // Trick to allow later generators to refer to params;
         // we need to filter out any existing declarations that
         // clash with our params, since params can shadow top level declarations
-        decls.filterNot(d => !ps.exists(_.name == d.name)) ++ ps.map { p =>
+        decls.filterNot(d => ps.exists(_.name == d.name)) ++ ps.map { p =>
           Let(p.name, Reference(p.name, p.meta), p.meta)
         }
       )
