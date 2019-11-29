@@ -11,7 +11,7 @@ This is a hobby project. Expect lots of bugs and don't expect to be able to use 
 
 ## Getting started
 
-This project is built with [mill](https://www.lihaoyi.com/mill/) version 0.3.6 and requires Java 8 or above to be installed.
+This project is built with [mill](https://www.lihaoyi.com/mill/) version 0.5.2 and requires Java 8 or above to be installed.
 
 To build the project:
 
@@ -100,12 +100,12 @@ module Test/Func {
 
 ```scala
 module Test/Id {
-  import Test.Func
+  import Test/Func
   let app = id(1)
 }
 
 module Test/Compose {
-  import Test.Func.{ compose, id }
+  import Test/Func.{ compose, id }
   let pointless = compose(id)(id)(1)
 }
 ```
