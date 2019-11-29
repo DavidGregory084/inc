@@ -68,8 +68,10 @@ trait Generators { self: Matchers =>
           Param(nm, NamePosType(LocalName(nm), Pos.Empty, tp))
       }
       body <- exprGen(
-        // Unpleasant trick to allow later generators to refer to v
-        decls ++ ps.map { p =>
+        // Trick to allow later generators to refer to params;
+        // we need to filter out any existing declarations that
+        // clash with our params, since params can shadow top level declarations
+        decls.filterNot(d => !ps.exists(_.name == d.name)) ++ ps.map { p =>
           Let(p.name, Reference(p.name, p.meta), p.meta)
         }
       )
