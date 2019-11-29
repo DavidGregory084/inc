@@ -67,7 +67,7 @@ module Test {}
 ### Let bindings and literals
 
 ```scala
-module Test.Let {
+module Test/Let {
   let litInt = 42
   let litLong = 42L
   let litFloat = 42.0F
@@ -82,7 +82,7 @@ module Test.Let {
 ### If expressions
 
 ```scala
-module Test.If {
+module Test/If {
   let choose = if true then 1 else 0
 }
 ```
@@ -90,7 +90,7 @@ module Test.If {
 ### Functions
 
 ```scala
-module Test.Func {
+module Test/Func {
   let id = a -> a
   let compose = f -> g -> a -> f(g(a))
 }
@@ -99,12 +99,12 @@ module Test.Func {
 ### Imports
 
 ```scala
-module Test.Id {
+module Test/Id {
   import Test.Func
   let app = id(1)
 }
 
-module Test.Compose {
+module Test/Compose {
   import Test.Func.{ compose, id }
   let pointless = compose(id)(id)(1)
 }

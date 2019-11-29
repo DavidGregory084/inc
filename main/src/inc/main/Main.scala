@@ -178,7 +178,7 @@ object Main {
 
       val afterAll = System.nanoTime
 
-      val name = if (mod.pkg.isEmpty) mod.name else mod.pkg.mkString(".") + "." + mod.name
+      val name = if (mod.pkg.isEmpty) mod.name else mod.pkg.mkString("/") + "/" + mod.name
 
       scribe.info(NL + Blue(s"""Compiled ${name} in """) + White(s"""${(afterAll - beforeAll) / 1000000}ms"""))
 
