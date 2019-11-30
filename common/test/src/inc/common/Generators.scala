@@ -70,7 +70,7 @@ trait Generators { self: Matchers =>
 
   def referenceGen(decls: Decls): Gen[Expr[NamePosType]] =
     Gen.oneOf(decls).map { existing =>
-      Reference(existing.name, NamePosType(existing.meta.name, Pos.Empty, existing.meta.typ))
+      Reference(List.empty, existing.name, NamePosType(existing.meta.name, Pos.Empty, existing.meta.typ))
     }
 
   def lambdaGen(decls: Decls): Gen[Expr[NamePosType]] =
@@ -100,7 +100,7 @@ trait Generators { self: Matchers =>
         // we need to filter out any existing declarations that
         // clash with our params, since params can shadow top level declarations
         decls.filterNot(d => ps.exists(_.name == d.name)) ++ ps.map { p =>
-          Let(p.name, Reference(p.name, p.meta), p.meta)
+          Let(p.name, Reference(List.empty, p.name, p.meta), p.meta)
         }
       )
 
@@ -111,7 +111,7 @@ trait Generators { self: Matchers =>
   def genArg(tp: Type)(decls: Decls): Gen[Expr[NamePosType]] = {
     val candidateDecls = decls.collect {
       case Let(nm, _, candidateMeta @ NamePosType(_, _, TypeScheme(_, `tp`))) =>
-        Reference(nm, candidateMeta)
+        Reference(List.empty, nm, candidateMeta)
     }
 
     val litGen = tp match {
@@ -142,12 +142,12 @@ trait Generators { self: Matchers =>
 
       args <- tpArgs.init.traverse(tp => genArg(tp)(decls))
 
-    } yield Apply(Reference(nm, lambdaMeta), args, NamePosType(NoName, Pos.Empty, TypeScheme(tpArgs.last)))
+    } yield Apply(Reference(List.empty, nm, lambdaMeta), args, NamePosType(NoName, Pos.Empty, TypeScheme(tpArgs.last)))
 
   def ifGen(decls: Decls): Gen[Expr[NamePosType]] = {
     val condDecls: List[Gen[Expr[NamePosType]]] = boolGen :: decls.collect {
       case Let(nm, _, condMeta @ NamePosType(_, _, TypeScheme(_, Type.Boolean))) =>
-        Reference(nm, condMeta)
+        Reference(List.empty, nm, condMeta)
     }.map(Gen.const)
 
     val condGen = Gen.oneOf(condDecls).flatMap(identity)

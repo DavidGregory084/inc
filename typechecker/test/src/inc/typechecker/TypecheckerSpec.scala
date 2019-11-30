@@ -18,7 +18,7 @@ class TypecheckerSpec extends FlatSpec with Matchers {
   def mkStr(s: String) = LiteralString(s, NameWithPos(NoName, Pos.Empty))
   def mkDbl(d: Double) = LiteralDouble(d, NameWithPos(NoName, Pos.Empty))
   def mkBool(b: Boolean) = LiteralBoolean(b, NameWithPos(NoName, Pos.Empty))
-  def mkRef(r: String) = Reference(r, NameWithPos(NoName, Pos.Empty))
+  def mkRef(r: String) = Reference(List.empty, r, NameWithPos(NoName, Pos.Empty))
 
   def mkIf(cond: Expr[NameWithPos], thenExpr: Expr[NameWithPos], elseExpr: Expr[NameWithPos]) =
     If(cond, thenExpr, elseExpr, NameWithPos(NoName, Pos.Empty))
@@ -43,7 +43,7 @@ class TypecheckerSpec extends FlatSpec with Matchers {
     Let(name, binding, NamePosType(LocalName(name), Pos.Empty, binding.meta.typ))
 
   def mkCheckedInt(i: Int) = LiteralInt(i, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Int)))
-  def mkCheckedRef(r: String, typ: TypeScheme) = Reference(r, NamePosType(NoName, Pos.Empty, typ))
+  def mkCheckedRef(r: String, typ: TypeScheme) = Reference(List.empty, r, NamePosType(NoName, Pos.Empty, typ))
 
 
   val noImports = Map.empty[String, TopLevelDeclaration[NameWithType]]

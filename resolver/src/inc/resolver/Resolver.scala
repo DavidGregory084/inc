@@ -41,8 +41,14 @@ object Resolver {
     case unit @ LiteralUnit(_) =>
       withName(unit, NoName, tbl)
 
-    case ref @ Reference(name, pos)  =>
-      tbl.get(name)
+    case ref @ Reference(mod, name, pos)  =>
+      val fullName =
+        if (mod.isEmpty)
+          name
+        else
+          mod.mkString("/") + "." + name
+
+      tbl.get(fullName)
         .map(nm => withName(ref, nm, tbl))
         .getOrElse(ResolverError.singleton(pos, s"Reference to undefined symbol: $name"))
 

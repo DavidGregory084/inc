@@ -104,8 +104,12 @@ object Printer {
       Doc.char('"') + Doc.str(s) + Doc.char('"')
     case LiteralUnit(_) =>
       Doc.text("()")
-    case Reference(ref, _) =>
-      Doc.text(ref)
+    case Reference(mod, name, _) =>
+      if (mod.isEmpty)
+        Doc.text(name)
+      else
+        Doc.intercalate(Doc.char('/'), mod.map(Doc.text)) +
+          Doc.char('.') + Doc.text(name)
     case If(c, t, e, _) =>
       Doc.text("if") & print(c) /
         (Doc.text("then") & print(t)).nested(2) /
