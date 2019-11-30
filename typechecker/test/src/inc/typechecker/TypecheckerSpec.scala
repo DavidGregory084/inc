@@ -51,7 +51,8 @@ class TypecheckerSpec extends FlatSpec with Matchers {
   "Typechecker" should "typecheck let bound literals successfully" in {
     val mod = mkModule("Int", List(mkLet("int", mkInt(42))))
     val expected = mkCheckedModule("Int", List(mkCheckedLet("int", mkCheckedInt(42))))
-    Typechecker.typecheck(mod, noImports, "").fold(
+    val ctx = Printer.SourceContext(80, "Int.inc", Printer.print(expected).render(80))
+    Typechecker.typecheck(mod, noImports, ctx).fold(
       errs => fail(s"""Typechecking failed with errors ${errs.mkString(", ")}"""),
       mod  => mod shouldBe expected
     )
@@ -66,7 +67,8 @@ class TypecheckerSpec extends FlatSpec with Matchers {
       mkCheckedLet("int", mkCheckedInt(42)),
       mkCheckedLet("int2", mkCheckedRef("int", TypeScheme(Type.Int)))
     ))
-    Typechecker.typecheck(mod, noImports, "").fold(
+    val ctx = Printer.SourceContext(80, "Ref.inc", Printer.print(expected).render(80))
+    Typechecker.typecheck(mod, noImports, ctx).fold(
       errs => fail(s"""Typechecking failed with errors ${errs.mkString(", ")}"""),
       mod  => mod shouldBe expected
     )
@@ -77,7 +79,8 @@ class TypecheckerSpec extends FlatSpec with Matchers {
       mkLet("int", mkInt(42)),
       mkLet("int2", mkRef("int3"))
     ))
-    Typechecker.typecheck(mod, noImports, "").fold(
+    val ctx = Printer.SourceContext(80, "Ref.inc", "")
+    Typechecker.typecheck(mod, noImports, ctx).fold(
       _ => succeed,
       _ => fail("Typechecking should fail as 'int3' is not defined")
     )
@@ -88,7 +91,9 @@ class TypecheckerSpec extends FlatSpec with Matchers {
       mkLet("integer", mkIf(mkBool(true), mkInt(42), mkInt(41)))
     ))
 
-    Typechecker.typecheck(mod1, noImports, "").fold(
+    val ctx1 = Printer.SourceContext(80, "Ref.inc", "")
+
+    Typechecker.typecheck(mod1, noImports, ctx1).fold(
       errs => fail(s"""Typechecking failed with errors ${errs.mkString(", ")}"""),
       _    => succeed
     )
@@ -97,7 +102,9 @@ class TypecheckerSpec extends FlatSpec with Matchers {
       mkLet("integer", mkIf(mkInt(1), mkInt(42), mkInt(41)))
     ))
 
-    Typechecker.typecheck(mod2, noImports, "") shouldBe TypeError.singleton(Pos.Empty, Red("Int") + " does not unify with " + Red("Boolean"))
+    val ctx2 = Printer.SourceContext(80, "If.inc", "")
+
+    Typechecker.typecheck(mod2, noImports, ctx2) shouldBe TypeError.singleton(Pos.Empty, Red("Int") + " does not unify with " + Red("Boolean"))
   }
 
   it should "ensure the expressions provided to both branches of an if are compatible" in {
@@ -105,7 +112,9 @@ class TypecheckerSpec extends FlatSpec with Matchers {
       mkLet("integer", mkIf(mkBool(true), mkInt(42), mkInt(41)))
     ))
 
-    Typechecker.typecheck(mod1, noImports, "").fold(
+    val ctx = Printer.SourceContext(80, "If.inc", "")
+
+    Typechecker.typecheck(mod1, noImports, ctx).fold(
       errs => fail(s"""Typechecking failed with errors ${errs.mkString(", ")}"""),
       _    => succeed
     )
@@ -114,7 +123,7 @@ class TypecheckerSpec extends FlatSpec with Matchers {
       mkLet("integer", mkIf(mkBool(true), mkInt(42), mkDbl(41.0)))
     ))
 
-    Typechecker.typecheck(mod2, noImports, "") shouldBe TypeError.singleton(Pos.Empty, Red("Int") + " does not unify with " + Red("Double")),
+    Typechecker.typecheck(mod2, noImports, ctx) shouldBe TypeError.singleton(Pos.Empty, Red("Int") + " does not unify with " + Red("Double")),
   }
 
   it should "infer the parameter and return type of lambda expressions" in {
@@ -122,7 +131,9 @@ class TypecheckerSpec extends FlatSpec with Matchers {
       mkLet("lam", mkLam(List("bool"), mkIf(mkRef("bool"), mkInt(42), mkInt(41))))
     ))
 
-    Typechecker.typecheck(mod1, noImports, "").fold(
+    val ctx1 = Printer.SourceContext(80, "If.inc", "")
+
+    Typechecker.typecheck(mod1, noImports, ctx1).fold(
       errs => fail(s"""Typechecking failed with errors ${errs.mkString(", ")}"""),
       _    => succeed
     )
@@ -131,7 +142,9 @@ class TypecheckerSpec extends FlatSpec with Matchers {
       mkLet("lam", mkLam(List("a"), mkRef("a")))
     ))
 
-    Typechecker.typecheck(mod2, noImports, "").fold(
+    val ctx2 = Printer.SourceContext(80, "Lambda.inc", "")
+
+    Typechecker.typecheck(mod2, noImports, ctx2).fold(
       errs => fail(s"""Typechecking failed with errors ${errs.mkString(", ")}"""),
       _    => succeed
     )
@@ -143,7 +156,9 @@ class TypecheckerSpec extends FlatSpec with Matchers {
       mkLet("app", mkApp(mkRef("lam"), List(mkBool(true))))
     ))
 
-    Typechecker.typecheck(mod1, noImports, "").fold(
+    val ctx = Printer.SourceContext(80, "Apply.inc", "")
+
+    Typechecker.typecheck(mod1, noImports, ctx).fold(
       errs => fail(s"""Typechecking failed with errors ${errs.mkString(", ")}"""),
       _    => succeed
     )
@@ -153,7 +168,7 @@ class TypecheckerSpec extends FlatSpec with Matchers {
       mkLet("app", mkApp(mkRef("lam"), List(mkBool(true))))
     ))
 
-    Typechecker.typecheck(mod2, noImports, "").fold(
+    Typechecker.typecheck(mod2, noImports, ctx).fold(
       errs => fail(s"""Typechecking failed with errors ${errs.mkString(", ")}"""),
       _    => succeed
     )
@@ -170,7 +185,9 @@ class TypecheckerSpec extends FlatSpec with Matchers {
       mkLet("app", constAppliedToStr)
     ))
 
-    Typechecker.typecheck(mod, noImports, "").fold(
+    val ctx = Printer.SourceContext(80, "Const.inc", "")
+
+    Typechecker.typecheck(mod, noImports, ctx).fold(
       errs => fail(s"""Typechecking failed with errors ${errs.mkString(", ")}"""),
       _    => succeed
     )
@@ -181,6 +198,8 @@ class TypecheckerSpec extends FlatSpec with Matchers {
       mkLet("occ", mkLam(List("f"), mkApp(mkRef("f"), List(mkRef("f")))))
     ))
 
-    Typechecker.typecheck(mod, noImports, "") shouldBe TypeError.singleton(Pos.Empty, "Attempt to construct infinite type"),
+    val ctx = Printer.SourceContext(80, "Occurs.inc", "")
+
+    Typechecker.typecheck(mod, noImports, ctx) shouldBe TypeError.singleton(Pos.Empty, "Attempt to construct infinite type"),
   }
 }

@@ -85,8 +85,7 @@ object common extends ScalaSettingsModule {
     super.ivyDeps() ++ Agg(
       ivy"org.typelevel::cats-core:2.0.0",
       ivy"org.typelevel::paiges-core:0.3.0",
-      ivy"com.lihaoyi::fansi:0.2.7",
-      ivy"com.outr::scribe:2.7.9"
+      ivy"com.typesafe.scala-logging::scala-logging:3.9.2"
     )
   }
   object test extends super.Test
@@ -129,7 +128,12 @@ object main extends ScalaSettingsModule with BuildInfo {
 
   def moduleDeps = Seq(common, rts, parser, resolver, typechecker, codegen)
 
+  def jlineVersion = T { "3.13.2" }
+
   def ivyDeps = Agg(
+    ivy"org.jline:jline-terminal:${jlineVersion()}",
+    ivy"org.jline:jline-terminal-jansi:${jlineVersion()}",
+    ivy"org.apache.logging.log4j:log4j-slf4j-impl:2.12.1",
     ivy"com.github.scopt::scopt:3.7.1",
     ivy"com.lihaoyi::pprint:0.5.6",
     // PPrint definitely requires scala-reflect

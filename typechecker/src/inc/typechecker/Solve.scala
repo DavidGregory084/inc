@@ -4,19 +4,13 @@ import inc.common._
 
 import cats.instances.either._
 import cats.syntax.flatMap._
-import scala.{ ::, Boolean, Left, Right, Some, Nil, StringContext }
+import com.typesafe.scalalogging.LazyLogging
+import org.typelevel.paiges.Style
+import scala.{ ::, Boolean, Left, Right, Nil, StringContext }
 import scala.collection.immutable.{ List, Map }
 import scala.Predef.ArrowAssoc
-import scribe._
-import scribe.format._
 
-class Solve(isTraceEnabled: Boolean) {
-  if (isTraceEnabled) {
-    this.logger.clearHandlers().withHandler(
-      formatter = Formatter.simple,
-      minimumLevel = Some(Level.Trace)
-    ).replace()
-  }
+class Solve(context: Printer.SourceContext, isTraceEnabled: Boolean) extends LazyLogging {
 
   type Substitution = Map[TypeVariable, Type]
   val EmptySubst: Substitution = Map.empty
@@ -41,12 +35,15 @@ class Solve(isTraceEnabled: Boolean) {
     }
 
   def unify(pos: Pos, left: Type, right: Type): Infer[Substitution] = {
-    lazy val ll = Printer.print(left).render(80)
-    lazy val rr = Printer.print(right).render(80)
-    lazy val llRed = Red(ll)
-    lazy val rrRed = Red(rr)
+    lazy val ll = Printer.print(left)
+    lazy val rr = Printer.print(right)
+    lazy val llRed = ll.style(Style.Ansi.Fg.Red).render(context.consoleWidth)
+    lazy val rrRed = rr.style(Style.Ansi.Fg.Red).render(context.consoleWidth)
+    lazy val llYellow = ll.style(Style.Ansi.Fg.Yellow).render(context.consoleWidth)
+    lazy val rrYellow = ll.style(Style.Ansi.Fg.Yellow).render(context.consoleWidth)
 
-    scribe.trace(NL + s"Unify ${Yellow(ll)} with ${Yellow(rr)}")
+    if (isTraceEnabled)
+      logger.info(NL + s"Unify ${llYellow} with ${rrYellow}")
 
     def go(left: Type, right: Type): Infer[Substitution] = {
       (left, right) match {

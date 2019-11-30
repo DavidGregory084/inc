@@ -1,51 +1,46 @@
 package inc.common
 
-import cats.data.Chain
-import java.lang.String
+import java.lang.{ String, System }
 import org.typelevel.paiges._
-import scala.{ Array, Int, Option, StringContext }
-import scala.collection.immutable.{ Map, Seq }
-import scala.Predef.{ augmentString, genericArrayOps }
+import scala.{ Int, StringContext }
+import scala.collection.immutable.Map
+import scala.Predef.{ augmentString, wrapRefArray }
 
 object Printer {
-  def regionWithMargin(plainInputLines: Array[String], highlightedSource: fansi.Str, pos: Pos) = {
-    val numberOfLines = plainInputLines.length
+  case class SourceContext(consoleWidth: Int, fileName: String, source: String)
 
-    def go(plainInputLines: Seq[(String, Int)], highlightedSource: fansi.Str, charIdx: Int, output: Chain[fansi.Str]): fansi.Str =
-      plainInputLines match {
-        case Seq() =>
-          fansi.Str.join(output.toList: _*)
-        case Seq((plainLine, lineIdx), plainLines @ _*) =>
-          val nextCharIdx = charIdx + 1 + plainLine.length
-
-          val (highlightedLine, highLightedLines) =
-            if (plainLine.length >= highlightedSource.length)
-              (highlightedSource, fansi.Str(""))
-            else
-              highlightedSource.splitAt(plainLine.length + 1)
-
-          if (pos.from > nextCharIdx || pos.to < charIdx)
-            go(plainLines, highLightedLines, nextCharIdx, output)
-          else {
-            val lineNumber = lineIdx + 1
-            val marginWidth = String.valueOf(numberOfLines).length + 1
-            val margin = fansi.Color.White(fansi.Str(s"%${marginWidth}d".format(lineNumber) + '|'))
-            go(plainLines, highLightedLines, nextCharIdx, output :+ margin :+ highlightedLine)
-          }
-      }
-
-    go(plainInputLines.toIndexedSeq.zipWithIndex, highlightedSource, 0, Chain.empty[fansi.Str])
+  def withMargin(marginWidth: Int, lineNumber: Int, line: String) = {
+    val margin = White(s"%${marginWidth}d".format(lineNumber) + '|')
+    margin + line
   }
 
-  def withSourceContext(header: Option[String], msg: String, pos: Pos, colour: fansi.Attrs, source: String) = {
-    if (pos.isEmpty)
+  def withSourceContext(context: SourceContext)(msg: String, pos: Pos, highlight: Style): String = {
+    if (pos.isEmpty || context.source.isEmpty)
       NL + msg
     else {
-      val highlightedSource = fansi.Str(source, errorMode = fansi.ErrorMode.Sanitize).overlay(colour, pos.from, pos.to)
-      val plainSourceLines = source.split('\n')
-      val formattedLines = regionWithMargin(plainSourceLines, highlightedSource, pos)
-      val formattedHeader = header.map(h => Blue(h + ":") + NL).getOrElse("")
-      NL + formattedHeader + formattedLines + NL + msg
+      val blue = Style.Ansi.Fg.Blue
+      val header = blue.start + context.fileName + blue.end
+
+      val before = context.source.substring(0, pos.from)
+      val highlighted = context.source.substring(pos.from, pos.to)
+      val after = context.source.substring(pos.to, context.source.length)
+
+      val dropBefore = before.count(c => c == '\r' || c == '\n')
+      val dropAfter = after.count(c => c == '\r' || c == '\n')
+
+      val highlightedString = before + highlight.start + highlighted + highlight.end + after
+
+      val allLines = highlightedString.split("[\\r\\n]")
+
+      val marginWidth = String.valueOf(allLines.length).length + 1
+
+      val highlightedLines = allLines
+        .zipWithIndex
+        .map { case (line, idx) => withMargin(marginWidth, idx + 1, line) }
+        .drop(dropBefore)
+        .dropRight(dropAfter)
+
+      NL + header + NL + highlightedLines.mkString(System.lineSeparator) + NL + msg
     }
   }
 

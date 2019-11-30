@@ -1,11 +1,14 @@
 * Major
 ** code generation for first class functions
+   This is done but it's a bit rubbish because it just uses function objects in fields - this means that all of the generic signatures get erased
 ** foreign function interface
 *** add `java` primitive?
 *** java code splices with parameter interpolation?
+    Not clear how return types will be inferred for splices (Java requires these to be explicit)
 ** datatype declarations
 ** pattern matching
 ** type system choice
+   Right now, very simple HM type inference extended with parametric polymorphism
 *** Essence of ML Type Inference
 *** Raising ML to the Power of System F
 *** HMF: Simple type inference for first-class polymorphism
@@ -31,10 +34,16 @@
 ** REPL / interpreter
 ** traits / extension methods
 *** link with invokedynamic?
-* Minor
 ** explicit type annotations
+   Complete except for lambda params (which aren't Exprs so a bit of plumbing is needed)
+* Minor
 ** alternative backend
 *** LLVM - [[https://github.com/bytedeco/javacpp-presets]]
 *** GRIN - missing JVM bindings?
 * Snagging
-** fix name shadowing and duplication in lambda parameters
+** DONE fix name shadowing and duplication in lambda parameters
+   CLOSED: [2019-11-30 Sat 01:46]
+** Rendering of types in trace messages
+    When type ascriptions were added, Printer functions for types began to return paiges.Doc for use in AST printing, which is annoying as you have to .render to use in logging
+** Parser errors are bad
+   Consider writing recursive descent parser instead of using parser combinators?

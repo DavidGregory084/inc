@@ -43,7 +43,8 @@ class MainSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCheck
     val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
     val pkg = "Test/Main/"
     val mod = s"module ${pkg}${fieldName.capitalize} { let ${fieldName} = ${stringValue} }"
-    val classFile = Main.compileModule(dir, mod, config).fold(err => fail(err.head), identity)
+    val ctx = Printer.SourceContext(80, s"${fieldName.capitalize}.inc", mod)
+    val classFile = Main.compileModule(dir, ctx, config).fold(err => fail(err.head), identity)
     val clazz = loadClassFrom(dir, pkg + classFile.toFile.toScala.nameWithoutExtension)
     getStatic(clazz, fieldName) shouldBe expectedValue
   }
@@ -87,7 +88,8 @@ class MainSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCheck
     val pkg = "Test/Main/"
     val fieldName = "reference"
     val mod = s"module ${pkg}Reference { let integer = 42; let ${fieldName} = integer }"
-    val result = Main.compileModule(dir, mod, config).fold(
+    val ctx = Printer.SourceContext(80, s"${fieldName.capitalize}.inc", mod)
+    val result = Main.compileModule(dir, ctx, config).fold(
       errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
       identity
     )
@@ -100,7 +102,8 @@ class MainSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCheck
     val pkg = "Test/Main/"
     val fieldName = "z"
     val mod = s"module ${pkg}If { let a = true; let x = 42; let y = 41; let ${fieldName} = if a then x else y }"
-    val result = Main.compileModule(dir, mod, config).fold(
+    val ctx = Printer.SourceContext(80, "If.inc", mod)
+    val result = Main.compileModule(dir, ctx, config).fold(
       errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
       identity
     )
@@ -113,7 +116,8 @@ class MainSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCheck
     val pkg = "Test/Main/"
     val fieldName = "z"
     val mod = s"module ${pkg}If { let a = false; let x = 42; let y = 41; let ${fieldName} = if a then x else y }"
-    val result = Main.compileModule(dir, mod, config).fold(
+    val ctx = Printer.SourceContext(80, "If.inc", mod)
+    val result = Main.compileModule(dir, ctx, config).fold(
       errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
       identity
     )
@@ -124,7 +128,8 @@ class MainSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCheck
   it should "compile a lambda expression" in withTmpDir { dir =>
     val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
     val mod = "module Test/Main/Lambda { let x = 42; let y = 41; let lam = bool -> if bool then x else y }"
-    val result = Main.compileModule(dir, mod, config).fold(
+    val ctx = Printer.SourceContext(80, "Lambda.inc", mod)
+    val result = Main.compileModule(dir, ctx, config).fold(
       errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
       identity
     )
@@ -134,7 +139,8 @@ class MainSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCheck
   it should "compile an identity function" in withTmpDir { dir =>
     val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
     val mod = "module Test/Main/Lambda { let id = a -> a }"
-    val result = Main.compileModule(dir, mod, config).fold(
+    val ctx = Printer.SourceContext(80, "Lambda.inc", mod)
+    val result = Main.compileModule(dir, ctx, config).fold(
       errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
       identity
     )
@@ -144,7 +150,8 @@ class MainSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCheck
   it should "compile an application of an identity function with a reference type" in withTmpDir { dir =>
     val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
     val mod = """module Test/Main/Lambda { let id = a -> a; let str = id("string") }"""
-    val result = Main.compileModule(dir, mod, config).fold(
+    val ctx = Printer.SourceContext(80, "Lambda.inc", mod)
+    val result = Main.compileModule(dir, ctx, config).fold(
       errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
       identity
     )
@@ -154,7 +161,8 @@ class MainSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCheck
   it should "compile an application of an identity function with a primitive type" in withTmpDir { dir =>
     val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
     val mod = """module Test/Main/Lambda { let id = a -> a; let int = id(1) }"""
-    val result = Main.compileModule(dir, mod, config).fold(
+    val ctx = Printer.SourceContext(80, "Lambda.inc", mod)
+    val result = Main.compileModule(dir, ctx, config).fold(
       errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
       identity
     )
@@ -164,7 +172,8 @@ class MainSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCheck
   it should "compile a function that accepts a function as argument" in withTmpDir { dir =>
     val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
     val mod = """module Test/Main/Const { let const = (a, b) -> a; let foo = a -> "a"; let bar = f -> foo(f(42, 36)); let baz = foo(const) }"""
-    val result = Main.compileModule(dir, mod, config).fold(
+    val ctx = Printer.SourceContext(80, "Const.inc", mod)
+    val result = Main.compileModule(dir, ctx, config).fold(
       errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
       identity
     )
@@ -180,7 +189,9 @@ class MainSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCheck
       |  let id = a -> a
       |}""".trim.stripMargin
 
-    Main.compileModule(dir, mod1, config).fold(
+    val ctx1 = Printer.SourceContext(80, "Id.inc", mod1)
+
+    Main.compileModule(dir, ctx1, config).fold(
       errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
       _    => succeed
     )
@@ -193,7 +204,9 @@ class MainSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCheck
       |}
       """.trim.stripMargin
 
-    val result2 = Main.compileModule(dir, mod2, config).fold(
+    val ctx2 = Printer.SourceContext(80, "Apply.inc", mod2)
+
+    val result2 = Main.compileModule(dir, ctx2, config).fold(
       errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
       identity
     )
@@ -208,8 +221,9 @@ class MainSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCheck
     forAll(modGen, minSuccessful(1000)) { generatedMod =>
       val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
       val mod = Printer.print(generatedMod).render(80)
+      val ctx = Printer.SourceContext(80, s"${generatedMod.name}.inc", mod)
       try {
-        val result = Main.compileModule(dir, mod, config).fold(
+        val result = Main.compileModule(dir, ctx, config).fold(
           errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
           identity
         )

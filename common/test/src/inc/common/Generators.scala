@@ -21,15 +21,29 @@ trait Generators { self: Matchers =>
 
   // Don't generate negative numbers: the language doesn't have operators yet so no parsing of prefix negation
   val intGen: Gen[Expr[NamePosType]] =
-    Arbitrary.arbitrary[Int].filter(_ >= 0).map(LiteralInt(_, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Int))))
+    Arbitrary.arbitrary[Int]
+      .filter(_ >= 0)
+      .map(LiteralInt(_, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Int))))
+
   val longGen: Gen[Expr[NamePosType]] =
-    Arbitrary.arbitrary[Long].filter(_ >= 0L).map(LiteralLong(_, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Long))))
+    Arbitrary.arbitrary[Long]
+      .filter(_ >= 0L)
+      .map(LiteralLong(_, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Long))))
+
   val fltGen: Gen[Expr[NamePosType]] =
-    Arbitrary.arbitrary[Float].filter(_ >= 0F).map(LiteralFloat(_, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Float))))
+    Arbitrary.arbitrary[Float]
+      .filter(_ >= 0F)
+      .map(LiteralFloat(_, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Float))))
+
   val dblGen: Gen[Expr[NamePosType]] =
-    Arbitrary.arbitrary[Double].filter(_ >= 0D).map(LiteralDouble(_, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Double))))
+    Arbitrary.arbitrary[Double]
+      .filter(_ >= 0D)
+      .map(LiteralDouble(_, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Double))))
+
   val boolGen: Gen[Expr[NamePosType]] =
-    Arbitrary.arbitrary[Boolean].map(LiteralBoolean(_, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Boolean))))
+    Arbitrary.arbitrary[Boolean]
+      .map(LiteralBoolean(_, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Boolean))))
+
   val charGen: Gen[Expr[NamePosType]] =
     Gen.asciiPrintableChar.filterNot { chr =>
       // Parsing char and string escapes is not implemented yet
@@ -38,6 +52,7 @@ trait Generators { self: Matchers =>
         chr == '\\' ||
         chr == '\''
     }.map(LiteralChar(_, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Char))))
+
   val strGen: Gen[Expr[NamePosType]] =
     Gen.asciiPrintableStr.filterNot { str =>
       // Parsing char and string escapes is not implemented yet
@@ -46,10 +61,12 @@ trait Generators { self: Matchers =>
       str.contains('\\') ||
       str.contains('"')
     }.map(LiteralString(_, NamePosType(NoName, Pos.Empty, TypeScheme(Type.String))))
+
   val unitGen: Gen[Expr[NamePosType]] =
     Gen.const(LiteralUnit(NamePosType(NoName, Pos.Empty, TypeScheme(Type.Unit))))
 
-  val literalGens: List[Gen[Expr[NamePosType]]] = List(intGen, longGen, fltGen, dblGen, boolGen, charGen, strGen, unitGen)
+  val literalGens: List[Gen[Expr[NamePosType]]] =
+    List(intGen, longGen, fltGen, dblGen, boolGen, charGen, strGen, unitGen)
 
   def referenceGen(decls: Decls): Gen[Expr[NamePosType]] =
     Gen.oneOf(decls).map { existing =>
@@ -59,8 +76,10 @@ trait Generators { self: Matchers =>
   def lambdaGen(decls: Decls): Gen[Expr[NamePosType]] =
     for {
       numArgs <- Gen.choose(1, 4)
+
       // Don't generate duplicate variable names
       pNms <- Gen.listOfN(numArgs, nameGen).suchThat(vs => vs.distinct.length == vs.length)
+
       pTps <- Gen.listOfN(numArgs, Gen.oneOf(
         TypeScheme(Type.Int),
         TypeScheme(Type.Long),
@@ -70,10 +89,12 @@ trait Generators { self: Matchers =>
         TypeScheme(Type.Char),
         TypeScheme(Type.String),
         TypeScheme(Type.Unit)))
+
       ps = pNms.zip(pTps).map {
         case (nm, tp) =>
           Param(nm, NamePosType(LocalName(nm), Pos.Empty, tp))
       }
+
       body <- exprGen(
         // Trick to allow later generators to refer to params;
         // we need to filter out any existing declarations that
@@ -82,7 +103,9 @@ trait Generators { self: Matchers =>
           Let(p.name, Reference(p.name, p.meta), p.meta)
         }
       )
+
       lam <- Gen.const(Lambda(ps, body, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Function(pTps.map(_.typ), body.meta.typ.typ)))))
+
     } yield lam
 
   def genArg(tp: Type)(decls: Decls): Gen[Expr[NamePosType]] = {
@@ -190,23 +213,6 @@ trait Generators { self: Matchers =>
       }.runA((List.empty, size))
     } yield decls
 
-  // val importGen =
-  //   for {
-  //     pkgLen <- Gen.choose(0, 5)
-  //     pkg <- Gen.resize(pkgLen, Gen.listOfN(pkgLen, nameGen))
-  //     symbols <- Arbitrary.arbitrary[Boolean]
-  //     name <- nameGen
-  //     imp <- {
-  //       if (!symbols)
-  //         Gen.const(ImportModule(pkg, name))
-  //       else
-  //         for {
-  //           symLen <- Gen.choose(2, 5)
-  //           syms <- Gen.resize(symLen, Gen.listOfN(symLen, nameGen))
-  //         } yield ImportSymbols(pkg, name, syms)
-  //     }
-  //   } yield imp
-
   implicit val arbitraryModule: Arbitrary[Module[NamePosType]] = Arbitrary {
     for {
       pkgLen <- Gen.choose(0, 5)
@@ -214,8 +220,6 @@ trait Generators { self: Matchers =>
       name <- nameGen
       modName = ModuleName(pkg, name)
       decls <- declsGen(modName)
-      // impLen <- Gen.choose(0, 5)
-      // imports <- Gen.resize(impLen, Gen.listOfN(impLen, importGen))
     } yield Module(pkg, name, List.empty, decls, NamePosType(modName, Pos.Empty, TypeScheme(Type.Module)))
   }
 }
