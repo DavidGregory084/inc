@@ -57,27 +57,35 @@ object Classpath {
   def readEnvironment(imports: List[Import], classloader: ClassLoader): Either[List[Error], Map[String, TopLevelDeclaration[NameWithType]]] = {
     val distinctPrefixes = imports.map {
       case ImportModule(pkg, nm, pos) =>
-        (pkg, nm, List.empty[String], pos)
-      case ImportSymbols(pkg, nm, syms, pos) =>
-        (pkg, nm, syms, pos)
+        (pkg, nm, pos)
+      case ImportSymbols(pkg, nm, _, pos) =>
+        (pkg, nm, pos)
     }.distinct
 
-    val declarations = distinctPrefixes.flatTraverse {
-      case (pkg, nm, syms, pos) =>
-        val className = pkg.mkString("/") + "/" + nm + ".class"
+    val classpathModules = distinctPrefixes.traverse {
+      case (pkg, nm, pos) =>
+        val className =
+          pkg.mkString("/") + "/" + nm + ".class"
 
         for {
           classBytes <- readClassBytes(classloader, className, pos)
           mod <- Codegen.readInterface(classBytes)
-        } yield {
-          val decls =
-            if (syms.isEmpty)
-              mod.declarations
-            else
-              mod.declarations.filter(d => syms.contains(d.name))
+        } yield (mod.fullName -> mod)
+    }
 
-          decls.map(d => d.name -> d)
-        }
+    val declarations = classpathModules.map(_.toMap).map { modules =>
+      imports.flatMap {
+        case i @ ImportModule(_, _, _) =>
+          val mod = modules(i.moduleName)
+          mod.declarations.map { d =>
+            (mod.name + "." + d.name) -> d
+          }
+        case i @ ImportSymbols(_, _, syms, _) =>
+          val mod = modules(i.moduleName)
+          mod.declarations
+            .filter(d => syms.contains(d.name))
+            .map(d => d.name -> d)
+      }
     }
 
     declarations.map(_.toMap)

@@ -41,8 +41,8 @@ object Resolver {
     case unit @ LiteralUnit(_) =>
       withName(unit, NoName, tbl)
 
-    case ref @ Reference(name, pos)  =>
-      tbl.get(name)
+    case ref @ Reference(_, name, pos)  =>
+      tbl.get(ref.fullName)
         .map(nm => withName(ref, nm, tbl))
         .getOrElse(ResolverError.singleton(pos, s"Reference to undefined symbol: $name"))
 

@@ -3,9 +3,9 @@ package inc.common
 import cats.Functor
 import cats.syntax.functor._
 import java.lang.{ Exception, String }
-import scala.{ Boolean, Char, Double, Float, Int, Long, Product, Serializable, Some }
-import scala.=:=
+import scala.{ =:=, Boolean, Char, Double, Float, Int, Long, Product, Serializable, Some, StringContext }
 import scala.collection.immutable.{ List, Map, Set }
+import scala.Predef.wrapRefArray
 
 sealed trait Expr[A] extends Product with Serializable {
   def meta: A
@@ -19,12 +19,12 @@ sealed trait Expr[A] extends Product with Serializable {
     case LiteralString(_, _) => Set.empty
     case LiteralChar(_, _) => Set.empty
     case LiteralUnit(_) => Set.empty
-    case Reference(nm, meta) =>
-      Set(Reference(nm, eqv(meta)))
+    case Reference(mod, nm, meta) =>
+      Set(Reference(mod, nm, eqv(meta)))
     case If(cond, thenExpr, elseExpr, _) =>
       cond.capturedVariables ++ thenExpr.capturedVariables ++ elseExpr.capturedVariables
     case Lambda(params, body, _) =>
-      val lambdaParams = params.map(p => Reference(p.name, eqv(p.meta).withEmptyPos))
+      val lambdaParams = params.map(p => Reference(List.empty, p.name, eqv(p.meta).withEmptyPos))
       val capturedInBody = body.capturedVariables.map(v => v.copy(meta = v.meta.withEmptyPos))
       capturedInBody -- lambdaParams
     case Apply(fn, args, _) =>
@@ -42,7 +42,7 @@ sealed trait Expr[A] extends Product with Serializable {
     case str @ LiteralString(_, _) => str
     case chr @ LiteralChar(_, _) => chr
     case unit @ LiteralUnit(_) => unit
-    case ref @ Reference(_, _) =>
+    case ref @ Reference(_, _, _) =>
       mapping.getOrElse(
         ref.copy(meta = eqv(meta).withEmptyPos.asInstanceOf[A]),
         ref
@@ -87,9 +87,11 @@ sealed trait Expr[A] extends Product with Serializable {
     case LiteralUnit(meta) =>
       val nameWithType = Some(eqv(meta).toProto)
       proto.LiteralUnit(nameWithType)
-    case Reference(name, meta) =>
+    case Reference(mod, name, meta) =>
       val nameWithType = Some(eqv(meta).toProto)
-      proto.Reference(name, nameWithType)
+      val modString = mod.mkString("/")
+      val fullName = if (mod.isEmpty) name else s"${modString}.${name}"
+      proto.Reference(fullName, nameWithType)
     case If(cond, thenExpr, elseExpr, meta) =>
       val nameWithType = Some(eqv(meta).toProto)
       proto.If(cond.toProto, thenExpr.toProto, elseExpr.toProto, nameWithType)
@@ -125,8 +127,10 @@ object Expr {
       LiteralChar(c.charAt(0), NameWithType.fromProto(char.getNameWithType))
     case unit @ proto.LiteralUnit(_) =>
       LiteralUnit(NameWithType.fromProto(unit.getNameWithType))
-    case ref @ proto.Reference(name, _) =>
-      Reference(name, NameWithType.fromProto(ref.getNameWithType))
+    case ref @ proto.Reference(nm, _) =>
+      val mod = nm.split("/").toList
+      val name = mod.last.split("\\.").last
+      Reference(mod.dropRight(1), name, NameWithType.fromProto(ref.getNameWithType))
     case ifExpr @ proto.If(cond, thenExpr, elseExpr, _) =>
       If(
         Expr.fromProto(cond),
@@ -170,7 +174,7 @@ object Expr {
         char.copy(meta = f(char.meta))
       case unit @ LiteralUnit(_) =>
         unit.copy(meta = f(unit.meta))
-      case ref @ Reference(_, _) =>
+      case ref @ Reference(_, _, _) =>
         ref.copy(meta = f(ref.meta))
       case ifExpr @ If(_, _, _, _) =>
         ifExpr.copy(
@@ -230,4 +234,6 @@ final case class LiteralChar[A](c: Char, meta: A) extends Expr[A]
 final case class LiteralString[A](s: String, meta: A) extends Expr[A]
 final case class LiteralUnit[A](meta: A) extends Expr[A]
 
-final case class Reference[A](name: String, meta: A) extends Expr[A]
+final case class Reference[A](mod: List[String], name: String, meta: A) extends Expr[A] {
+  def fullName = if (mod.isEmpty) name else mod.mkString("/") + "." + name
+}

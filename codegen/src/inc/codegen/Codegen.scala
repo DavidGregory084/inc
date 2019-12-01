@@ -305,16 +305,18 @@ class Codegen(verifyCodegen: Boolean) {
         _ <- newExpr(classWriter, className, generator, outerName, arguments, locals)(elseExpr)
         _ = generator.visitLabel(trueLabel)
       } yield ()
-    case Reference(ref, nameWithType) =>
+    case Reference(mod, name, nameWithType) =>
       for {
         descriptor <- descriptorFor(nameWithType.typ)
         internalName = getInternalName(nameWithType.name, className)
         _ <- nameWithType.name match {
           case MemberName(_, _, _) =>
-            Right(generator.visitFieldInsn(GETSTATIC, internalName, ref, descriptor))
+            Right(generator.visitFieldInsn(GETSTATIC, internalName, name, descriptor))
           case LocalName(nm) =>
             Right(generator.loadArg(arguments(nm)))
           case NoName | ModuleName(_, _) =>
+            val modString = mod.mkString("/")
+            val ref = modString + "." + name
             CodegenError.singleton(s"Unable to resolve reference to variable $ref")
         }
       } yield ()
@@ -378,7 +380,7 @@ class Codegen(verifyCodegen: Boolean) {
       val replaceCaptured = capturedVarsWithIdx.map {
         case (v, i) =>
           val newName = "captured$" + i
-          (v.copy(meta = v.meta.withEmptyPos), Reference(newName, v.meta.copy(name = LocalName(newName))))
+          (v.copy(meta = v.meta.withEmptyPos), Reference(List.empty, newName, v.meta.copy(name = LocalName(newName))))
       }.toMap
 
       val typeForLambda = asmTypeOf(nameWithType.typ.typ)
@@ -456,10 +458,10 @@ class Codegen(verifyCodegen: Boolean) {
         newStaticFieldFrom(classWriter, className, staticInitializer)(let.name, descriptor, internalName, "instance")
       case Ascription(expr, _, _) =>
         newTopLevelLet(className, classWriter, staticInitializer, let.copy(binding = expr))
-      case Reference(ref, nameWithType) =>
+      case Reference(_, name, nameWithType) =>
         descriptorFor(nameWithType.typ).flatMap { descriptor =>
           val internalName = getInternalName(nameWithType.name, enclosingClass = className)
-          newStaticFieldFrom(classWriter, className, staticInitializer)(let.name, descriptor, internalName, ref)
+          newStaticFieldFrom(classWriter, className, staticInitializer)(let.name, descriptor, internalName, name)
         }
       case ifExpr @ If(_, _, _, nameWithType) =>
         for {

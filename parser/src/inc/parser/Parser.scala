@@ -108,9 +108,11 @@ object Parser {
   def inParens[_: P, A](p: => P[A]) = P("(" ~/ p ~ ")")
   def inSquareBraces[_: P, A](p: => P[A]) = P("[" ~/ p ~ "]")
 
-  def reference[_: P] = P(Index ~ identifier ~ Index).map {
-    case (from, id, to) =>
-      Reference(id, Pos(from, to))
+  def reference[_: P] = P(Index ~ (identifier.rep(sep = "/", min = 0) ~ ".").? ~ identifier ~ Index).map {
+    case (from, Some(mod), id, to) =>
+      Reference(mod.toList, id, Pos(from, to))
+    case (from, None, id, to) =>
+      Reference(List.empty, id, Pos(from, to))
   }
 
   def ifExpr[_: P] = P(

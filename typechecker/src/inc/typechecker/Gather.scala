@@ -86,9 +86,8 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
       case unit @ LiteralUnit(_) =>
         withSimpleType(unit, Type.Unit)
 
-      case Reference(name, meta)  =>
-        env.get(name).map { typ =>
-
+      case ref @ Reference(_, name, meta)  =>
+        env.get(ref.fullName).map { typ =>
           val tp = typ.instantiate
 
           if (typ.bound.nonEmpty && isTraceEnabled) {

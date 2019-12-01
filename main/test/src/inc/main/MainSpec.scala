@@ -200,7 +200,7 @@ class MainSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCheck
       """
       |module Test/Apply {
       |  import Test/Id
-      |  let int = id(1)
+      |  let int = Id.id(1)
       |}
       """.trim.stripMargin
 
