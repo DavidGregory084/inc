@@ -6,6 +6,10 @@ import scala.collection.immutable.List
 
 sealed trait Import {
   val pos: Pos
+  def moduleName: String = this match {
+    case ImportModule(pkg, name, _) => pkg.mkString("/") + "/" + name
+    case ImportSymbols(pkg, name, _, _) => pkg.mkString("/") + "/" + name
+  }
   def toProto: proto.Import = this match {
     case ImportModule(pkg, name, _) => proto.Import(pkg, name)
     case ImportSymbols(pkg, name, symbols, _) => proto.Import(pkg, name, Some(proto.Symbols(symbols)))

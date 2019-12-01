@@ -22,6 +22,8 @@ final case class Module[A](
     nameWithType = Some(eqv(meta).toProto)
   )
 
+  def fullName = (pkg :+ name).mkString("/")
+
   def substitute(subst: Map[TypeVariable, Type])(implicit eqv: A =:= NamePosType): Module[A] =
     this.map(a => eqv(a).substitute(subst).asInstanceOf[A])
 }

@@ -234,4 +234,6 @@ final case class LiteralChar[A](c: Char, meta: A) extends Expr[A]
 final case class LiteralString[A](s: String, meta: A) extends Expr[A]
 final case class LiteralUnit[A](meta: A) extends Expr[A]
 
-final case class Reference[A](mod: List[String], name: String, meta: A) extends Expr[A]
+final case class Reference[A](mod: List[String], name: String, meta: A) extends Expr[A] {
+  def fullName = if (mod.isEmpty) name else mod.mkString("/") + "." + name
+}
