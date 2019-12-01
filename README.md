@@ -101,11 +101,13 @@ module Test/Func {
 ```scala
 module Test/Id {
   import Test/Func
-  let app = id(1)
+  // Imports are qualified by default
+  let app = Func.id(1)
 }
 
 module Test/Compose {
   import Test/Func.{ compose, id }
+  // Individual symbols can be imported unqualified
   let pointless = compose(id)(id)(1)
 }
 ```
