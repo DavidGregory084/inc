@@ -80,6 +80,8 @@ trait Generators { self: Matchers =>
       // Don't generate duplicate variable names
       pNms <- Gen.listOfN(numArgs, nameGen).suchThat(vs => vs.distinct.length == vs.length)
 
+      pAscs <- Gen.listOfN(numArgs, Arbitrary.arbitrary[Boolean])
+
       pTps <- Gen.listOfN(numArgs, Gen.oneOf(
         TypeScheme(Type.Int),
         TypeScheme(Type.Long),
@@ -90,9 +92,9 @@ trait Generators { self: Matchers =>
         TypeScheme(Type.String),
         TypeScheme(Type.Unit)))
 
-      ps = pNms.zip(pTps).map {
-        case (nm, tp) =>
-          Param(nm, NamePosType(LocalName(nm), Pos.Empty, tp))
+      ps = pNms.lazyZip(pAscs).lazyZip(pTps).map {
+        case (nm, ascribed, tp) =>
+          Param(nm, if (ascribed) Some(tp) else None, NamePosType(LocalName(nm), Pos.Empty, tp))
       }
 
       body <- exprGen(

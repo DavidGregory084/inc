@@ -126,10 +126,10 @@ object Parser {
   }
 
   def param[_: P] = P(
-    Index ~ identifier ~ Index
+    Index ~ identifier ~ (":" ~ typeExpr).? ~ Index
   ).map {
-    case (from, name, to) =>
-      Param(name, Pos(from, to))
+    case (from, name, ascribedAs, to) =>
+      Param(name, ascribedAs.map(TypeScheme(List.empty, _)), Pos(from, to))
   }
 
   def lambda[_: P] = P(

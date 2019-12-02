@@ -60,7 +60,7 @@ object Resolver {
       val emptyRes: Either[List[ResolverError], (Chain[Param[NameWithPos]], SymbolTable)] = Right((emptyParams, tblWithoutParams))
 
       val resolvedParams = params.foldLeft(emptyRes) {
-        case (resSoFar, param @ Param(name, pos)) =>
+        case (resSoFar, param @ Param(name, _, pos)) =>
           resSoFar.flatMap {
             case (paramsSoFar, updatedTbl) =>
               if (updatedTbl.contains(name))

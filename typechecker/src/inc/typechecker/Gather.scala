@@ -7,7 +7,7 @@ import cats.syntax.either._
 import cats.syntax.functor._
 import org.typelevel.paiges.Style
 import java.lang.String
-import scala.{ Boolean, Either, Right, StringContext }
+import scala.{ Boolean, Some, None, Either, Right, StringContext }
 import scala.collection.immutable.{ List, Map }
 import scala.Predef.{ ArrowAssoc, augmentString }
 import com.typesafe.scalalogging.LazyLogging
@@ -141,14 +141,16 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
 
       case Lambda(params, body, meta) =>
         val typedParams = params.map {
-          case Param(name, meta) =>
-            Param(name, meta.withSimpleType(TypeVariable()))
+          case Param(name, ascribedAs @ Some(typeScheme), meta) =>
+            Param(name, ascribedAs, meta.withType(typeScheme))
+          case Param(name, None, meta) =>
+            Param(name, None, meta.withSimpleType(TypeVariable()))
         }
 
         val paramMappings = typedParams.map(p => p.name -> p.meta.typ)
 
         typedParams.foreach {
-          case Param(name, meta) =>
+          case Param(name, _, meta) =>
             trace(name, meta.pos, meta.typ)
         }
 

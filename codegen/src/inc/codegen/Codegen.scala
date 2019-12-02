@@ -15,7 +15,7 @@ import org.objectweb.asm.{ Attribute, ByteVector, ClassReader, ClassVisitor, Cla
 import org.objectweb.asm.Opcodes._
 import org.objectweb.asm.util.{ CheckClassAdapter, TraceClassVisitor }
 import org.objectweb.asm.commons.{ GeneratorAdapter, Method }
-import scala.{ Array, Boolean, Byte, Char, Int, Unit, Option, Either, Right, StringContext }
+import scala.{ Array, Boolean, Byte, Char, Int, Unit, Option, None, Either, Right, StringContext }
 import scala.collection.immutable.{ List, Map }
 import scala.Predef.classOf
 
@@ -373,7 +373,7 @@ class Codegen(verifyCodegen: Boolean) {
       val prependedParams = capturedVarsWithIdx.map {
         case (v, i) =>
           val newName = "captured$" + i
-          Param(newName, v.meta.copy(name = LocalName(newName)))
+          Param(newName, None, v.meta.copy(name = LocalName(newName)))
       }
 
       // Replace all references to the captured variables with the adapted args

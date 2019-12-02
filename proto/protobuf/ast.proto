@@ -117,6 +117,7 @@ message If {
 
 message Param {
   string name = 1;
+  TypeScheme ascribedAs = 3;
   NameWithType nameWithType = 2;
 }
 
