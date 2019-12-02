@@ -24,7 +24,7 @@ class TypecheckerSpec extends FlatSpec with Matchers {
     If(cond, thenExpr, elseExpr, NameWithPos(NoName, Pos.Empty))
 
   def mkLam(params: List[String], body: Expr[NameWithPos]) = Lambda(
-    params.map(nm => Param(nm, NameWithPos(LocalName(nm), Pos.Empty))),
+    params.map(nm => Param(nm, None, NameWithPos(LocalName(nm), Pos.Empty))),
     body,
     NameWithPos(NoName, Pos.Empty)
   )
