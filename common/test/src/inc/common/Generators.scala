@@ -69,8 +69,14 @@ trait Generators { self: Matchers =>
     List(intGen, longGen, fltGen, dblGen, boolGen, charGen, strGen, unitGen)
 
   def referenceGen(decls: Decls): Gen[Expr[NamePosType]] =
-    Gen.oneOf(decls).map { existing =>
-      Reference(List.empty, existing.name, NamePosType(existing.meta.name, Pos.Empty, existing.meta.typ))
+    Gen.oneOf(decls).flatMap {
+      case Let(name, _, meta) =>
+        Gen.const(Reference(List.empty, name, NamePosType(meta.name, Pos.Empty, meta.typ)))
+      case Data(_, _, cases, _) =>
+        Gen.oneOf(cases).map {
+          case DataConstructor(caseName, _, _, caseMeta) =>
+            Reference(List.empty, caseName, NamePosType(caseMeta.name, Pos.Empty, caseMeta.typ))
+        }
     }
 
   def lambdaGen(decls: Decls): Gen[Expr[NamePosType]] =
@@ -195,11 +201,52 @@ trait Generators { self: Matchers =>
       expr <- exprGen(decls)
     } yield Let(name, expr, NamePosType(MemberName(modName.pkg, modName.cls, name), Pos.Empty, expr.meta.typ))
 
+  def constructorGen(modName: ModuleName, dataType: TypeScheme) =
+    for {
+      name <- nameGen
+
+      numArgs <- Gen.choose(1, 4)
+
+      pNms <- Gen.listOfN(numArgs, nameGen).suchThat(vs => vs.distinct.length == vs.length)
+
+      pTps <- Gen.listOfN(numArgs, Gen.oneOf(
+                            TypeScheme(Type.Int),
+                            TypeScheme(Type.Long),
+                            TypeScheme(Type.Float),
+                            TypeScheme(Type.Double),
+                            TypeScheme(Type.Boolean),
+                            TypeScheme(Type.Char),
+                            TypeScheme(Type.String),
+                            TypeScheme(Type.Unit),
+                            dataType))
+
+      params = pNms.lazyZip(pTps).map {
+        case (nm, tp) =>
+          Param(nm, Some(tp), NamePosType(LocalName(nm), Pos.Empty, tp))
+      }
+
+      typeScheme = TypeScheme(List.empty, Type.Function(pTps.map(_.typ), dataType.typ))
+
+    } yield DataConstructor(name, params, typeScheme, NamePosType(MemberName(modName.pkg, modName.cls, name), Pos.Empty, typeScheme))
+
+  def dataGen(modName: ModuleName) =
+    for {
+      name <- nameGen
+
+      numConstrs <- Gen.choose(1, 4)
+
+      typeScheme = TypeScheme(List.empty, TypeConstructor(name, List.empty))
+
+      constrs <- Gen.listOfN(numConstrs, constructorGen(modName, typeScheme))
+
+    } yield Data(name, List.empty, constrs, NamePosType(NoName, Pos.Empty, typeScheme))
+
   def declGen(modName: ModuleName) =
     StateT.modifyF[Gen, (Decls, Int)] {
       case (decls, remaining) =>
-        letGen(modName, decls).map { decl =>
-          (decls :+ decl, remaining - 1)
+        val declGens = List(letGen(modName, decls), dataGen(modName))
+        Gen.oneOf(declGens).flatMap { declGen =>
+          declGen.map { decl => (decls :+ decl, remaining - 1) }
         }
     }
 

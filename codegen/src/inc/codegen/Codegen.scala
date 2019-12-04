@@ -500,6 +500,8 @@ class Codegen(verifyCodegen: Boolean) {
     decl match {
       case let @ Let(_, _, _) =>
         newTopLevelLet(internalName, cw, siv, let)
+      case _ =>
+        Right(())
     }
 
   def getInternalName(name: Name, enclosingClass: String) = name match {

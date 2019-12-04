@@ -1,7 +1,11 @@
 package inc.resolver
 
 import cats.data.Chain
+import cats.instances.either._
+import cats.instances.list._
+import cats.syntax.either._
 import cats.syntax.functor._
+import cats.syntax.traverse._
 import inc.common._
 import java.lang.String
 import scala.{ Either, Right, StringContext }
@@ -103,14 +107,32 @@ object Resolver {
   def resolve(mod: Module[Pos], decl: TopLevelDeclaration[Pos], tbl: SymbolTable): Either[List[ResolverError], (TopLevelDeclaration[NameWithPos], SymbolTable)] = decl match {
     case Let(name, expr, pos) =>
       val memberName = MemberName(mod.pkg, mod.name, name)
-
       resolve(expr, tbl).flatMap {
         case (resolvedExpr, updatedTbl) =>
-          if (updatedTbl.contains(name))
-            ResolverError.singleton(resolvedExpr.meta.pos, s"Symbol $name is already defined")
-          else
-            Right((Let(name, resolvedExpr, NameWithPos(memberName, pos)), updatedTbl.updated(name, memberName)))
+          Right((Let(name, resolvedExpr, NameWithPos(memberName, pos)), updatedTbl))
       }
+
+    case data @ Data(name, _, cases, pos) =>
+      val resolvedCases = cases.map {
+        case constr @ DataConstructor(caseName, params, _, casePos) =>
+          val resolvedParams = params.map { param =>
+            param.map(pos => NameWithPos(LocalName(param.name), pos))
+          }
+          val memberName = MemberName(mod.pkg, mod.name, caseName)
+          constr.copy(params = resolvedParams, meta = NameWithPos(memberName, casePos))
+      }
+
+      val updatedData = data.copy(
+        cases = resolvedCases,
+        meta = NameWithPos(NoName, pos)
+      )
+
+      val updatedTbl = resolvedCases.foldLeft(tbl) {
+        case (tbl, nextCase) =>
+          tbl.updated(name, nextCase.meta.name)
+      }
+
+      Right((updatedData, updatedTbl))
   }
 
   def resolve(
@@ -118,12 +140,33 @@ object Resolver {
     importedDecls: Map[String, TopLevelDeclaration[NameWithType]] = Map.empty
   ): Either[List[ResolverError], Module[NameWithPos]] = module match {
     case Module(pkg, name, _, decls, pos) =>
-      val initialTbl = importedDecls.view.map { case (sym, tld) => (sym, tld.meta.name) }.toMap
+      val importedTbl = importedDecls.view.map { case (sym, tld) => (sym, tld.meta.name) }.toMap
 
+      // Do an initial pass over the top level declarations
+      val initialRes = decls.foldLeft(importedTbl.asRight[List[ResolverError]]) {
+        case (resSoFar, Let(name, _, pos)) =>
+          resSoFar.flatMap { tbl =>
+            if (tbl.contains(name))
+              ResolverError.singleton(pos, s"Symbol $name is already defined")
+            else
+              Right(tbl.updated(name, MemberName(module.pkg, module.name, name)))
+          }
+        case (resSoFar, Data(_, _, cases, _)) =>
+          resSoFar.flatMap { tbl =>
+            cases.traverse {
+              case DataConstructor(name, _, _, pos) =>
+                if (tbl.contains(name))
+                  ResolverError.singleton(pos, s"Symbol $name is already defined")
+                else
+                  Right(tbl.updated(name, MemberName(module.pkg, module.name, name)))
+            }.map { tbls => tbls.foldLeft(Map.empty: SymbolTable)(_ ++ _) }
+          }
+      }
+
+      // Resolve names within the bodies of the declarations
       val emptyDecls = Chain.empty[TopLevelDeclaration[NameWithPos]]
-      val emptyRes: Either[List[ResolverError], (Chain[TopLevelDeclaration[NameWithPos]], SymbolTable)] = Right((emptyDecls, initialTbl))
 
-      val resolvedDecls = decls.foldLeft(emptyRes) {
+      val resolvedDecls = decls.foldLeft(initialRes.map(tbl => (emptyDecls, tbl))) {
         case (resSoFar, nextDecl) =>
           for {
             (resolvedSoFar, tblSoFar) <- resSoFar

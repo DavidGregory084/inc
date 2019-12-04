@@ -4,7 +4,7 @@ import fastparse._, ScalaWhitespace._
 import inc.common._
 import java.lang.{ Boolean, Character, Double, Float, Integer, Long, String }
 import scala.{ Either, Right, Int, Some, None, StringContext }
-import scala.collection.immutable.{ List, Seq }
+import scala.collection.immutable.{ List, Map, Seq }
 import scala.Predef.augmentString
 
 object Parser {
@@ -194,7 +194,44 @@ object Parser {
       Let(name, expr, Pos(from, to))
   }
 
-  def decl[_: P] = P(letDeclaration)
+  def dataConstructor[_: P](parentType: TypeScheme, mapping: Map[String, TypeVariable]) = P(
+    Index ~ "case" ~/ identifier ~ inParens(param.rep(sep = comma./)) ~ Index
+  ).map {
+    case (from, name, params, to) =>
+      val ascribedParams = params.map { param =>
+        param.copy(ascribedAs = param.ascribedAs.map(_.replace(mapping)))
+      }
+      DataConstructor(name, ascribedParams.toList, parentType, Pos(from, to))
+  }
+
+  def typeParams[_: P] = P(
+    "[" ~ identifier.rep(min = 1, sep = comma./) ~ "]"
+  ).map { tparams =>
+    tparams.map { nm =>
+      (nm, TypeVariable())
+    }
+  }
+
+  def dataDeclaration[_: P] = P(
+    Index ~ "data" ~/ (identifier ~ typeParams.?).flatMap {
+        case (name, Some(mapping)) =>
+          val tparams = mapping.map { case (_, typ) => typ }
+          val typ = TypeScheme(tparams.toList, TypeConstructor(name, tparams.toList))
+          inBraces(dataConstructor(typ, mapping.toMap).rep(sep = maybeSemi./)).map { cases =>
+            (name, tparams, cases)
+          }
+        case (name, None) =>
+          val typ = TypeScheme(List.empty, TypeConstructor(name, List.empty))
+          inBraces(dataConstructor(typ, Map.empty).rep(sep = maybeSemi./)).map { cases =>
+            (name, List.empty, cases)
+          }
+      } ~ Index
+  ).map {
+    case (from, (name, tparams, cases), to) =>
+      Data(name, tparams.toList, cases.toList, Pos(from, to))
+  }
+
+  def decl[_: P] = P(letDeclaration | dataDeclaration)
 
   def importedSymbols[_: P] = P( inBraces(identifier.rep(min = 1, sep = comma./)) | identifier.map(Seq(_)) )
 

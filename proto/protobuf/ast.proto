@@ -201,9 +201,24 @@ message Let {
   NameWithType nameWithType = 3;
 }
 
+message DataConstructor {
+  string name = 1;
+  repeated Param params = 2;
+  TypeScheme returnType = 3;
+  NameWithType nameWithType = 4;
+}
+
+message Data {
+  string name = 1;
+  repeated TypeVariable typeParams = 2;
+  repeated DataConstructor cases = 3;
+  NameWithType nameWithType = 4;
+}
+
 message TopLevelDeclaration {
   oneof sealed_value {
     Let let = 1;
+    Data data = 2;
   }
 }
 

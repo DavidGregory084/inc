@@ -262,6 +262,27 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
 
             (checkedLet, constraints)
         }
+      case data @ Data(name, tparams, cases, meta) =>
+        val checkedCases: List[DataConstructor[NamePosType]] = cases.map {
+          case constr @ DataConstructor(caseName, params, returnType, caseMeta) =>
+            val checkedParams = params.map { param =>
+              param.map(meta => meta.withType(param.ascribedAs.get))
+            }
+            val typeScheme = TypeScheme(tparams, Type.Function(checkedParams.map(_.meta.typ.typ), returnType.typ))
+
+            trace(caseName, caseMeta.pos, typeScheme)
+
+            constr.copy(params = checkedParams, meta = caseMeta.withType(typeScheme))
+        }
+
+        val typeScheme = TypeScheme(tparams, TypeConstructor(name, tparams))
+
+        val checkedData = data.copy(
+          cases = checkedCases,
+          meta = meta.withType(typeScheme)
+        )
+
+        Right((checkedData, List.empty))
     }
 
   def gather(
@@ -278,6 +299,12 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
         val initialDecls = decls.flatMap {
           case Let(name, _, _) =>
             List(name -> TypeScheme(List.empty, TypeVariable()))
+          case Data(dataName, tparams, cases, _) =>
+            cases.map {
+              case DataConstructor(caseName, params, _, _) =>
+                val paramTypes = params.map { p => p.ascribedAs.get.typ }
+                caseName -> TypeScheme(tparams, Type.Function(paramTypes, TypeConstructor(dataName, tparams)))
+            }
         }.toMap
 
         val initialEnv = importedEnv ++ initialDecls

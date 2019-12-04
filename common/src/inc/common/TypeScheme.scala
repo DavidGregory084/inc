@@ -10,6 +10,9 @@ case class TypeScheme(bound: List[TypeVariable], typ: Type) {
   def freeTypeVariables: Set[TypeVariable] =
     typ.freeTypeVariables diff bound.toSet
 
+  def replace(subst: Map[String, TypeVariable]) =
+    TypeScheme(bound, typ.replace(subst))
+
   def substitute(subst: Map[TypeVariable, Type]) =
     TypeScheme(bound, typ.substitute(subst -- bound))
 

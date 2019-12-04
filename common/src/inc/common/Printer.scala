@@ -102,6 +102,11 @@ object Printer {
     }
   }
 
+  def print[A](p: Param[A]): Doc = {
+    Doc.text(p.name) +
+      p.ascribedAs.map(asc => Doc.char(':') & print(asc)).getOrElse(Doc.empty)
+  }
+
   def print[A](e: Expr[A]): Doc = e match {
     case LiteralInt(i, _) =>
       Doc.str(i)
@@ -132,11 +137,13 @@ object Printer {
     case Lambda(params, b, _) =>
       val args =
         if (params.length == 1)
-          Doc.text(params.head.name)
+          params.head.ascribedAs.map { _ =>
+            print(params.head).tightBracketBy(Doc.char('('), Doc.char(')'))
+          }.getOrElse(print(params.head))
         else
           Doc.intercalate(
             Doc.char(',') + Doc.space,
-            params.map(p => Doc.text(p.name))
+            params.map(print(_))
           ).tightBracketBy(Doc.char('('), Doc.char(')'))
 
       args & Doc.text("->") & print(b).nested(2)
@@ -151,9 +158,30 @@ object Printer {
       Doc.char('(') + print(expr) + Doc.char(')') + Doc.text(": ") + print(ascribedAs)
   }
 
+  def print[A](data: DataConstructor[A]): Doc = data match {
+    case DataConstructor(name, params, _, _) =>
+      val prefix = Doc.text("case") & Doc.text(name) + Doc.char('(')
+      val suffix = Doc.char(')')
+      val argsList = Doc.intercalate(Doc.char(',') + Doc.space, params.map(print(_)))
+      argsList.tightBracketBy(prefix, suffix)
+  }
+
   def print[A](decl: TopLevelDeclaration[A]): Doc = decl match {
     case Let(name, binding, _) =>
       Doc.text("let") & Doc.text(name) & Doc.char('=') & print(binding).nested(2)
+    case Data(name, tparams, cases, _) =>
+      val typeParams =
+        if (tparams.isEmpty)
+          Doc.empty
+        else
+          Doc.intercalate(
+            Doc.text(", "),
+            tparams.map(t => Doc.text("T"+t.id.toString))).tightBracketBy(Doc.char('['), Doc.char(']'))
+
+      val prefix = Doc.text("data") & Doc.text(name) + typeParams & Doc.char('{')
+      val suffix = Doc.char('}')
+      val body = Doc.intercalate(Doc.char(';') + Doc.line, cases.map(print(_)))
+      body.bracketBy(prefix, suffix, indent = 2)
   }
 
   def print[A](mod: Module[A]): Doc = {
