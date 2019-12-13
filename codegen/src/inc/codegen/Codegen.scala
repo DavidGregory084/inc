@@ -154,8 +154,8 @@ class Codegen(verifyCodegen: Boolean) {
     }
   }
 
-  def functionClass(typ: TypeConstructor): Either[List[CodegenError], Class[_]] =
-    (typ.typeParams.length - 1) match {
+  def functionClass(arity: Int): Either[List[CodegenError], Class[_]] =
+    arity match {
       case 0 => Right(classOf[inc.rts.Function0[_]])
       case 1 => Right(classOf[inc.rts.Function1[_, _]])
       case 2 => Right(classOf[inc.rts.Function2[_, _, _]])
@@ -179,10 +179,10 @@ class Codegen(verifyCodegen: Boolean) {
       case 20 => Right(classOf[inc.rts.Function20[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]])
       case 21 => Right(classOf[inc.rts.Function21[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]])
       case 22 => Right(classOf[inc.rts.Function22[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]])
-      case _ => CodegenError.singleton(s"Error determining function class for ${Printer.print(typ)}")
+      case _ => CodegenError.singleton("Functions of arity greater than 22 are not supported")
     }
 
-  def descriptorFor(typ: TypeScheme): Either[List[CodegenError], String] = typ.typ match {
+  def descriptorFor(typ: Type): Either[List[CodegenError], String] = typ match {
     case TypeConstructor("Int", _) =>
       Right(AsmType.INT_TYPE.getDescriptor)
     case TypeConstructor("Long", _) =>
@@ -197,15 +197,17 @@ class Codegen(verifyCodegen: Boolean) {
       Right(AsmType.CHAR_TYPE.getDescriptor)
     case TypeConstructor("String", _) =>
       Right(AsmType.getDescriptor(classOf[String]))
-    case tyCon @ TypeConstructor("->", _) =>
-      functionClass(tyCon).map(AsmType.getDescriptor)
+    case TypeApply(TypeConstructor("->", _), params) =>
+      functionClass(params.length - 1).map(AsmType.getDescriptor)
+    case TypeApply(typ, _) =>
+      descriptorFor(typ)
     case TypeConstructor(name, _) =>
       Either.catchOnly[ClassNotFoundException] {
         AsmType.getDescriptor(Class.forName(name))
       }.leftFlatMap { _ =>
         CodegenError.singleton(s"Class ${name} could not be found")
       }
-    case TypeVariable(_) =>
+    case TypeVariable(_, _) =>
       Right(AsmType.getDescriptor(classOf[Object]))
   }
 
@@ -224,15 +226,17 @@ class Codegen(verifyCodegen: Boolean) {
       Right(AsmType.CHAR_TYPE)
     case TypeConstructor("String", _) =>
       Right(AsmType.getType(classOf[String]))
-    case tyCon @ TypeConstructor("->", _) =>
-      functionClass(tyCon).map(AsmType.getType)
+    case TypeApply(TypeConstructor("->", _), params) =>
+      functionClass(params.length - 1).map(AsmType.getType)
+    case TypeApply(typ, _) =>
+      asmTypeOf(typ)
     case TypeConstructor(name, _) =>
       Either.catchOnly[ClassNotFoundException] {
         AsmType.getType(Class.forName(name))
       }.leftFlatMap { _ =>
         CodegenError.singleton(s"Class ${name} could not be found")
       }
-    case TypeVariable(_) =>
+    case TypeVariable(_, _) =>
       Right(AsmType.getType(classOf[Object]))
   }
 
@@ -251,15 +255,17 @@ class Codegen(verifyCodegen: Boolean) {
       Right(AsmType.getType(classOf[java.lang.Character]))
     case TypeConstructor("String", _) =>
       Right(AsmType.getType(classOf[String]))
-    case tyCon @ TypeConstructor("->", _) =>
-      functionClass(tyCon).map(AsmType.getType)
+    case TypeApply(TypeConstructor("->", _), params) =>
+      functionClass(params.length - 1).map(AsmType.getType)
+    case TypeApply(typ, _) =>
+      boxedAsmTypeOf(typ)
     case TypeConstructor(name, _) =>
       Either.catchOnly[ClassNotFoundException] {
         AsmType.getType(Class.forName(name))
       }.leftFlatMap { _ =>
         CodegenError.singleton(s"Class ${name} could not be found")
       }
-    case TypeVariable(_) =>
+    case TypeVariable(_, _) =>
       Right(AsmType.getType(classOf[Object]))
   }
 
@@ -307,7 +313,7 @@ class Codegen(verifyCodegen: Boolean) {
       } yield ()
     case Reference(mod, name, nameWithType) =>
       for {
-        descriptor <- descriptorFor(nameWithType.typ)
+        descriptor <- descriptorFor(nameWithType.typ.typ)
         internalName = getInternalName(nameWithType.name, className)
         _ <- nameWithType.name match {
           case MemberName(_, _, _) =>
@@ -325,7 +331,7 @@ class Codegen(verifyCodegen: Boolean) {
       newExpr(classWriter, className, generator, outerName, arguments, locals)(expr)
 
     case Apply(fn, args, nameWithType) =>
-      val TypeScheme(_, TypeConstructor("->", tpArgs)) = fn.meta.typ
+      val TypeScheme(_, TypeApply(TypeConstructor("->", _), tpArgs)) = fn.meta.typ
       val objectType = AsmType.getType(classOf[Object])
 
       for {
@@ -352,7 +358,7 @@ class Codegen(verifyCodegen: Boolean) {
       }
 
     case lam @ Lambda(params, body, nameWithType) =>
-      val TypeScheme(_, TypeConstructor("->", tpArgs)) = nameWithType.typ
+      val TypeScheme(_, TypeApply(TypeConstructor("->", _), tpArgs)) = nameWithType.typ
 
       val capturedVars = lam.capturedVariables.toList
       val capturedVarsWithIdx = capturedVars.zipWithIndex
@@ -459,25 +465,25 @@ class Codegen(verifyCodegen: Boolean) {
       case Ascription(expr, _, _) =>
         newTopLevelLet(className, classWriter, staticInitializer, let.copy(binding = expr))
       case Reference(_, name, nameWithType) =>
-        descriptorFor(nameWithType.typ).flatMap { descriptor =>
+        descriptorFor(nameWithType.typ.typ).flatMap { descriptor =>
           val internalName = getInternalName(nameWithType.name, enclosingClass = className)
           newStaticFieldFrom(classWriter, className, staticInitializer)(let.name, descriptor, internalName, name)
         }
       case ifExpr @ If(_, _, _, nameWithType) =>
         for {
-          descriptor <- descriptorFor(nameWithType.typ)
+          descriptor <- descriptorFor(nameWithType.typ.typ)
           _ <- newStaticField(classWriter)(let.name, descriptor, null)
           _ <- newExpr(classWriter, className, staticInitializer, let.name, Map.empty, Map.empty)(ifExpr)
         } yield staticInitializer.visitFieldInsn(PUTSTATIC, className, let.name, descriptor)
       case lam @ Lambda(_, _, nameWithType) =>
         for {
-          descriptor <- descriptorFor(nameWithType.typ)
+          descriptor <- descriptorFor(nameWithType.typ.typ)
           _ <- newStaticField(classWriter)(let.name, descriptor, null)
           _ <- newExpr(classWriter, className, staticInitializer, let.name, Map.empty, Map.empty)(lam)
         } yield staticInitializer.visitFieldInsn(PUTSTATIC, className, let.name, descriptor)
       case apply @ Apply(_, _, nameWithType) =>
         for {
-          descriptor <- descriptorFor(nameWithType.typ)
+          descriptor <- descriptorFor(nameWithType.typ.typ)
           _ <- newStaticField(classWriter)(let.name, descriptor, null)
           _ <- newExpr(classWriter, className, staticInitializer, let.name, Map.empty, Map.empty)(apply)
         } yield staticInitializer.visitFieldInsn(PUTSTATIC, className, let.name, descriptor)

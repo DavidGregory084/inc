@@ -145,19 +145,18 @@ object Parser {
   def funTypeExpr[_: P]: P[Type] = P(
     (inParens(typeExpr.rep(sep = comma./)) | primaryTypeExpr.map(Seq(_))) ~ "->" ~/ typeExpr
   ).map {
-    case (paramTyps, returnTyp) if paramTyps.isEmpty =>
-      TypeConstructor("->", List(TypeConstructor("inc.rts.Unit", List.empty), returnTyp))
     case (paramTyps, returnTyp) =>
-      TypeConstructor("->", (paramTyps :+ returnTyp).toList)
+      Type.Function(paramTyps.toList, returnTyp)
   }
 
   def primaryTypeExpr[_: P]: P[Type] = P(
     identifier.rep(min = 1, sep = ".") ~ inSquareBraces(typeExpr.rep(min = 1, sep = comma./)).?
   ).map {
     case (id, Some(params)) =>
-      TypeConstructor(id.mkString("."), params.toList)
+      val kind = Kind.Function(params.length - 1)
+      TypeApply(TypeConstructor(id.mkString("."), kind), params.toList)
     case (id, None) =>
-      TypeConstructor(id.mkString("."), List.empty)
+      TypeConstructor(id.mkString("."), Atomic)
   }
 
   def typeExpr[_: P]: P[Type] = P( NoCut(funTypeExpr) | primaryTypeExpr | inParens(typeExpr) )

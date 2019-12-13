@@ -271,9 +271,16 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
     module match {
       case Module(_, _, _, decls, meta) =>
 
-        val initialEnv = importedDecls.view.map {
-          case (sym, tld) => (sym, tld.meta.typ)
+        val importedEnv = importedDecls.view.map {
+          case (sym, tld) => sym -> tld.meta.typ
         }.toMap
+
+        val initialDecls = decls.flatMap {
+          case Let(name, _, _) =>
+            List(name -> TypeScheme(List.empty, TypeVariable()))
+        }.toMap
+
+        val initialEnv = importedEnv ++ initialDecls
 
         val emptyRes: Infer[(Chain[TopLevelDeclaration[NamePosType]], Environment, List[Constraint])] =
           Right((Chain.empty, initialEnv, List.empty))

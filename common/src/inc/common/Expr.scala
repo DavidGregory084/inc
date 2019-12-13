@@ -33,7 +33,7 @@ sealed trait Expr[A] extends Product with Serializable {
       expr.capturedVariables
   }
 
-  def replace(mapping: Map[Reference[A], Reference[A]])(implicit eqv: A =:= NamePosType): Expr[A] = this match {
+  def replace(mapping: Map[Reference[A], Reference[A]])(implicit to: A =:= NamePosType): Expr[A] = this match {
     case int @ LiteralInt(_, _) => int
     case long @ LiteralLong(_, _) => long
     case flt @ LiteralFloat(_, _) => flt
@@ -43,8 +43,9 @@ sealed trait Expr[A] extends Product with Serializable {
     case chr @ LiteralChar(_, _) => chr
     case unit @ LiteralUnit(_) => unit
     case ref @ Reference(_, _, _) =>
+      val from = to.flip
       mapping.getOrElse(
-        ref.copy(meta = eqv(meta).withEmptyPos.asInstanceOf[A]),
+        ref.copy(meta = from(to(meta).withEmptyPos)),
         ref
       )
     case ifExpr @ If(cond, thenExpr, elseExpr, _) =>
@@ -106,8 +107,10 @@ sealed trait Expr[A] extends Product with Serializable {
       proto.Ascription(expr.toProto, Some(ascribedAs.toProto), nameWithType)
   }
 
-  def substitute(subst: Map[TypeVariable, Type])(implicit eqv: A =:= NamePosType): Expr[A] =
-    this.map(a => eqv(a).substitute(subst).asInstanceOf[A])
+  def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= NamePosType): Expr[A] = {
+    val from = to.flip
+    this.map(a => from(to(a).substitute(subst)))
+  }
 }
 object Expr {
   def fromProto(expr: proto.Expr): Expr[NameWithType] = expr match {

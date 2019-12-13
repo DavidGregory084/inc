@@ -18,8 +18,10 @@ sealed trait TopLevelDeclaration[A] extends Product with Serializable {
       proto.Let(name, expr.toProto, nameWithType)
   }
 
-  def substitute(subst: Map[TypeVariable, Type])(implicit eqv: A =:= NamePosType): TopLevelDeclaration[A] =
-    this.map(a => eqv(a).substitute(subst).asInstanceOf[A])
+  def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= NamePosType): TopLevelDeclaration[A] = {
+    val from = to.flip
+    this.map(a => from(to(a).substitute(subst)))
+  }
 }
 
 object TopLevelDeclaration {
