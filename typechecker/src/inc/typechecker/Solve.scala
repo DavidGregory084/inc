@@ -26,10 +26,12 @@ class Solve(context: Printer.SourceContext, isTraceEnabled: Boolean) extends Laz
 
   def bind(pos: Pos, tyVar: TypeVariable, typ: Type): Infer[Substitution] =
     typ match {
-      case t @ TypeVariable(_) if tyVar == t =>
+      case t @ TypeVariable(_, _) if tyVar == t =>
         Right(EmptySubst)
       case t if tyVar.occursIn(t) =>
         TypeError.singleton(pos, "Attempt to construct infinite type")
+      case t if tyVar.kind != t.kind =>
+        TypeError.singleton(pos, s"Kinds do not match: ${Printer.print(tyVar.kind).render(80)} ${Printer.print(t.kind).render(80)}")
       case _ =>
         Right(Map(tyVar -> typ))
     }
@@ -47,24 +49,30 @@ class Solve(context: Printer.SourceContext, isTraceEnabled: Boolean) extends Laz
 
     def go(left: Type, right: Type): Infer[Substitution] = {
       (left, right) match {
-        case (TypeConstructor(_, lvars), TypeConstructor(_, rvars)) if lvars.length != rvars.length =>
+        case (TypeApply(_, largs), TypeApply(_, rargs)) if largs.length != rargs.length =>
           TypeError.singleton(pos, s"${llRed} does not unify with ${rrRed}")
 
-        case (TypeConstructor(l, lvars), TypeConstructor(r, rvars)) if l == r =>
-          val emptyRes: Infer[Substitution] = Right(EmptySubst)
+        case (TypeApply(ltyp, largs), TypeApply(rtyp, rargs)) =>
+          unify(pos, ltyp, rtyp).flatMap { outerSubst =>
 
-          lvars.zip(rvars).foldLeft(emptyRes) {
-            case (substSoFar, (ll, rr)) =>
-              for {
-                subst <- substSoFar
-                newSubst <- unify(pos, ll.substitute(subst), rr.substitute(subst))
-              } yield chainSubstitution(subst, newSubst)
+            val result: Infer[Substitution] = Right(outerSubst)
+
+            largs.zip(rargs).foldLeft(result) {
+              case (substSoFar, (ll, rr)) =>
+                for {
+                  subst <- substSoFar
+                  newSubst <- unify(pos, ll.substitute(subst), rr.substitute(subst))
+                } yield chainSubstitution(subst, newSubst)
+            }
           }
 
-        case (tyVar @ TypeVariable(_), typ) =>
+        case (TypeConstructor(l, _), TypeConstructor(r, _)) if l == r =>
+          Right(EmptySubst)
+
+        case (tyVar @ TypeVariable(_, _), typ) =>
           bind(pos, tyVar, typ)
 
-        case (typ, tyVar @ TypeVariable(_)) =>
+        case (typ, tyVar @ TypeVariable(_, _)) =>
           bind(pos, tyVar, typ)
 
         case (_, _) =>

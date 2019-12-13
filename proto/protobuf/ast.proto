@@ -12,19 +12,45 @@ message Import {
   Symbols symbols = 3;
 }
 
+message Atomic {}
+
+message Parameterized {
+  repeated Kind params = 1;
+  Kind result = 2;
+}
+
+message KindVariable {
+  int32 id = 1;
+}
+
+message Kind {
+  oneof sealed_value {
+    Atomic atomic = 1;
+    Parameterized parameterized = 2;
+    KindVariable kindVar = 3;
+  }
+}
+
 message TypeVariable {
   int32 id = 1;
+  Kind kind = 2;
 }
 
 message TypeConstructor {
   string name = 1;
-  repeated Type typeParams = 2;
+  Kind kind = 2;
+}
+
+message TypeApply {
+  Type typ = 1;
+  repeated Type params = 2;
 }
 
 message Type {
   oneof sealed_value {
     TypeVariable tyVar = 1;
     TypeConstructor tyCon = 2;
+    TypeApply tyApp = 3;
   }
 }
 

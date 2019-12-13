@@ -16,6 +16,6 @@ case class Configuration(
 
 object Configuration {
   val default = Configuration()
-  val test = Configuration(verifyCodegen = true)
+  val test = Configuration(verifyCodegen = true, traceTyper = true)
   val printTimings = Configuration(printPhaseTiming = true)
 }

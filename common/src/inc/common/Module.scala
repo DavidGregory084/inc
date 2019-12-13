@@ -24,8 +24,10 @@ final case class Module[A](
 
   def fullName = (pkg :+ name).mkString("/")
 
-  def substitute(subst: Map[TypeVariable, Type])(implicit eqv: A =:= NamePosType): Module[A] =
-    this.map(a => eqv(a).substitute(subst).asInstanceOf[A])
+  def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= NamePosType): Module[A] = {
+    val from = to.flip
+    this.map(a => from(to(a).substitute(subst)))
+  }
 }
 
 object Module {

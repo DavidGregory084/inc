@@ -57,25 +57,38 @@ object Printer {
   }
 
   def print(typ: Type): Doc = typ match {
-    case TypeVariable(i) =>
+    case TypeVariable(i, _) =>
       Doc.text("T" + i.toString)
-    case TypeConstructor(nm, tyParams) =>
-      if (tyParams.isEmpty)
-        Doc.text(nm)
-      else if (nm == "->") {
-        val args =
-          if (tyParams.length == 2)
-            print(tyParams.head)
-          else {
-            Doc.intercalate(Doc.char(',') + Doc.space, tyParams.init.map(print))
-              .tightBracketBy(Doc.char('('), Doc.char(')'))
-          }
+    case TypeConstructor(nm, _) =>
+      Doc.text(nm)
+    case TypeApply(typ, params) if params.isEmpty =>
+      print(typ)
+    case TypeApply(TypeConstructor("->", _), params) =>
+      val args =
+        if (params.length == 2)
+          print(params.head)
+        else {
+          Doc.intercalate(Doc.char(',') + Doc.space, params.init.map(print))
+            .tightBracketBy(Doc.char('('), Doc.char(')'))
+        }
 
-        Doc.char('(') + args + Doc.text(" -> ") + print(tyParams.last) + Doc.char(')')
-      } else {
-        Doc.text(nm) + Doc.intercalate(Doc.char(',') + Doc.space, tyParams.init.map(print))
-          .tightBracketBy(Doc.char('['), Doc.char(']'))
-      }
+        Doc.char('(') + args + Doc.text(" -> ") + print(params.last) + Doc.char(')')
+    case TypeApply(typ, params) =>
+      print(typ) + Doc.intercalate(Doc.char(',') + Doc.space, params.map(print))
+        .tightBracketBy(Doc.char('['), Doc.char(']'))
+  }
+
+  def print(kind: Kind): Doc = kind match {
+    case Atomic =>
+      Doc.char('*')
+    case KindVariable(id) =>
+      Doc.text("K"+ id.toString)
+    case Parameterized(params, result) =>
+      if (params.length == 1)
+        print(params.head) & Doc.text("->") & print(result)
+      else
+        Doc.intercalate(Doc.char(',') + Doc.space, params.map(print))
+          .tightBracketBy(Doc.char('('), Doc.char(')')) & Doc.text("->") & print(result)
   }
 
   def print(typ: TypeScheme): Doc = {

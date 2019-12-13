@@ -1,14 +1,20 @@
 package inc.common
 
 import cats.Functor
-import java.lang.String
+import java.lang.{ Exception, String }
 import scala.{ Option, Some }
 import scala.=:=
 import scala.collection.immutable.Map
 
 final case class Param[A](name: String, ascribedAs: Option[TypeScheme], meta: A) {
-  def substitute(subst: Map[TypeVariable, Type])(implicit eqv: A =:= NamePosType) =
-    Param(name, ascribedAs, eqv(meta).substitute(subst).asInstanceOf[A])
+  def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= NamePosType) = {
+    val from = to.flip
+    Param(name, ascribedAs, from(to(meta).substitute(subst)))
+  }
+
+  def withAscribedType(implicit eqv: A =:= NameWithPos): Param[NamePosType] =
+    ascribedAs.map(asc => copy(meta = meta.withType(asc)))
+      .getOrElse(throw new Exception("Called withAscribedType on a param with no ascription"))
 
   def toProto(implicit eqv: A =:= NamePosType): proto.Param = {
     val nameWithType = Some(eqv(meta).toProto)
