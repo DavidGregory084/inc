@@ -16,6 +16,14 @@ final case class Param[A](name: String, ascribedAs: Option[TypeScheme], meta: A)
     }
   }
 
+  def substituteKinds(subst: Map[KindVariable, Kind])(implicit to: A =:= NamePosType): Param[A] = {
+    val from = to.flip
+    val namePosType = to(meta)
+    copy(
+      ascribedAs = ascribedAs.map(_.substituteKinds(subst)),
+      meta = from(namePosType.substituteKinds(subst)))
+  }
+
   def withAscribedType(implicit eqv: A =:= NameWithPos): Param[NamePosType] =
     ascribedAs.map(asc => copy(meta = meta.withType(asc)))
       .getOrElse(throw new Exception("Called withAscribedType on a param with no ascription"))

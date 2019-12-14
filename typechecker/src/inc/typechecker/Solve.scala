@@ -38,7 +38,7 @@ class Solve(context: Printer.SourceContext, isTraceEnabled: Boolean) extends Laz
         Right(Map(tyVar -> typ))
     }
 
-  def unify(pos: Pos, left: Type, right: Type): Infer[Substitution] = {
+  def unify(left: Type, right: Type, pos: Pos): Infer[Substitution] = {
     lazy val ll = Printer.print(left)
     lazy val rr = Printer.print(right)
     lazy val llRed = ll.style(Style.Ansi.Fg.Red).render(context.consoleWidth)
@@ -55,7 +55,7 @@ class Solve(context: Printer.SourceContext, isTraceEnabled: Boolean) extends Laz
           TypeError.singleton(pos, s"${llRed} does not unify with ${rrRed}")
 
         case (TypeApply(ltyp, largs), TypeApply(rtyp, rargs)) =>
-          unify(pos, ltyp, rtyp).flatMap { outerSubst =>
+          unify(ltyp, rtyp, pos).flatMap { outerSubst =>
 
             val result: Infer[Substitution] = Right(outerSubst)
 
@@ -63,7 +63,7 @@ class Solve(context: Printer.SourceContext, isTraceEnabled: Boolean) extends Laz
               case (substSoFar, (ll, rr)) =>
                 for {
                   subst <- substSoFar
-                  newSubst <- unify(pos, ll.substitute(subst), rr.substitute(subst))
+                  newSubst <- unify(ll.substitute(subst), rr.substitute(subst), pos)
                 } yield chainSubstitution(subst, newSubst)
             }
           }
@@ -96,7 +96,7 @@ class Solve(context: Printer.SourceContext, isTraceEnabled: Boolean) extends Laz
       case (Nil, subst) =>
         Right(Right(subst))
       case (Equal(l, r, pos) :: tail, substSoFar) =>
-        unify(pos, l, r).map { subst =>
+        unify(l, r, pos).map { subst =>
           Left((tail.map(_.substitute(subst)), chainSubstitution(substSoFar, subst)))
         }
     }

@@ -275,14 +275,16 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
             constr.copy(params = checkedParams, meta = caseMeta.withType(typeScheme))
         }
 
-        val typeScheme = TypeScheme(tparams, TypeConstructor(name, tparams))
+        val typeScheme = TypeScheme(tparams, TypeApply(TypeConstructor(name, data.kind), tparams))
 
         val checkedData = data.copy(
           cases = checkedCases,
           meta = meta.withType(typeScheme)
         )
 
-        Right((checkedData, List.empty))
+        Kindchecker.kindcheck(checkedData).map { d =>
+          (d, List.empty)
+        }
     }
 
   def gather(
@@ -301,9 +303,11 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
             List(name -> TypeScheme(List.empty, TypeVariable()))
           case Data(dataName, tparams, cases, _) =>
             cases.map {
-              case DataConstructor(caseName, params, _, _) =>
+              case DataConstructor(caseName, params, returnTyp, _) =>
                 val paramTypes = params.map { p => p.ascribedAs.get.typ }
-                caseName -> TypeScheme(tparams, Type.Function(paramTypes, TypeConstructor(dataName, tparams)))
+                val dataTyp = TypeConstructor(dataName, returnTyp.typ.kind)
+                val typeScheme = TypeScheme(tparams, Type.Function(paramTypes, dataTyp))
+                caseName -> typeScheme
             }
         }.toMap
 

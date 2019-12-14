@@ -235,7 +235,7 @@ trait Generators { self: Matchers =>
 
       numConstrs <- Gen.choose(1, 4)
 
-      typeScheme = TypeScheme(List.empty, TypeConstructor(name, List.empty))
+      typeScheme = TypeScheme(List.empty, TypeConstructor(name, Atomic))
 
       constrs <- Gen.listOfN(numConstrs, constructorGen(modName, typeScheme))
 

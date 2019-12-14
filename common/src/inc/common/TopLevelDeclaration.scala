@@ -74,6 +74,15 @@ final case class DataConstructor[A](
     val nameWithType = Some(eqv(meta).toProto)
     proto.DataConstructor(name, params.map(_.toProto), Some(returnType.toProto), nameWithType)
   }
+
+  def substituteKinds(subst: Map[KindVariable, Kind])(implicit to: A =:= NamePosType): DataConstructor[A] = {
+    val from = to.flip
+    val namePosType = to(meta)
+    copy(
+      params = params.map(_.substituteKinds(subst)),
+      returnType = returnType.substituteKinds(subst),
+      meta = from(namePosType.substituteKinds(subst)))
+  }
 }
 
 object DataConstructor {
@@ -92,7 +101,20 @@ final case class Data[A](
   typeParams: List[TypeVariable],
   cases: List[DataConstructor[A]],
   meta: A
-) extends TopLevelDeclaration[A]
+) extends TopLevelDeclaration[A] {
+
+  def kind: Kind =
+    Parameterized(typeParams.map(_.kind), Atomic)
+
+  def substituteKinds(subst: Map[KindVariable, Kind])(implicit to: A =:= NamePosType): Data[A] = {
+    val from = to.flip
+    val namePosType = to(meta)
+    copy(
+      typeParams = typeParams.map(_.substituteKinds(subst).asInstanceOf[TypeVariable]),
+      cases = cases.map(_.substituteKinds(subst)),
+      meta = from(namePosType.substituteKinds(subst)))
+  }
+}
 
 final case class Let[A](
   name: String,

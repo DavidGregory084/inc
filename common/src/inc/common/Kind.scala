@@ -2,7 +2,7 @@ package inc.common
 
 import java.lang.Exception
 import java.util.concurrent.atomic.AtomicInteger
-import scala.collection.immutable.{ List, Map }
+import scala.collection.immutable.{ List, Map, Set }
 import scala.{ Int, Product, Serializable }
 
 sealed abstract class Kind extends Product with Serializable {
@@ -18,6 +18,15 @@ sealed abstract class Kind extends Product with Serializable {
         Parameterized(params.map(_.substitute(subst)), result.substitute(subst))
     }
 
+  def kindVariables: Set[KindVariable] = this match {
+    case kindVar @ KindVariable(_) =>
+      Set(kindVar)
+    case Parameterized(params, _) =>
+      params.flatMap(_.kindVariables).toSet
+    case Atomic =>
+      Set.empty
+  }
+
   def toProto: proto.Kind = this match {
     case Atomic =>
       proto.Atomic()
@@ -30,7 +39,7 @@ sealed abstract class Kind extends Product with Serializable {
 
 object Kind {
   def Function(arity: Int): Kind =
-    Parameterized(List.fill(arity)(Atomic), Atomic)
+    Parameterized(List.fill(arity)(KindVariable()), Atomic)
 
   def fromProto(kind: proto.Kind): Kind = kind match {
     case proto.Atomic() =>
@@ -48,7 +57,9 @@ case object Atomic extends Kind
 
 case class Parameterized(params: List[Kind], result: Kind) extends Kind
 
-case class KindVariable(id: Int) extends Kind
+case class KindVariable(id: Int) extends Kind {
+  def occursIn(kind: Kind) = kind.kindVariables.contains(this)
+}
 
 object KindVariable {
   val nextId = new AtomicInteger(1)

@@ -153,7 +153,7 @@ object Parser {
     identifier.rep(min = 1, sep = ".") ~ inSquareBraces(typeExpr.rep(min = 1, sep = comma./)).?
   ).map {
     case (id, Some(params)) =>
-      val kind = Kind.Function(params.length - 1)
+      val kind = Kind.Function(params.length)
       TypeApply(TypeConstructor(id.mkString("."), kind), params.toList)
     case (id, None) =>
       TypeConstructor(id.mkString("."), Atomic)
@@ -208,20 +208,21 @@ object Parser {
     "[" ~ identifier.rep(min = 1, sep = comma./) ~ "]"
   ).map { tparams =>
     tparams.map { nm =>
-      (nm, TypeVariable())
+      (nm, TypeVariable(kind = KindVariable()))
     }
   }
 
   def dataDeclaration[_: P] = P(
     Index ~ "data" ~/ (identifier ~ typeParams.?).flatMap {
         case (name, Some(mapping)) =>
-          val tparams = mapping.map { case (_, typ) => typ }
-          val typ = TypeScheme(tparams.toList, TypeConstructor(name, tparams.toList))
+          val tparams = mapping.map { case (_, typ) => typ }.toList
+          val kind = Parameterized(tparams.map(_.kind), Atomic)
+          val typ = TypeScheme(tparams.toList, TypeApply(TypeConstructor(name, kind), tparams))
           inBraces(dataConstructor(typ, mapping.toMap).rep(sep = maybeSemi./)).map { cases =>
             (name, tparams, cases)
           }
         case (name, None) =>
-          val typ = TypeScheme(List.empty, TypeConstructor(name, List.empty))
+          val typ = TypeScheme(List.empty, TypeConstructor(name, Atomic))
           inBraces(dataConstructor(typ, Map.empty).rep(sep = maybeSemi./)).map { cases =>
             (name, List.empty, cases)
           }

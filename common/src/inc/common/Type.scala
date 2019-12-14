@@ -58,6 +58,15 @@ sealed abstract class Type extends Product with Serializable {
       case TypeApply(typ, params) =>
         TypeApply(typ.substitute(subst), params.map(_.substitute(subst)))
     }
+
+  def substituteKinds(subst: Map[KindVariable, Kind]): Type = this match {
+    case TypeVariable(id, kind) =>
+      TypeVariable(id, kind.substitute(subst))
+    case TypeConstructor(name, kind) =>
+      TypeConstructor(name, kind.substitute(subst))
+    case TypeApply(typ, tparams) =>
+      TypeApply(typ.substituteKinds(subst), tparams.map(_.substituteKinds(subst)))
+  }
 }
 
 object Type {

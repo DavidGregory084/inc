@@ -16,6 +16,11 @@ case class TypeScheme(bound: List[TypeVariable], typ: Type) {
   def substitute(subst: Map[TypeVariable, Type]) =
     TypeScheme(bound, typ.substitute(subst -- bound))
 
+  def substituteKinds(subst: Map[KindVariable, Kind]): TypeScheme =
+    copy(
+      bound = bound.map(_.substituteKinds(subst).asInstanceOf[TypeVariable]),
+      typ = typ.substituteKinds(subst))
+
   def instantiate: Type =
     if (bound.isEmpty)
       typ
