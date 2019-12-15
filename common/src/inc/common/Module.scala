@@ -24,10 +24,13 @@ final case class Module[A](
 
   def fullName = (pkg :+ name).mkString("/")
 
-  def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= NamePosType): Module[A] = {
-    val from = to.flip
-    this.map(a => from(to(a).substitute(subst)))
-  }
+  def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= NamePosType): Module[A] =
+    if (subst.isEmpty)
+      this
+    else {
+      val from = to.flip
+      this.map(a => from(to(a).substitute(subst)))
+    }
 }
 
 object Module {

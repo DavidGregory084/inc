@@ -7,7 +7,7 @@ import scala.{ Product, Serializable, Some }
 import scala.=:=
 import scala.collection.immutable.Map
 
-sealed trait TopLevelDeclaration[A] extends Product with Serializable {
+sealed abstract class TopLevelDeclaration[A] extends Product with Serializable {
   def name: String
 
   def meta: A
@@ -18,10 +18,13 @@ sealed trait TopLevelDeclaration[A] extends Product with Serializable {
       proto.Let(name, expr.toProto, nameWithType)
   }
 
-  def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= NamePosType): TopLevelDeclaration[A] = {
-    val from = to.flip
-    this.map(a => from(to(a).substitute(subst)))
-  }
+  def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= NamePosType): TopLevelDeclaration[A] =
+    if (subst.isEmpty)
+      this
+    else {
+      val from = to.flip
+      this.map(a => from(to(a).substitute(subst)))
+    }
 }
 
 object TopLevelDeclaration {

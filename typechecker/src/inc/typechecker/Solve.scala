@@ -26,7 +26,9 @@ class Solve(context: Printer.SourceContext, isTraceEnabled: Boolean) extends Laz
 
   def bind(pos: Pos, tyVar: TypeVariable, typ: Type): Infer[Substitution] =
     typ match {
-      case t @ TypeVariable(_, _) if tyVar == t =>
+      case t @ InferredTypeVariable(_, _) if tyVar == t =>
+        Right(EmptySubst)
+      case t @ NamedTypeVariable(_, _) if tyVar == t =>
         Right(EmptySubst)
       case t if tyVar.occursIn(t) =>
         TypeError.singleton(pos, "Attempt to construct infinite type")
@@ -69,10 +71,16 @@ class Solve(context: Printer.SourceContext, isTraceEnabled: Boolean) extends Laz
         case (TypeConstructor(l, _), TypeConstructor(r, _)) if l == r =>
           Right(EmptySubst)
 
-        case (tyVar @ TypeVariable(_, _), typ) =>
+        case (tyVar @ InferredTypeVariable(_, _), typ) =>
           bind(pos, tyVar, typ)
 
-        case (typ, tyVar @ TypeVariable(_, _)) =>
+        case (typ, tyVar @ InferredTypeVariable(_, _)) =>
+          bind(pos, tyVar, typ)
+
+        case (tyVar @ NamedTypeVariable(_, _), typ) =>
+          bind(pos, tyVar, typ)
+
+        case (typ, tyVar @ NamedTypeVariable(_, _)) =>
           bind(pos, tyVar, typ)
 
         case (_, _) =>

@@ -3,17 +3,20 @@ package inc.common
 import java.lang.Exception
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.immutable.{ List, Map }
-import scala.Int
+import scala.{ Int, Product, Serializable }
 
-sealed trait Kind {
-  def substitute(subst: Map[KindVariable, Kind]): Kind = this match {
-    case Atomic =>
-      Atomic
-    case kindVar @ KindVariable(_) =>
-      subst.getOrElse(kindVar, kindVar)
-    case Parameterized(params, result) =>
-      Parameterized(params.map(_.substitute(subst)), result.substitute(subst))
-  }
+sealed abstract class Kind extends Product with Serializable {
+  def substitute(subst: Map[KindVariable, Kind]): Kind =
+    if (subst.isEmpty)
+      this
+    else this match {
+      case Atomic =>
+        Atomic
+      case kindVar @ KindVariable(_) =>
+        subst.getOrElse(kindVar, kindVar)
+      case Parameterized(params, result) =>
+        Parameterized(params.map(_.substitute(subst)), result.substitute(subst))
+    }
 
   def toProto: proto.Kind = this match {
     case Atomic =>

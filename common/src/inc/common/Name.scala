@@ -2,8 +2,9 @@ package inc.common
 
 import java.lang.{ Exception, String }
 import scala.collection.immutable.List
+import scala.{ Product, Serializable }
 
-sealed trait Name {
+sealed abstract class Name extends Product with Serializable {
   def toProto: proto.Name = this match {
     case NoName => proto.NoName()
     case LocalName(nm) => proto.LocalName(nm)

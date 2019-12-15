@@ -207,7 +207,9 @@ class Codegen(verifyCodegen: Boolean) {
       }.leftFlatMap { _ =>
         CodegenError.singleton(s"Class ${name} could not be found")
       }
-    case TypeVariable(_, _) =>
+    case NamedTypeVariable(_, _) =>
+      Right(AsmType.getDescriptor(classOf[Object]))
+    case InferredTypeVariable(_, _) =>
       Right(AsmType.getDescriptor(classOf[Object]))
   }
 
@@ -236,7 +238,9 @@ class Codegen(verifyCodegen: Boolean) {
       }.leftFlatMap { _ =>
         CodegenError.singleton(s"Class ${name} could not be found")
       }
-    case TypeVariable(_, _) =>
+    case NamedTypeVariable(_, _) =>
+      Right(AsmType.getType(classOf[Object]))
+    case InferredTypeVariable(_, _) =>
       Right(AsmType.getType(classOf[Object]))
   }
 
@@ -265,7 +269,9 @@ class Codegen(verifyCodegen: Boolean) {
       }.leftFlatMap { _ =>
         CodegenError.singleton(s"Class ${name} could not be found")
       }
-    case TypeVariable(_, _) =>
+    case NamedTypeVariable(_, _) =>
+      Right(AsmType.getType(classOf[Object]))
+    case InferredTypeVariable(_, _) =>
       Right(AsmType.getType(classOf[Object]))
   }
 

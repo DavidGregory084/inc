@@ -1,11 +1,11 @@
 package inc.common
 
 import java.lang.String
-import scala.collection.immutable.{ List, Map, Set }
+import scala.collection.immutable.{ List, Map, Set, Vector }
 
 case class TypeScheme(bound: List[TypeVariable], typ: Type) {
   def toProto: proto.TypeScheme =
-    proto.TypeScheme(bound.map(tv => proto.TypeVariable(tv.id)), typ.toProto)
+    proto.TypeScheme(bound.map(tv => tv.toProto), typ.toProto)
 
   def freeTypeVariables: Set[TypeVariable] =
     typ.freeTypeVariables diff bound.toSet
@@ -37,9 +37,17 @@ object TypeScheme {
     case proto.TypeScheme(bound, t) =>
       // Instantiate the type scheme with fresh type variables for this compilation run
       val typ = Type.fromProto(t)
-      val freshVars = bound.toList.map(_ => TypeVariable())
+
       val tyVars = bound.toList.map(TypeVariable.fromProto)
-      val subst = tyVars.zip(freshVars).toMap
-      TypeScheme(tyVars, typ.substitute(subst))
+
+      val (freshVars, subst) = tyVars.foldLeft((Vector.empty[TypeVariable], Map.empty[TypeVariable, Type])) {
+        case ((vars, subst), named @ NamedTypeVariable(_, _)) =>
+          (vars :+ named, subst)
+        case ((vars, subst), inferred @ InferredTypeVariable(_, kind)) =>
+          val freshVar = TypeVariable(kind)
+          (vars :+ freshVar, subst.updated(inferred, freshVar))
+      }
+
+      TypeScheme(freshVars.toList, typ.substitute(subst))
   }
 }

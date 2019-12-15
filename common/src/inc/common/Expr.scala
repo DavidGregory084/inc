@@ -7,7 +7,7 @@ import scala.{ =:=, Boolean, Char, Double, Float, Int, Long, Product, Serializab
 import scala.collection.immutable.{ List, Map, Set }
 import scala.Predef.wrapRefArray
 
-sealed trait Expr[A] extends Product with Serializable {
+sealed abstract class Expr[A] extends Product with Serializable {
   def meta: A
 
   def capturedVariables(implicit eqv: A =:= NamePosType): Set[Reference[NamePosType]] = this match {
@@ -108,8 +108,12 @@ sealed trait Expr[A] extends Product with Serializable {
   }
 
   def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= NamePosType): Expr[A] = {
-    val from = to.flip
-    this.map(a => from(to(a).substitute(subst)))
+    if (subst.isEmpty)
+      this
+    else {
+      val from = to.flip
+      this.map(a => from(to(a).substitute(subst)))
+    }
   }
 }
 object Expr {

@@ -57,7 +57,9 @@ object Printer {
   }
 
   def print(typ: Type): Doc = typ match {
-    case TypeVariable(i, _) =>
+    case NamedTypeVariable(n, _) =>
+      Doc.text(n)
+    case InferredTypeVariable(i, _) =>
       Doc.text("T" + i.toString)
     case TypeConstructor(nm, _) =>
       Doc.text(nm)

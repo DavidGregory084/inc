@@ -1,10 +1,10 @@
 package inc.common
 
 import java.lang.String
-import scala.{ Some, None }
+import scala.{ Some, None, Product, Serializable }
 import scala.collection.immutable.List
 
-sealed trait Import {
+sealed abstract class Import extends Product with Serializable {
   val pos: Pos
   def moduleName: String = this match {
     case ImportModule(pkg, name, _) => pkg.mkString("/") + "/" + name
