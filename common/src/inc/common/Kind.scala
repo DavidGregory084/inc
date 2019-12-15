@@ -6,6 +6,15 @@ import scala.collection.immutable.{ List, Map, Set }
 import scala.{ Int, Product, Serializable }
 
 sealed abstract class Kind extends Product with Serializable {
+  def default: Kind = this match {
+    case Atomic =>
+      Atomic
+    case KindVariable(_) =>
+      Atomic
+    case Parameterized(params, result) =>
+      Parameterized(params.map(_.default), result.default)
+  }
+
   def substitute(subst: Map[KindVariable, Kind]): Kind =
     if (subst.isEmpty)
       this

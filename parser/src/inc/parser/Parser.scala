@@ -7,6 +7,84 @@ import scala.{ Either, Right, Int, Some, None, StringContext }
 import scala.collection.immutable.{ List, Map, Seq }
 import scala.Predef.augmentString
 
+class ExprParser(typeVars: Map[String, TypeVariable]) {
+  import Parser._
+
+  def ifExpr[_: P] = P(
+    Index ~
+    "if" ~/ expression ~
+      "then" ~ expression ~
+      "else" ~ expression ~ Index
+  ).map {
+    case (from, cond, thenExpr, elseExpr, to) =>
+      If(cond, thenExpr, elseExpr, Pos(from, to))
+  }
+
+  def param[_: P] = P(
+    Index ~ identifier ~ (":" ~ typeExpr).? ~ Index
+  ).map {
+    case (from, name, ascribedAs, to) =>
+      Param(name, ascribedAs.map(TypeScheme(List.empty, _)), Pos(from, to))
+  }
+
+  def lambda[_: P] = P(
+    Index ~
+    (inParens(param.rep(sep = comma./)) | param.map(Seq(_))) ~ "->" ~/
+      expression ~
+      Index
+  ).map {
+    case (from, params, expr, to) =>
+      Lambda(params.toList, expr, Pos(from, to))
+  }
+
+  def funTypeExpr[_: P]: P[Type] = P(
+    (inParens(typeExpr.rep(sep = comma./)) | primaryTypeExpr.map(Seq(_))) ~ "->" ~/ typeExpr
+  ).map {
+    case (paramTyps, returnTyp) =>
+      Type.Function(paramTyps.toList, returnTyp)
+  }
+
+  def primaryTypeExpr[_: P]: P[Type] = P(
+    identifier.rep(min = 1, sep = ".") ~ inSquareBraces(typeExpr.rep(min = 1, sep = comma./)).?
+  ).map {
+    case (id, Some(params)) =>
+      val kind = Kind.Function(params.length)
+      val name = id.mkString(".")
+      val tp = typeVars.getOrElse(name, TypeConstructor(name, kind))
+      TypeApply(tp, params.toList)
+    case (id, None) =>
+      val name = id.mkString(".")
+      typeVars.getOrElse(name, TypeConstructor(name, Atomic))
+  }
+
+  def typeExpr[_: P]: P[Type] =
+    P( NoCut(funTypeExpr) | primaryTypeExpr | inParens(typeExpr) )
+
+  def application[_: P]: P[Expr[Pos] => Expr[Pos]] = P(
+    inParens(expression.rep(sep = comma./)) ~ Index
+  ).map {
+    case (args, to) =>
+      fn => Apply(fn, args.toList, Pos(fn.meta.from, to))
+  }
+
+  // NoCut allows us to backtrack out of a nullary lambda into a unit literal, and from an if statement into an identifier starting with "if"
+  def primaryExpr[_:P] = P( (NoCut(lambda) | NoCut(ifExpr) | literal | reference | inParens(expression)) ~ application.rep ).map {
+    case (expr, applications) =>
+      applications.foldLeft(expr) { case (expr, app) => app(expr) }
+  }
+
+  def expression[_: P]: P[Expr[Pos]] = P(
+    Index ~
+      primaryExpr ~ (":" ~ typeExpr).? ~
+      Index
+  ).map {
+    case (from, expr, Some(ascribedAs), to) =>
+      Ascription(expr, TypeScheme(List.empty, ascribedAs), Pos(from, to))
+    case (_, expr, None, _) =>
+      expr
+  }
+}
+
 object Parser {
   def ReservedWords[_: P] = P(
     StringIn(
@@ -115,100 +193,36 @@ object Parser {
       Reference(List.empty, id, Pos(from, to))
   }
 
-  def ifExpr[_: P] = P(
-    Index ~
-    "if" ~/ expression ~
-      "then" ~ expression ~
-      "else" ~ expression ~ Index
-  ).map {
-    case (from, cond, thenExpr, elseExpr, to) =>
-      If(cond, thenExpr, elseExpr, Pos(from, to))
+
+  def letDeclaration[_: P] = {
+    val exprParser = new ExprParser(typeVars = Map.empty)
+
+    P(
+      Index ~ "let" ~/ identifier ~ "=" ~
+        (inBraces(exprParser.expression) | exprParser.expression) ~
+        Index
+    ).map {
+      case (from, name, expr, to) =>
+        Let(name, expr, Pos(from, to))
+    }
   }
 
-  def param[_: P] = P(
-    Index ~ identifier ~ (":" ~ typeExpr).? ~ Index
-  ).map {
-    case (from, name, ascribedAs, to) =>
-      Param(name, ascribedAs.map(TypeScheme(List.empty, _)), Pos(from, to))
-  }
+  def dataConstructor[_: P](parentType: TypeScheme, typeVars: Map[String, TypeVariable]) ={
+    val exprParser = new ExprParser(typeVars)
 
-  def lambda[_: P] = P(
-    Index ~
-    (inParens(param.rep(sep = comma./)) | param.map(Seq(_))) ~ "->" ~/
-      expression ~
-      Index
-  ).map {
-    case (from, params, expr, to) =>
-      Lambda(params.toList, expr, Pos(from, to))
-  }
-
-  def funTypeExpr[_: P]: P[Type] = P(
-    (inParens(typeExpr.rep(sep = comma./)) | primaryTypeExpr.map(Seq(_))) ~ "->" ~/ typeExpr
-  ).map {
-    case (paramTyps, returnTyp) =>
-      Type.Function(paramTyps.toList, returnTyp)
-  }
-
-  def primaryTypeExpr[_: P]: P[Type] = P(
-    identifier.rep(min = 1, sep = ".") ~ inSquareBraces(typeExpr.rep(min = 1, sep = comma./)).?
-  ).map {
-    case (id, Some(params)) =>
-      val kind = Kind.Function(params.length)
-      TypeApply(TypeConstructor(id.mkString("."), kind), params.toList)
-    case (id, None) =>
-      TypeConstructor(id.mkString("."), Atomic)
-  }
-
-  def typeExpr[_: P]: P[Type] = P( NoCut(funTypeExpr) | primaryTypeExpr | inParens(typeExpr) )
-
-  def application[_: P]: P[Expr[Pos] => Expr[Pos]] = P(
-    inParens(expression.rep(sep = comma./)) ~ Index
-  ).map {
-    case (args, to) =>
-      fn => Apply(fn, args.toList, Pos(fn.meta.from, to))
-  }
-
-  // NoCut allows us to backtrack out of a nullary lambda into a unit literal, and from an if statement into an identifier starting with "if"
-  def primaryExpr[_:P] = P( (NoCut(lambda) | NoCut(ifExpr) | literal | reference | inParens(expression)) ~ application.rep ).map {
-    case (expr, applications) =>
-      applications.foldLeft(expr) { case (expr, app) => app(expr) }
-  }
-
-  def expression[_: P]: P[Expr[Pos]] = P(
-    Index ~
-      primaryExpr ~ (":" ~ typeExpr).? ~
-      Index
-  ).map {
-    case (from, expr, Some(ascribedAs), to) =>
-      Ascription(expr, TypeScheme(List.empty, ascribedAs), Pos(from, to))
-    case (_, expr, None, _) =>
-      expr
-  }
-
-  def letDeclaration[_: P] = P(
-    Index ~ "let" ~/ identifier ~ "=" ~
-      (inBraces(expression) | expression) ~
-      Index
-  ).map {
-    case (from, name, expr, to) =>
-      Let(name, expr, Pos(from, to))
-  }
-
-  def dataConstructor[_: P](parentType: TypeScheme, mapping: Map[String, TypeVariable]) = P(
-    Index ~ "case" ~/ identifier ~ inParens(param.rep(sep = comma./)) ~ Index
-  ).map {
-    case (from, name, params, to) =>
-      val ascribedParams = params.map { param =>
-        param.copy(ascribedAs = param.ascribedAs.map(_.replace(mapping)))
-      }
-      DataConstructor(name, ascribedParams.toList, parentType, Pos(from, to))
+    P(
+      Index ~ "case" ~/ identifier ~ inParens(exprParser.param.rep(sep = comma./)) ~ Index
+    ).map {
+      case (from, name, params, to) =>
+        DataConstructor(name, params.toList, parentType, Pos(from, to))
+    }
   }
 
   def typeParams[_: P] = P(
     "[" ~ identifier.rep(min = 1, sep = comma./) ~ "]"
   ).map { tparams =>
     tparams.map { nm =>
-      (nm, TypeVariable(kind = KindVariable()))
+      (nm, NamedTypeVariable(nm, kind = KindVariable()))
     }
   }
 

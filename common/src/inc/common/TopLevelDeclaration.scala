@@ -20,7 +20,7 @@ sealed abstract class TopLevelDeclaration[A] extends Product with Serializable {
       val nameWithType = Some(eqv(meta).toProto)
       proto.Data(
         name,
-        tparams.map(t => proto.TypeVariable(t.id)),
+        tparams.map(_.toProto),
         cases.map(_.toProto),
         nameWithType)
   }
@@ -75,6 +75,15 @@ final case class DataConstructor[A](
     proto.DataConstructor(name, params.map(_.toProto), Some(returnType.toProto), nameWithType)
   }
 
+  def defaultKinds(implicit to: A =:= NamePosType): DataConstructor[A] = {
+    val from = to.flip
+    val namePosType = to(meta)
+    copy(
+      params = params.map(_.defaultKinds),
+      returnType = returnType.defaultKinds,
+      meta = from(namePosType.defaultKinds))
+  }
+
   def substituteKinds(subst: Map[KindVariable, Kind])(implicit to: A =:= NamePosType): DataConstructor[A] = {
     val from = to.flip
     val namePosType = to(meta)
@@ -104,7 +113,19 @@ final case class Data[A](
 ) extends TopLevelDeclaration[A] {
 
   def kind: Kind =
-    Parameterized(typeParams.map(_.kind), Atomic)
+    if (typeParams.isEmpty)
+      Atomic
+    else
+      Parameterized(typeParams.map(_.kind), Atomic)
+
+  def defaultKinds(implicit to: A =:= NamePosType): Data[A] = {
+    val from = to.flip
+    val namePosType = to(meta)
+    copy(
+      typeParams = typeParams.map(_.defaultKinds.asInstanceOf[TypeVariable]),
+      cases = cases.map(_.defaultKinds),
+      meta = from(namePosType.defaultKinds))
+  }
 
   def substituteKinds(subst: Map[KindVariable, Kind])(implicit to: A =:= NamePosType): Data[A] = {
     val from = to.flip

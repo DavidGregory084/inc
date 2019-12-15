@@ -16,6 +16,14 @@ final case class Param[A](name: String, ascribedAs: Option[TypeScheme], meta: A)
     }
   }
 
+  def defaultKinds(implicit to: A =:= NamePosType): Param[A] = {
+    val from = to.flip
+    val namePosType = to(meta)
+    copy(
+      ascribedAs = ascribedAs.map(_.defaultKinds),
+      meta = from(namePosType.defaultKinds))
+  }
+
   def substituteKinds(subst: Map[KindVariable, Kind])(implicit to: A =:= NamePosType): Param[A] = {
     val from = to.flip
     val namePosType = to(meta)

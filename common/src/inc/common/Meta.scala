@@ -47,4 +47,7 @@ case class NamePosType(name: Name, pos: Pos, typ: TypeScheme) {
 
   def substituteKinds(subst: Map[KindVariable, Kind]): NamePosType =
     copy(typ = typ.substituteKinds(subst))
+
+  def defaultKinds: NamePosType =
+    copy(typ = typ.defaultKinds)
 }

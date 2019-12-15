@@ -59,9 +59,22 @@ sealed abstract class Type extends Product with Serializable {
         TypeApply(typ.substitute(subst), params.map(_.substitute(subst)))
     }
 
+  def defaultKinds: Type = this match {
+    case NamedTypeVariable(name, kind) =>
+      NamedTypeVariable(name, kind.default)
+    case InferredTypeVariable(id, kind) =>
+      InferredTypeVariable(id, kind.default)
+    case TypeConstructor(name, kind) =>
+      TypeConstructor(name, kind.default)
+    case TypeApply(typ, tparams) =>
+      TypeApply(typ.defaultKinds, tparams.map(_.defaultKinds))
+  }
+
   def substituteKinds(subst: Map[KindVariable, Kind]): Type = this match {
-    case TypeVariable(id, kind) =>
-      TypeVariable(id, kind.substitute(subst))
+    case NamedTypeVariable(name, kind) =>
+      NamedTypeVariable(name, kind.substitute(subst))
+    case InferredTypeVariable(id, kind) =>
+      InferredTypeVariable(id, kind.substitute(subst))
     case TypeConstructor(name, kind) =>
       TypeConstructor(name, kind.substitute(subst))
     case TypeApply(typ, tparams) =>
@@ -102,6 +115,8 @@ object Type {
 }
 
 sealed abstract class TypeVariable extends Type {
+  def name: String
+
   def occursIn(typ: Type) = typ.freeTypeVariables.contains(this)
 
   override def toProto: proto.TypeVariable = this match {
@@ -118,7 +133,9 @@ sealed abstract class TypeVariable extends Type {
 
 case class NamedTypeVariable(name: String, kind: Kind) extends TypeVariable
 
-case class InferredTypeVariable(id: Int, kind: Kind) extends TypeVariable
+case class InferredTypeVariable(id: Int, kind: Kind) extends TypeVariable {
+  def name = "T" + id.toString
+}
 
 object TypeVariable {
   val nextId = new AtomicInteger(1)

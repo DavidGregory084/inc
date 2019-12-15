@@ -188,7 +188,7 @@ object Printer {
         else
           Doc.intercalate(
             Doc.text(", "),
-            tparams.map(t => Doc.text("T"+t.id.toString))).tightBracketBy(Doc.char('['), Doc.char(']'))
+            tparams.map(print)).tightBracketBy(Doc.char('['), Doc.char(']'))
 
       val prefix = Doc.text("data") & Doc.text(name) + typeParams & Doc.char('{')
       val suffix = Doc.char('}')

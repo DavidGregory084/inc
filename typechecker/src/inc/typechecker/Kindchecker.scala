@@ -36,26 +36,20 @@ object Kindchecker extends LazyLogging {
   }
 
   def gather(typ: Type, pos: Pos): List[KindConstraint] = typ match {
-    case TypeVariable(_, _) =>
+    case NamedTypeVariable(_, _) =>
+      List.empty
+    case InferredTypeVariable(_, _) =>
       List.empty
     case TypeConstructor(_, _) =>
       List.empty
-    case TypeApply(TypeVariable(id, varKind), appliedTps) =>
+    case TypeApply(tp, appliedTps) =>
       val tparamKinds = appliedTps.map(_.kind)
       val appKind = Parameterized(tparamKinds, Atomic)
-      val appCst = List(EqualKind(varKind, appKind, pos))
+      val appCst = List(EqualKind(tp.kind, appKind, pos))
       val tparamCsts = appliedTps.flatMap(gather(_, pos))
-      trace("Application of T" + id, appCst)
+      val tpString = Printer.print(tp).render(80)
+      trace("Application of " + tpString, appCst)
       tparamCsts ++ appCst
-    case TypeApply(TypeConstructor(name, conKind), appliedTps) =>
-      val tparamKinds = appliedTps.map(_.kind)
-      val appKind = Parameterized(tparamKinds, Atomic)
-      val appCst = List(EqualKind(conKind, appKind, pos))
-      val tparamCsts = appliedTps.flatMap(gather(_, pos))
-      trace("Application of " + name, appCst)
-      tparamCsts ++ appCst
-    case _ =>
-      List.empty
   }
 
   def gather(constr: DataConstructor[NamePosType]): List[KindConstraint] = constr match {
@@ -165,11 +159,17 @@ object Kindchecker extends LazyLogging {
         logger.info(NL + "Apply substitution: " + substitution)
       }
 
-      checkedData = data.substituteKinds(subst.withDefaultValue(Atomic))
+      checkedData = data
+        .substituteKinds(subst)
+        .defaultKinds
 
-      kindEnv = checkedData.typeParams.map(tv => "T"+tv.id -> tv.kind)
+      kindEnv = checkedData.typeParams
+        .map(tv => tv.name -> tv.kind)
+        .toMap.updated(checkedData.name, checkedData.kind)
 
-      _ = trace("Final kind environment", kindEnv.toMap)
+      _ = if (kindEnv.nonEmpty) {
+        trace("Final kind environment", kindEnv)
+      }
 
     } yield checkedData
   }

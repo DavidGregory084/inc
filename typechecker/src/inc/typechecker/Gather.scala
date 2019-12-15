@@ -265,9 +265,7 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
       case data @ Data(name, tparams, cases, meta) =>
         val checkedCases: List[DataConstructor[NamePosType]] = cases.map {
           case constr @ DataConstructor(caseName, params, returnType, caseMeta) =>
-            val checkedParams = params.map { param =>
-              param.map(meta => meta.withType(param.ascribedAs.get))
-            }
+            val checkedParams = params.map(_.withAscribedType)
             val typeScheme = TypeScheme(tparams, Type.Function(checkedParams.map(_.meta.typ.typ), returnType.typ))
 
             trace(caseName, caseMeta.pos, typeScheme)
