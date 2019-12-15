@@ -15,7 +15,10 @@ case class NameWithType(name: Name, typ: TypeScheme) {
     NamePosType(name, Pos.Empty, typ)
 
   def substitute(subst: Map[TypeVariable, Type]): NameWithType =
-    copy(typ = typ.substitute(subst))
+    if (subst.isEmpty)
+      this
+    else
+      copy(typ = typ.substitute(subst))
 }
 
 object NameWithType {
@@ -37,5 +40,8 @@ case class NamePosType(name: Name, pos: Pos, typ: TypeScheme) {
   def forgetPos = NameWithType(name, typ)
 
   def substitute(subst: Map[TypeVariable, Type]): NamePosType =
-    copy(typ = typ.substitute(subst))
+    if (subst.isEmpty)
+      this
+    else
+      copy(typ = typ.substitute(subst))
 }

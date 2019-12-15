@@ -8,8 +8,12 @@ import scala.collection.immutable.Map
 
 final case class Param[A](name: String, ascribedAs: Option[TypeScheme], meta: A) {
   def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= NamePosType) = {
-    val from = to.flip
-    Param(name, ascribedAs, from(to(meta).substitute(subst)))
+    if (subst.isEmpty)
+      this
+    else {
+      val from = to.flip
+      Param(name, ascribedAs, from(to(meta).substitute(subst)))
+    }
   }
 
   def withAscribedType(implicit eqv: A =:= NameWithPos): Param[NamePosType] =

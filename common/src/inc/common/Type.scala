@@ -2,15 +2,21 @@ package inc.common
 
 import java.lang.{ Exception, String }
 import java.util.concurrent.atomic.AtomicInteger
-import scala.{ Int, StringContext }
+import scala.{ Int, StringContext, Product, Serializable }
 import scala.collection.immutable.{ List, Map, Set }
 
-sealed trait Type {
+sealed abstract class Type extends Product with Serializable {
   def kind: Kind
 
   def toProto: proto.Type = this match {
-    case TypeVariable(i, kind) =>
-      proto.TypeVariable(i, kind.toProto)
+    case NamedTypeVariable(n, kind) =>
+      proto.TypeVariable(
+        proto.TypeVariable.TyVar.Named(
+          proto.NamedTypeVariable(n, kind.toProto)))
+    case InferredTypeVariable(i, kind) =>
+      proto.TypeVariable(
+        proto.TypeVariable.TyVar.Inferred(
+          proto.InferredTypeVariable(i, kind.toProto)))
     case TypeApply(typ, params) =>
       proto.TypeApply(typ.toProto, params.map(_.toProto))
     case TypeConstructor(name, kind) =>
@@ -25,9 +31,13 @@ sealed trait Type {
   }
 
   def freeTypeVariables: Set[TypeVariable] = this match {
-    case tyVar @ TypeVariable(_, _) =>
+    case tyVar @ NamedTypeVariable(_, _) =>
       Set(tyVar)
-    case TypeApply(tyVar @ TypeVariable(_, _), params) =>
+    case tyVar @ InferredTypeVariable(_, _) =>
+      Set(tyVar)
+    case TypeApply(tyVar @ InferredTypeVariable(_, _), params) =>
+      params.flatMap(_.freeTypeVariables).toSet + tyVar
+    case TypeApply(tyVar @ NamedTypeVariable(_, _), params) =>
       params.flatMap(_.freeTypeVariables).toSet + tyVar
     case TypeApply(typ, params) =>
       typ.freeTypeVariables ++ params.flatMap(_.freeTypeVariables).toSet
@@ -35,14 +45,19 @@ sealed trait Type {
       Set.empty
   }
 
-  def substitute(subst: Map[TypeVariable, Type]): Type = this match {
-    case tyVar @ TypeVariable(_, _) =>
-      subst.getOrElse(tyVar, tyVar)
-    case tyCon @ TypeConstructor(_, _) =>
-      tyCon
-    case TypeApply(typ, params) =>
-      TypeApply(typ.substitute(subst), params.map(_.substitute(subst)))
-  }
+  def substitute(subst: Map[TypeVariable, Type]): Type =
+    if (subst.isEmpty)
+      this
+    else this match {
+      case tyVar @ NamedTypeVariable(_, _) =>
+        subst.getOrElse(tyVar, tyVar)
+      case tyVar @ InferredTypeVariable(_, _) =>
+        subst.getOrElse(tyVar, tyVar)
+      case tyCon @ TypeConstructor(_, _) =>
+        tyCon
+      case TypeApply(typ, params) =>
+        TypeApply(typ.substitute(subst), params.map(_.substitute(subst)))
+    }
 }
 
 object Type {
@@ -66,8 +81,8 @@ object Type {
   }
 
   def fromProto(typ: proto.Type): Type = typ match {
-    case proto.TypeVariable(id, kind) =>
-      TypeVariable(id, Kind.fromProto(kind))
+    case tyVar @ proto.TypeVariable(_) =>
+      TypeVariable.fromProto(tyVar)
     case proto.TypeConstructor(name, kind) =>
       TypeConstructor(name, Kind.fromProto(kind))
     case proto.TypeApply(typ, params) =>
@@ -77,16 +92,37 @@ object Type {
   }
 }
 
-case class TypeVariable(id: Int, kind: Kind) extends Type {
+sealed abstract class TypeVariable extends Type {
   def occursIn(typ: Type) = typ.freeTypeVariables.contains(this)
+
+  override def toProto: proto.TypeVariable = this match {
+    case NamedTypeVariable(n, kind) =>
+      proto.TypeVariable(
+        proto.TypeVariable.TyVar.Named(
+          proto.NamedTypeVariable(n, kind.toProto)))
+    case InferredTypeVariable(i, kind) =>
+      proto.TypeVariable(
+        proto.TypeVariable.TyVar.Inferred(
+          proto.InferredTypeVariable(i, kind.toProto)))
+  }
 }
+
+case class NamedTypeVariable(name: String, kind: Kind) extends TypeVariable
+
+case class InferredTypeVariable(id: Int, kind: Kind) extends TypeVariable
 
 object TypeVariable {
   val nextId = new AtomicInteger(1)
   def apply(kind: Kind = Atomic): TypeVariable =
-    TypeVariable(nextId.getAndIncrement, kind)
-  def fromProto(tyVar: proto.TypeVariable) =
-    TypeVariable(tyVar.id, Atomic)
+    InferredTypeVariable(nextId.getAndIncrement, kind)
+  def fromProto(tyVar: proto.TypeVariable) = tyVar.tyVar match {
+    case proto.TypeVariable.TyVar.Named(proto.NamedTypeVariable(name, kind)) =>
+      NamedTypeVariable(name, Kind.fromProto(kind))
+    case proto.TypeVariable.TyVar.Inferred(proto.InferredTypeVariable(id, kind)) =>
+      InferredTypeVariable(id, Kind.fromProto(kind))
+    case proto.TypeVariable.TyVar.Empty =>
+      throw new Exception("Empty TypeVariable in protobuf")
+  }
 }
 
 case class TypeConstructor(name: String, kind: Kind) extends Type

@@ -31,7 +31,12 @@ message Kind {
   }
 }
 
-message TypeVariable {
+message NamedTypeVariable {
+  string name = 1;
+  Kind kind = 2;
+}
+
+message InferredTypeVariable {
   int32 id = 1;
   Kind kind = 2;
 }
@@ -44,6 +49,13 @@ message TypeConstructor {
 message TypeApply {
   Type typ = 1;
   repeated Type params = 2;
+}
+
+message TypeVariable {
+  oneof tyVar {
+    NamedTypeVariable named = 1;
+    InferredTypeVariable inferred = 2;
+  }
 }
 
 message Type {
@@ -143,8 +155,8 @@ message If {
 
 message Param {
   string name = 1;
-  TypeScheme ascribedAs = 3;
-  NameWithType nameWithType = 2;
+  TypeScheme ascribedAs = 2;
+  NameWithType nameWithType = 3;
 }
 
 message Lambda {
@@ -167,19 +179,19 @@ message Ascription {
 
 message Expr {
   oneof sealed_value {
-    Reference ref = 2;
-    LiteralInt int = 3;
-    LiteralLong long = 4;
-    LiteralFloat flt = 5;
-    LiteralDouble dbl = 6; 
-    LiteralBoolean boolean = 7;
-    LiteralString str = 8;
-    LiteralChar char = 9;
-    LiteralUnit unit = 10;
-    If if = 11;
-    Lambda lambda = 12;
-    Apply apply = 13;
-    Ascription ascription = 14;
+    Reference ref = 1;
+    LiteralInt int = 2;
+    LiteralLong long = 3;
+    LiteralFloat flt = 4;
+    LiteralDouble dbl = 5; 
+    LiteralBoolean boolean = 6;
+    LiteralString str = 7;
+    LiteralChar char = 8;
+    LiteralUnit unit = 9;
+    If if = 10;
+    Lambda lambda = 11;
+    Apply apply = 12;
+    Ascription ascription = 13;
   }
 }
 
