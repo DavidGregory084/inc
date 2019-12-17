@@ -75,9 +75,9 @@ object Printer {
       Doc.text("T" + i.toString)
     case TypeConstructor(nm, _) =>
       Doc.text(nm)
-    case TypeApply(typ, params) if params.isEmpty =>
+    case TypeApply(typ, params, _) if params.isEmpty =>
       print(typ)
-    case TypeApply(TypeConstructor("->", _), params) =>
+    case TypeApply(TypeConstructor("->", _), params, _) =>
       val args =
         if (params.length == 2)
           print(params.head)
@@ -87,7 +87,7 @@ object Printer {
         }
 
         Doc.char('(') + args & Doc.text("->") & print(params.last) + Doc.char(')')
-    case TypeApply(typ, params) =>
+    case TypeApply(typ, params, _) =>
       print(typ) + Doc.intercalate(Doc.char(',') + Doc.space, params.map(print))
         .tightBracketBy(Doc.char('['), Doc.char(']'))
   }

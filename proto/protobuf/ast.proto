@@ -49,6 +49,7 @@ message TypeConstructor {
 message TypeApply {
   Type typ = 1;
   repeated Type params = 2;
+  Kind kind = 3;
 }
 
 message TypeVariable {

@@ -51,7 +51,7 @@ class ExprParser(typeVars: Map[String, TypeVariable]) {
       val kind = Kind.Function(params.length)
       val name = id.mkString(".")
       val tp = typeVars.getOrElse(name, TypeConstructor(name, kind))
-      TypeApply(tp, params.toList)
+      TypeApply(tp, params.toList, KindVariable())
     case (id, None) =>
       val name = id.mkString(".")
       typeVars.getOrElse(name, TypeConstructor(name, Atomic))
@@ -231,7 +231,7 @@ object Parser {
         case (name, Some(mapping)) =>
           val tparams = mapping.map { case (_, typ) => typ }.toList
           val kind = Parameterized(tparams.map(_.kind), Atomic)
-          val typ = TypeScheme(tparams.toList, TypeApply(TypeConstructor(name, kind), tparams))
+          val typ = TypeScheme(tparams.toList, TypeApply(TypeConstructor(name, kind), tparams, Atomic))
           inBraces(dataConstructor(typ, mapping.toMap).rep(sep = maybeSemi./)).map { cases =>
             (name, tparams, cases)
           }

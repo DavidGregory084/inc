@@ -44,17 +44,17 @@ class Solve(context: Printer.SourceContext, isTraceEnabled: Boolean) extends Laz
     lazy val llRed = ll.style(Style.Ansi.Fg.Red).render(context.consoleWidth)
     lazy val rrRed = rr.style(Style.Ansi.Fg.Red).render(context.consoleWidth)
     lazy val llYellow = ll.style(Style.Ansi.Fg.Yellow).render(context.consoleWidth)
-    lazy val rrYellow = ll.style(Style.Ansi.Fg.Yellow).render(context.consoleWidth)
+    lazy val rrYellow = rr.style(Style.Ansi.Fg.Yellow).render(context.consoleWidth)
 
     if (isTraceEnabled)
       logger.info(NL + s"Unify ${llYellow} with ${rrYellow}")
 
     def go(left: Type, right: Type): Infer[Substitution] = {
       (left, right) match {
-        case (TypeApply(_, largs), TypeApply(_, rargs)) if largs.length != rargs.length =>
+        case (TypeApply(_, largs, _), TypeApply(_, rargs, _)) if largs.length != rargs.length =>
           TypeError.singleton(pos, s"${llRed} does not unify with ${rrRed}")
 
-        case (TypeApply(ltyp, largs), TypeApply(rtyp, rargs)) =>
+        case (TypeApply(ltyp, largs, _), TypeApply(rtyp, rargs, _)) =>
           unify(ltyp, rtyp, pos).flatMap { outerSubst =>
 
             val result: Infer[Substitution] = Right(outerSubst)

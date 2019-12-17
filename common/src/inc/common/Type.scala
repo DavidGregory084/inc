@@ -2,7 +2,7 @@ package inc.common
 
 import java.lang.{ Exception, String }
 import java.util.concurrent.atomic.AtomicInteger
-import scala.{ Int, StringContext, Product, Serializable }
+import scala.{ Int, Product, Serializable }
 import scala.collection.immutable.{ List, Map, Set }
 
 sealed abstract class Type extends Product with Serializable {
@@ -17,8 +17,8 @@ sealed abstract class Type extends Product with Serializable {
       proto.TypeVariable(
         proto.TypeVariable.TyVar.Inferred(
           proto.InferredTypeVariable(i, kind.toProto)))
-    case TypeApply(typ, params) =>
-      proto.TypeApply(typ.toProto, params.map(_.toProto))
+    case TypeApply(typ, params, kind) =>
+      proto.TypeApply(typ.toProto, params.map(_.toProto), kind.toProto)
     case TypeConstructor(name, kind) =>
       proto.TypeConstructor(name, kind.toProto)
   }
@@ -35,11 +35,11 @@ sealed abstract class Type extends Product with Serializable {
       Set(tyVar)
     case tyVar @ InferredTypeVariable(_, _) =>
       Set(tyVar)
-    case TypeApply(tyVar @ InferredTypeVariable(_, _), params) =>
+    case TypeApply(tyVar @ InferredTypeVariable(_, _), params, _) =>
       params.flatMap(_.freeTypeVariables).toSet + tyVar
-    case TypeApply(tyVar @ NamedTypeVariable(_, _), params) =>
+    case TypeApply(tyVar @ NamedTypeVariable(_, _), params, _) =>
       params.flatMap(_.freeTypeVariables).toSet + tyVar
-    case TypeApply(typ, params) =>
+    case TypeApply(typ, params, _) =>
       typ.freeTypeVariables ++ params.flatMap(_.freeTypeVariables).toSet
     case TypeConstructor(_, _) =>
       Set.empty
@@ -55,8 +55,10 @@ sealed abstract class Type extends Product with Serializable {
         subst.getOrElse(tyVar, tyVar)
       case tyCon @ TypeConstructor(_, _) =>
         tyCon
-      case TypeApply(typ, params) =>
-        TypeApply(typ.substitute(subst), params.map(_.substitute(subst)))
+      case ta @ TypeApply(typ, params, _) =>
+        ta.copy(
+          typ = typ.substitute(subst),
+          params = params.map(_.substitute(subst)))
     }
 
   def defaultKinds: Type = this match {
@@ -66,8 +68,14 @@ sealed abstract class Type extends Product with Serializable {
       InferredTypeVariable(id, kind.default)
     case TypeConstructor(name, kind) =>
       TypeConstructor(name, kind.default)
-    case TypeApply(typ, tparams) =>
-      TypeApply(typ.defaultKinds, tparams.map(_.defaultKinds))
+    case TypeApply(typ, tparams, _) =>
+      val defaultedTyp = typ.defaultKinds
+      val defaultedTparams = tparams.map(_.defaultKinds)
+      val resultKind = defaultedTyp.kind
+      TypeApply(
+        defaultedTyp,
+        defaultedTparams,
+        resultKind)
   }
 
   def substituteKinds(subst: Map[KindVariable, Kind]): Type = this match {
@@ -77,8 +85,11 @@ sealed abstract class Type extends Product with Serializable {
       InferredTypeVariable(id, kind.substitute(subst))
     case TypeConstructor(name, kind) =>
       TypeConstructor(name, kind.substitute(subst))
-    case TypeApply(typ, tparams) =>
-      TypeApply(typ.substituteKinds(subst), tparams.map(_.substituteKinds(subst)))
+    case TypeApply(typ, tparams, kind) =>
+      TypeApply(
+        typ.substituteKinds(subst),
+        tparams.map(_.substituteKinds(subst)),
+        kind.substitute(subst))
   }
 }
 
@@ -99,7 +110,8 @@ object Type {
   def Function(from: List[Type], to: Type) = {
     TypeApply(
       TypeConstructor("->", Parameterized(from.map(_ => Atomic), Atomic)),
-      from :+ to)
+      from :+ to,
+      Atomic)
   }
 
   def fromProto(typ: proto.Type): Type = typ match {
@@ -107,8 +119,11 @@ object Type {
       TypeVariable.fromProto(tyVar)
     case proto.TypeConstructor(name, kind) =>
       TypeConstructor(name, Kind.fromProto(kind))
-    case proto.TypeApply(typ, params) =>
-      TypeApply(Type.fromProto(typ), params.map(Type.fromProto).toList)
+    case proto.TypeApply(typ, params, kind) =>
+      TypeApply(
+        Type.fromProto(typ),
+        params.map(Type.fromProto).toList,
+        Kind.fromProto(kind))
     case proto.Type.Empty =>
       throw new Exception("Empty Type in protobuf")
   }
@@ -153,13 +168,4 @@ object TypeVariable {
 
 case class TypeConstructor(name: String, kind: Kind) extends Type
 
-case class TypeApply(typ: Type, params: List[Type]) extends Type {
-  def kind: Kind = typ.kind match {
-    case Parameterized(_, result) =>
-      result
-    case kindVar @ KindVariable(_) =>
-      kindVar
-    case _ =>
-      throw new Exception(s"Type application ${Printer.print(this).render(80)} has unexpected kind ${typ.kind}")
-  }
-}
+case class TypeApply(typ: Type, params: List[Type], kind: Kind) extends Type

@@ -44,28 +44,50 @@ object Kindchecker extends LazyLogging {
   }
 
   def gather(typ: Type, pos: Pos): List[KindConstraint] = typ match {
-    case NamedTypeVariable(_, _) =>
+    case tv @ NamedTypeVariable(_, _) =>
+      trace(tv.name, tv.kind)
       List.empty
-    case InferredTypeVariable(_, _) =>
+    case tv @ InferredTypeVariable(_, _) =>
+      trace(tv.name, tv.kind)
       List.empty
-    case TypeConstructor(_, _) =>
+    case tc @ TypeConstructor(_, _) =>
+      trace(tc.name, tc.kind)
       List.empty
-    case TypeApply(tp, appliedTps) =>
-      val tparamKinds = appliedTps.map(_.kind)
-      val appKind = Parameterized(tparamKinds, Atomic)
-      val appCst = List(EqualKind(tp.kind, appKind, pos))
+    case TypeApply(tp, appliedTps, kind) =>
+      trace("Type application", kind)
+
+      val tpCsts = gather(tp, pos)
+      trace("Type to apply", tpCsts)
+
       val tparamCsts = appliedTps.flatMap(gather(_, pos))
-      val tpString = Printer.print(tp).render(80)
-      trace("Application of " + tpString, appCst)
-      tparamCsts ++ appCst
+
+      tparamCsts.zipWithIndex.foreach {
+        case (csts, idx) =>
+          trace(s"Type argument ${idx + 1}", csts)
+      }
+
+      val tparamKinds = appliedTps.map(_.kind)
+      val appliedKind = Parameterized(tparamKinds, kind)
+      trace("Applied kind", appliedKind)
+
+      val appCst = List(EqualKind(tp.kind, appliedKind, pos))
+
+      tpCsts ++ tparamCsts ++ appCst
   }
 
   def gather(constr: DataConstructor[NamePosType]): List[KindConstraint] = constr match {
-    case DataConstructor(_, params, _, _) =>
-      params.foldLeft(List.empty[KindConstraint]) {
-        case (cstsSoFar, Param(_, _, meta)) =>
-          cstsSoFar ++ gather(meta.typ.typ, meta.pos)
+    case DataConstructor(name, params, _, _) =>
+      val constraints = params.foldLeft(List.empty[KindConstraint]) {
+        case (cstsSoFar, Param(paramName, _, meta)) =>
+          val paramResultCst = List(EqualKind(meta.typ.typ.kind, Atomic, meta.pos))
+          trace(paramName, paramResultCst)
+          val paramCsts = gather(meta.typ.typ, meta.pos)
+          cstsSoFar ++ paramResultCst ++ paramCsts
       }
+
+      trace(name, constraints)
+
+      constraints
   }
 
   def gather(data: Data[NamePosType]): Infer[List[KindConstraint]] = data match {
@@ -78,9 +100,11 @@ object Kindchecker extends LazyLogging {
           cstsSoFar ++ gather(nextConstr)
       }
 
-      trace(name, constraintsFromConstrs ++ parentConstraints)
+      val allConstraints = constraintsFromConstrs ++ parentConstraints
 
-      Right(constraintsFromConstrs ++ parentConstraints)
+      trace(name, allConstraints)
+
+      Right(allConstraints)
   }
 
   def chainSubstitutions(ss: List[Substitution]): Substitution =
@@ -108,7 +132,7 @@ object Kindchecker extends LazyLogging {
     lazy val llRed = ll.style(Style.Ansi.Fg.Red).render(80)
     lazy val rrRed = rr.style(Style.Ansi.Fg.Red).render(80)
     lazy val llYellow = ll.style(Style.Ansi.Fg.Yellow).render(80)
-    lazy val rrYellow = ll.style(Style.Ansi.Fg.Yellow).render(80)
+    lazy val rrYellow = rr.style(Style.Ansi.Fg.Yellow).render(80)
 
     logger.info(NL + s"Unify ${llYellow} with ${rrYellow}")
 
@@ -117,7 +141,7 @@ object Kindchecker extends LazyLogging {
         case (Parameterized(lparams, _), Parameterized(rparams, _)) if lparams.length != rparams.length =>
           TypeError.singleton(pos, s"${llRed} does not unify with ${rrRed}")
 
-        case (Parameterized(largs, _), Parameterized(rargs, _)) =>
+        case (Parameterized(largs, lres), Parameterized(rargs, rres)) =>
           val emptyRes: Infer[Substitution] = Right(EmptySubst)
 
           largs.zip(rargs).foldLeft(emptyRes) {
@@ -126,6 +150,10 @@ object Kindchecker extends LazyLogging {
                 subst <- substSoFar
                 newSubst <- unify(ll.substitute(subst), rr.substitute(subst), pos)
               } yield chainSubstitution(subst, newSubst)
+          }.flatMap { paramSubst =>
+            unify(lres.substitute(paramSubst), rres.substitute(paramSubst), pos).map { resultSubst =>
+              chainSubstitution(paramSubst, resultSubst)
+            }
           }
 
         case (Atomic, Atomic) =>
@@ -167,9 +195,7 @@ object Kindchecker extends LazyLogging {
         logger.info(NL + "Apply substitution: " + substitution)
       }
 
-      checkedData = data
-        .substituteKinds(subst)
-        .defaultKinds
+      checkedData = data.substituteKinds(subst).defaultKinds
 
       kindEnv = checkedData.typeParams
         .map(tv => tv.name -> tv.kind)

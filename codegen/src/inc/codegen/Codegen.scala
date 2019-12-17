@@ -197,9 +197,9 @@ class Codegen(verifyCodegen: Boolean) {
       Right(AsmType.CHAR_TYPE.getDescriptor)
     case TypeConstructor("String", _) =>
       Right(AsmType.getDescriptor(classOf[String]))
-    case TypeApply(TypeConstructor("->", _), params) =>
+    case TypeApply(TypeConstructor("->", _), params, _) =>
       functionClass(params.length - 1).map(AsmType.getDescriptor)
-    case TypeApply(typ, _) =>
+    case TypeApply(typ, _, _) =>
       descriptorFor(typ)
     case TypeConstructor(name, _) =>
       Either.catchOnly[ClassNotFoundException] {
@@ -228,9 +228,9 @@ class Codegen(verifyCodegen: Boolean) {
       Right(AsmType.CHAR_TYPE)
     case TypeConstructor("String", _) =>
       Right(AsmType.getType(classOf[String]))
-    case TypeApply(TypeConstructor("->", _), params) =>
+    case TypeApply(TypeConstructor("->", _), params, _) =>
       functionClass(params.length - 1).map(AsmType.getType)
-    case TypeApply(typ, _) =>
+    case TypeApply(typ, _, _) =>
       asmTypeOf(typ)
     case TypeConstructor(name, _) =>
       Either.catchOnly[ClassNotFoundException] {
@@ -259,9 +259,9 @@ class Codegen(verifyCodegen: Boolean) {
       Right(AsmType.getType(classOf[java.lang.Character]))
     case TypeConstructor("String", _) =>
       Right(AsmType.getType(classOf[String]))
-    case TypeApply(TypeConstructor("->", _), params) =>
+    case TypeApply(TypeConstructor("->", _), params, _) =>
       functionClass(params.length - 1).map(AsmType.getType)
-    case TypeApply(typ, _) =>
+    case TypeApply(typ, _, _) =>
       boxedAsmTypeOf(typ)
     case TypeConstructor(name, _) =>
       Either.catchOnly[ClassNotFoundException] {
@@ -337,7 +337,7 @@ class Codegen(verifyCodegen: Boolean) {
       newExpr(classWriter, className, generator, outerName, arguments, locals)(expr)
 
     case Apply(fn, args, nameWithType) =>
-      val TypeScheme(_, TypeApply(TypeConstructor("->", _), tpArgs)) = fn.meta.typ
+      val TypeScheme(_, TypeApply(TypeConstructor("->", _), tpArgs, _)) = fn.meta.typ
       val objectType = AsmType.getType(classOf[Object])
 
       for {
@@ -364,7 +364,7 @@ class Codegen(verifyCodegen: Boolean) {
       }
 
     case lam @ Lambda(params, body, nameWithType) =>
-      val TypeScheme(_, TypeApply(TypeConstructor("->", _), tpArgs)) = nameWithType.typ
+      val TypeScheme(_, TypeApply(TypeConstructor("->", _), tpArgs, _)) = nameWithType.typ
 
       val capturedVars = lam.capturedVariables.toList
       val capturedVarsWithIdx = capturedVars.zipWithIndex
