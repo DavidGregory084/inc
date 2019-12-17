@@ -157,6 +157,8 @@ case class TypeApply(typ: Type, params: List[Type]) extends Type {
   def kind: Kind = typ.kind match {
     case Parameterized(_, result) =>
       result
+    case kindVar @ KindVariable(_) =>
+      kindVar
     case _ =>
       throw new Exception(s"Type application ${Printer.print(this).render(80)} has unexpected kind ${typ.kind}")
   }

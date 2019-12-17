@@ -5,7 +5,7 @@ import mill.contrib.scalapblib._
 
 import ammonite.ops._
 
-import $ivy.`com.lihaoyi::mill-contrib-buildinfo:0.3.6`
+import $ivy.`com.lihaoyi::mill-contrib-buildinfo:0.5.2`
 import mill.contrib.BuildInfo
 
 import $ivy.`io.github.davidgregory084::mill-tpolecat:0.1.2`

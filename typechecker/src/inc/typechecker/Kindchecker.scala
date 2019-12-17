@@ -14,6 +14,12 @@ object Kindchecker extends LazyLogging {
   type Substitution = Map[KindVariable, Kind]
   val EmptySubst: Substitution = Map.empty
 
+  def trace(name: String, kind: Kind) = {
+    val kindString = Printer.print(kind).render(80)
+    val formattedMsg = NL + name + ": " + kindString
+    logger.info(formattedMsg)
+  }
+
   def trace(name: String, env: Map[String, Kind]) = {
     val formattedMsg = NL + name + ": " + (NL * 2) + env.map {
       case (nm, kind) =>
@@ -30,9 +36,11 @@ object Kindchecker extends LazyLogging {
   }
 
   def trace(name: String, constraints: List[KindConstraint]) = {
-    val formattedMsg = NL + name + ": " + (NL * 2) +
-      constraints.map(Printer.print).map(_.render(80)).mkString(NL)
-    logger.info(formattedMsg)
+    if (constraints.nonEmpty) {
+      val formattedMsg = NL + name + ": " + (NL * 2) +
+        constraints.map(Printer.print).map(_.render(80)).mkString(NL)
+      logger.info(formattedMsg)
+    }
   }
 
   def gather(typ: Type, pos: Pos): List[KindConstraint] = typ match {

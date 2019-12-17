@@ -86,7 +86,7 @@ object Printer {
             .tightBracketBy(Doc.char('('), Doc.char(')'))
         }
 
-        Doc.char('(') + args + Doc.text(" -> ") + print(params.last) + Doc.char(')')
+        Doc.char('(') + args & Doc.text("->") & print(params.last) + Doc.char(')')
     case TypeApply(typ, params) =>
       print(typ) + Doc.intercalate(Doc.char(',') + Doc.space, params.map(print))
         .tightBracketBy(Doc.char('['), Doc.char(']'))
@@ -98,11 +98,14 @@ object Printer {
     case KindVariable(id) =>
       Doc.text("K"+ id.toString)
     case Parameterized(params, result) =>
-      if (params.length == 1)
-        print(params.head) & Doc.text("->") & print(result)
-      else
-        Doc.intercalate(Doc.char(',') + Doc.space, params.map(print))
-          .tightBracketBy(Doc.char('('), Doc.char(')')) & Doc.text("->") & print(result)
+      val args =
+        if (params.length == 1)
+          print(params.head)
+        else
+          Doc.intercalate(Doc.char(',') + Doc.space, params.map(print))
+            .tightBracketBy(Doc.char('('), Doc.char(')'))
+
+      Doc.char('(') + args & Doc.text("->") & print(result) + Doc.char(')')
   }
 
   def print(typ: TypeScheme): Doc = {

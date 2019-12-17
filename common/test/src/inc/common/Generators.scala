@@ -244,7 +244,7 @@ trait Generators { self: Matchers =>
   def declGen(modName: ModuleName) =
     StateT.modifyF[Gen, (Decls, Int)] {
       case (decls, remaining) =>
-        val declGens = List(letGen(modName, decls), dataGen(modName))
+        val declGens = List(letGen(modName, decls)/*, dataGen(modName)*/)
         Gen.oneOf(declGens).flatMap { declGen =>
           declGen.map { decl => (decls :+ decl, remaining - 1) }
         }
