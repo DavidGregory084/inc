@@ -183,95 +183,95 @@ class Codegen(verifyCodegen: Boolean) {
     }
 
   def descriptorFor(typ: Type): Either[List[CodegenError], String] = typ match {
-    case TypeConstructor("Int", _) =>
+    case TypeConstructor("Int", _, _) =>
       Right(AsmType.INT_TYPE.getDescriptor)
-    case TypeConstructor("Long", _) =>
+    case TypeConstructor("Long", _, _) =>
       Right(AsmType.LONG_TYPE.getDescriptor)
-    case TypeConstructor("Float", _) =>
+    case TypeConstructor("Float", _, _) =>
       Right(AsmType.FLOAT_TYPE.getDescriptor)
-    case TypeConstructor("Double", _) =>
+    case TypeConstructor("Double", _, _) =>
       Right(AsmType.DOUBLE_TYPE.getDescriptor)
-    case TypeConstructor("Boolean", _) =>
+    case TypeConstructor("Boolean", _, _) =>
       Right(AsmType.BOOLEAN_TYPE.getDescriptor)
-    case TypeConstructor("Char", _) =>
+    case TypeConstructor("Char", _, _) =>
       Right(AsmType.CHAR_TYPE.getDescriptor)
-    case TypeConstructor("String", _) =>
+    case TypeConstructor("String", _, _) =>
       Right(AsmType.getDescriptor(classOf[String]))
-    case TypeApply(TypeConstructor("->", _), params, _) =>
+    case TypeApply(TypeConstructor("->", _, _), params, _, _) =>
       functionClass(params.length - 1).map(AsmType.getDescriptor)
-    case TypeApply(typ, _, _) =>
+    case TypeApply(typ, _, _, _) =>
       descriptorFor(typ)
-    case TypeConstructor(name, _) =>
+    case TypeConstructor(name, _, _) =>
       Either.catchOnly[ClassNotFoundException] {
         AsmType.getDescriptor(Class.forName(name))
       }.leftFlatMap { _ =>
         CodegenError.singleton(s"Class ${name} could not be found")
       }
-    case NamedTypeVariable(_, _) =>
+    case NamedTypeVariable(_, _, _) =>
       Right(AsmType.getDescriptor(classOf[Object]))
-    case InferredTypeVariable(_, _) =>
+    case InferredTypeVariable(_, _, _) =>
       Right(AsmType.getDescriptor(classOf[Object]))
   }
 
   def asmTypeOf(typ: Type): Either[List[CodegenError], AsmType] = typ match {
-    case TypeConstructor("Int", _) =>
+    case TypeConstructor("Int", _, _) =>
       Right(AsmType.INT_TYPE)
-    case TypeConstructor("Long", _) =>
+    case TypeConstructor("Long", _, _) =>
       Right(AsmType.LONG_TYPE)
-    case TypeConstructor("Float", _) =>
+    case TypeConstructor("Float", _, _) =>
       Right(AsmType.FLOAT_TYPE)
-    case TypeConstructor("Double", _) =>
+    case TypeConstructor("Double", _, _) =>
       Right(AsmType.DOUBLE_TYPE)
-    case TypeConstructor("Boolean", _) =>
+    case TypeConstructor("Boolean", _, _) =>
       Right(AsmType.BOOLEAN_TYPE)
-    case TypeConstructor("Char", _) =>
+    case TypeConstructor("Char", _, _) =>
       Right(AsmType.CHAR_TYPE)
-    case TypeConstructor("String", _) =>
+    case TypeConstructor("String", _, _) =>
       Right(AsmType.getType(classOf[String]))
-    case TypeApply(TypeConstructor("->", _), params, _) =>
+    case TypeApply(TypeConstructor("->", _, _), params, _, _) =>
       functionClass(params.length - 1).map(AsmType.getType)
-    case TypeApply(typ, _, _) =>
+    case TypeApply(typ, _, _, _) =>
       asmTypeOf(typ)
-    case TypeConstructor(name, _) =>
+    case TypeConstructor(name, _, _) =>
       Either.catchOnly[ClassNotFoundException] {
         AsmType.getType(Class.forName(name))
       }.leftFlatMap { _ =>
         CodegenError.singleton(s"Class ${name} could not be found")
       }
-    case NamedTypeVariable(_, _) =>
+    case NamedTypeVariable(_, _, _) =>
       Right(AsmType.getType(classOf[Object]))
-    case InferredTypeVariable(_, _) =>
+    case InferredTypeVariable(_, _, _) =>
       Right(AsmType.getType(classOf[Object]))
   }
 
   def boxedAsmTypeOf(typ: Type): Either[List[CodegenError], AsmType] = typ match {
-    case TypeConstructor("Int", _) =>
+    case TypeConstructor("Int", _, _) =>
       Right(AsmType.getType(classOf[java.lang.Integer]))
-    case TypeConstructor("Long", _) =>
+    case TypeConstructor("Long", _, _) =>
       Right(AsmType.getType(classOf[java.lang.Long]))
-    case TypeConstructor("Float", _) =>
+    case TypeConstructor("Float", _, _) =>
       Right(AsmType.getType(classOf[java.lang.Float]))
-    case TypeConstructor("Double", _) =>
+    case TypeConstructor("Double", _, _) =>
       Right(AsmType.getType(classOf[java.lang.Double]))
-    case TypeConstructor("Boolean", _) =>
+    case TypeConstructor("Boolean", _, _) =>
       Right(AsmType.getType(classOf[java.lang.Boolean]))
-    case TypeConstructor("Char", _) =>
+    case TypeConstructor("Char", _, _) =>
       Right(AsmType.getType(classOf[java.lang.Character]))
-    case TypeConstructor("String", _) =>
+    case TypeConstructor("String", _, _) =>
       Right(AsmType.getType(classOf[String]))
-    case TypeApply(TypeConstructor("->", _), params, _) =>
+    case TypeApply(TypeConstructor("->", _, _), params, _, _) =>
       functionClass(params.length - 1).map(AsmType.getType)
-    case TypeApply(typ, _, _) =>
+    case TypeApply(typ, _, _, _) =>
       boxedAsmTypeOf(typ)
-    case TypeConstructor(name, _) =>
+    case TypeConstructor(name, _, _) =>
       Either.catchOnly[ClassNotFoundException] {
         AsmType.getType(Class.forName(name))
       }.leftFlatMap { _ =>
         CodegenError.singleton(s"Class ${name} could not be found")
       }
-    case NamedTypeVariable(_, _) =>
+    case NamedTypeVariable(_, _, _) =>
       Right(AsmType.getType(classOf[Object]))
-    case InferredTypeVariable(_, _) =>
+    case InferredTypeVariable(_, _, _) =>
       Right(AsmType.getType(classOf[Object]))
   }
 
@@ -337,7 +337,7 @@ class Codegen(verifyCodegen: Boolean) {
       newExpr(classWriter, className, generator, outerName, arguments, locals)(expr)
 
     case Apply(fn, args, nameWithType) =>
-      val TypeScheme(_, TypeApply(TypeConstructor("->", _), tpArgs, _)) = fn.meta.typ
+      val TypeScheme(_, TypeApply(TypeConstructor("->", _, _), tpArgs, _, _)) = fn.meta.typ
       val objectType = AsmType.getType(classOf[Object])
 
       for {
@@ -364,7 +364,7 @@ class Codegen(verifyCodegen: Boolean) {
       }
 
     case lam @ Lambda(params, body, nameWithType) =>
-      val TypeScheme(_, TypeApply(TypeConstructor("->", _), tpArgs, _)) = nameWithType.typ
+      val TypeScheme(_, TypeApply(TypeConstructor("->", _, _), tpArgs, _, _)) = nameWithType.typ
 
       val capturedVars = lam.capturedVariables.toList
       val capturedVarsWithIdx = capturedVars.zipWithIndex

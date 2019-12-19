@@ -5,47 +5,50 @@ import inc.common._
 import cats.data.Chain
 import cats.syntax.either._
 import cats.syntax.functor._
-import org.typelevel.paiges.Style
+import org.typelevel.paiges._
 import java.lang.String
 import scala.{ Boolean, Some, None, Either, Right, StringContext }
 import scala.collection.immutable.{ List, Map }
-import scala.Predef.{ ArrowAssoc, augmentString }
+import scala.Predef.ArrowAssoc
 import com.typesafe.scalalogging.LazyLogging
 
 class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boolean) extends LazyLogging {
+  val kindchecker = new Kindchecker(context, isTraceEnabled: Boolean)
 
   def highlightSource(msg: String, pos: Pos): String =
     Printer.withSourceContext(context)(msg, pos, Style.Ansi.Fg.Yellow)
 
   def trace(name: String, pos: Pos, typ: Type) = {
     if (isTraceEnabled) {
-      val tpString = Printer.print(typ).render(context.consoleWidth)
-      val formattedMsg = NL + name + ": " + tpString
-      logger.info(highlightSource(formattedMsg, pos))
+      val formattedMsg = Doc.hardLine + Doc.text(name + ":") & Printer.print(typ)
+      val formattedStr = formattedMsg.render(context.consoleWidth)
+      logger.info(highlightSource(formattedStr, pos))
     }
   }
 
   def trace(name: String, pos: Pos, typ: TypeScheme) = {
     if (isTraceEnabled) {
-      val tpString = Printer.print(typ).render(context.consoleWidth)
-      val formattedMsg = NL + name + ": " + tpString
-      logger.info(highlightSource(formattedMsg, pos))
+      val formattedMsg = Doc.hardLine + Doc.text(name + ":") & Printer.print(typ)
+      val formattedStr = formattedMsg.render(context.consoleWidth)
+      logger.info(highlightSource(formattedStr, pos))
     }
   }
 
   def trace(name: String, pos: Pos, constraints: List[Constraint]) = {
     if (constraints.nonEmpty && isTraceEnabled) {
-      val formattedMsg = NL + name + ": " + (NL * 2) +
-        constraints.map(Printer.print).map(_.render(context.consoleWidth)).mkString(NL)
-      logger.info(highlightSource(formattedMsg, pos))
+      val header = Doc.hardLine + Doc.text(name + ":") & (Doc.hardLine * 2)
+      val formattedMsg = header + Doc.intercalate(Doc.hardLine, constraints.map(Printer.print))
+      val formattedStr = formattedMsg.render(context.consoleWidth)
+      logger.info(highlightSource(formattedStr, pos))
     }
   }
 
   def trace(name: String, constraints: List[Constraint]) = {
     if (constraints.nonEmpty && isTraceEnabled) {
-      val formattedMsg = NL + name + ": " + (NL * 2) +
-        constraints.map(Printer.print).map(_.render(context.consoleWidth)).mkString(NL)
-      logger.info(formattedMsg)
+      val header = Doc.hardLine + Doc.text(name + ":") & (Doc.hardLine * 2)
+      val formattedMsg = header + Doc.intercalate(Doc.hardLine, constraints.map(Printer.print))
+      val formattedStr = formattedMsg.render(context.consoleWidth)
+      logger.info(formattedStr)
     }
   }
 
@@ -177,8 +180,13 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
 
           _ = trace("Ascribed expression", e.meta.pos, exprCst)
 
-          // Emit a constraint that the expression's type must match the ascription
-          ascriptionCst = List(Equal(e.meta.typ.typ, ascribedAs.typ, meta.pos))
+          ascriptionCst =
+            // Unless we know the ascription is correct
+            if (e.meta.typ.typ == ascribedAs.typ)
+              List.empty
+            // Emit a constraint that the expression's type must match the ascription
+            else
+              List(Equal(e.meta.typ.typ, ascribedAs.typ, meta.pos))
 
           constraints = exprCst ++ ascriptionCst
 
@@ -275,14 +283,14 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
 
         val typeScheme = TypeScheme(
           tparams,
-          TypeApply(TypeConstructor(name, data.kind), tparams, Atomic))
+          TypeApply(TypeConstructor(name, KindVariable(), meta.pos), tparams, KindVariable()))
 
         val checkedData = data.copy(
           cases = checkedCases,
           meta = meta.withType(typeScheme)
         )
 
-        Kindchecker.kindcheck(checkedData).map { d =>
+        kindchecker.kindcheck(checkedData).map { d =>
           (d, List.empty)
         }
     }

@@ -2,7 +2,7 @@ package inc.common
 
 import java.lang.{ String, System }
 import org.typelevel.paiges._
-import scala.{ Int, StringContext }
+import scala.{ Int, StringContext, Some, None }
 import scala.collection.immutable.Map
 import scala.Predef.{ augmentString, wrapRefArray }
 
@@ -69,25 +69,35 @@ object Printer {
   }
 
   def print(typ: Type): Doc = typ match {
-    case NamedTypeVariable(n, _) =>
+    case NamedTypeVariable(n, _, _) =>
       Doc.text(n)
-    case InferredTypeVariable(i, _) =>
+    case InferredTypeVariable(i, _, _) =>
       Doc.text("T" + i.toString)
-    case TypeConstructor(nm, _) =>
+    case TypeConstructor(nm, _, _) =>
       Doc.text(nm)
-    case TypeApply(typ, params, _) if params.isEmpty =>
+    case TypeApply(typ, params, _, _) if params.isEmpty =>
       print(typ)
-    case TypeApply(TypeConstructor("->", _), params, _) =>
-      val args =
+    case TypeApply(TypeConstructor("->", _, _), params, _, _) =>
+      val withParens = params.headOption match {
+        case Some(ta @ TypeApply(TypeConstructor("->", _, _), _, _, _)) =>
+          print(ta).tightBracketBy(Doc.char('('), Doc.char(')'))
+        case Some(other) =>
+          print(other)
+        case None =>
+          Doc.empty
+      }
+
+      val paramDocs =
         if (params.length == 2)
-          print(params.head)
+          withParens
         else {
           Doc.intercalate(Doc.char(',') + Doc.space, params.init.map(print))
             .tightBracketBy(Doc.char('('), Doc.char(')'))
         }
 
-        Doc.char('(') + args & Doc.text("->") & print(params.last) + Doc.char(')')
-    case TypeApply(typ, params, _) =>
+      paramDocs & Doc.text("->") & print(params.last)
+
+    case TypeApply(typ, params, _, _) =>
       print(typ) + Doc.intercalate(Doc.char(',') + Doc.space, params.map(print))
         .tightBracketBy(Doc.char('['), Doc.char(']'))
   }
@@ -98,14 +108,23 @@ object Printer {
     case KindVariable(id) =>
       Doc.text("K"+ id.toString)
     case Parameterized(params, result) =>
-      val args =
+      val withParens = params.headOption match {
+        case Some(p @ Parameterized(_, _)) =>
+          print(p).tightBracketBy(Doc.char('('), Doc.char(')'))
+        case Some(other) =>
+          print(other)
+        case None =>
+          Doc.empty
+      }
+
+      val paramDocs =
         if (params.length == 1)
-          print(params.head)
+          withParens
         else
           Doc.intercalate(Doc.char(',') + Doc.space, params.map(print))
             .tightBracketBy(Doc.char('('), Doc.char(')'))
 
-      Doc.char('(') + args & Doc.text("->") & print(result) + Doc.char(')')
+      paramDocs & Doc.text("->") & print(result)
   }
 
   def print(typ: TypeScheme): Doc = {

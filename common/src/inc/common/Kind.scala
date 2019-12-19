@@ -30,8 +30,8 @@ sealed abstract class Kind extends Product with Serializable {
   def kindVariables: Set[KindVariable] = this match {
     case kindVar @ KindVariable(_) =>
       Set(kindVar)
-    case Parameterized(params, _) =>
-      params.flatMap(_.kindVariables).toSet
+    case Parameterized(params, result) =>
+      params.flatMap(_.kindVariables).toSet ++ result.kindVariables
     case Atomic =>
       Set.empty
   }

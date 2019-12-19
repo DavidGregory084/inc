@@ -5,61 +5,75 @@ import java.lang.String
 import cats.instances.either._
 import cats.syntax.flatMap._
 import org.typelevel.paiges._
-import scala.{ ::, Left, Right, Nil, StringContext }
+import scala.{ ::, Boolean, Left, Right, Nil, StringContext }
 import scala.collection.immutable.{ List, Map }
-import scala.Predef.{ ArrowAssoc, augmentString }
+import scala.Predef.ArrowAssoc
 import com.typesafe.scalalogging.LazyLogging
 
-object Kindchecker extends LazyLogging {
+class Kindchecker(context: Printer.SourceContext, isTraceEnabled: Boolean) extends LazyLogging {
   type Substitution = Map[KindVariable, Kind]
   val EmptySubst: Substitution = Map.empty
 
-  def trace(name: String, kind: Kind) = {
-    val kindString = Printer.print(kind).render(80)
-    val formattedMsg = NL + name + ": " + kindString
-    logger.info(formattedMsg)
-  }
+  def highlightSource(msg: String, pos: Pos): String =
+    Printer.withSourceContext(context)(msg, pos, Style.Ansi.Fg.Yellow)
 
-  def trace(name: String, env: Map[String, Kind]) = {
-    val formattedMsg = NL + name + ": " + (NL * 2) + env.map {
-      case (nm, kind) =>
-        val kindStr = Printer.print(kind).render(80)
-        nm + ": " + kindStr
-    }.mkString(NL)
-
-    logger.info(formattedMsg)
-  }
-
-  def trace(name: String, constraint: KindConstraint) = {
-    val formattedMsg = NL + name + ": " + Printer.print(constraint).render(80)
-    logger.info(formattedMsg)
-  }
-
-  def trace(name: String, constraints: List[KindConstraint]) = {
-    if (constraints.nonEmpty) {
-      val formattedMsg = NL + name + ": " + (NL * 2) +
-        constraints.map(Printer.print).map(_.render(80)).mkString(NL)
-      logger.info(formattedMsg)
+  def trace(name: String, kind: Kind, pos: Pos) = {
+    if (isTraceEnabled) {
+      val formattedMsg = Doc.hardLine + Doc.text(name + ":") & Printer.print(kind)
+      val formattedStr = formattedMsg.render(context.consoleWidth)
+      logger.info(highlightSource(formattedStr, pos))
     }
   }
 
-  def gather(typ: Type, pos: Pos): List[KindConstraint] = typ match {
-    case tv @ NamedTypeVariable(_, _) =>
-      trace(tv.name, tv.kind)
-      List.empty
-    case tv @ InferredTypeVariable(_, _) =>
-      trace(tv.name, tv.kind)
-      List.empty
-    case tc @ TypeConstructor(_, _) =>
-      trace(tc.name, tc.kind)
-      List.empty
-    case TypeApply(tp, appliedTps, kind) =>
-      trace("Type application", kind)
+  def trace(name: String, env: Map[String, Kind]) = {
+    if (env.nonEmpty && isTraceEnabled) {
+      val header = Doc.hardLine + Doc.text(name + ":") + (Doc.hardLine * 2)
 
-      val tpCsts = gather(tp, pos)
+      val formattedMsg = header + Doc.intercalate(Doc.hardLine, env.map {
+        case (nm, kind) =>
+          val kindStr = Printer.print(kind)
+          Doc.text(nm + ":") & kindStr
+      })
+
+      val formattedStr = formattedMsg.render(context.consoleWidth)
+
+      logger.info(formattedStr)
+    }
+  }
+
+  def trace(name: String, constraint: KindConstraint) = {
+    if (isTraceEnabled) {
+      val formattedMsg = Doc.hardLine + Doc.text(name + ":") & Printer.print(constraint)
+      val formattedStr = formattedMsg.render(context.consoleWidth)
+      logger.info(highlightSource(formattedStr, constraint.pos))
+    }
+  }
+
+  def trace(name: String, constraints: List[KindConstraint]) = {
+    if (constraints.nonEmpty && isTraceEnabled) {
+      val header = Doc.hardLine + Doc.text(name + ":") & (Doc.hardLine * 2)
+      val formattedMsg = header + Doc.intercalate(Doc.hardLine, constraints.map(Printer.print))
+      val formattedStr = formattedMsg.render(context.consoleWidth)
+      logger.info(formattedStr)
+    }
+  }
+
+  def gather(typ: Type): List[KindConstraint] = typ match {
+    case NamedTypeVariable(nm, kind, pos) =>
+      trace(s"Reference to $nm", kind, pos)
+      List.empty
+    case InferredTypeVariable(_, _, _) =>
+      List.empty
+    case TypeConstructor(nm, kind, pos) =>
+      trace(s"Reference to $nm", kind, pos)
+      List.empty
+    case TypeApply(tp, appliedTps, kind, pos) =>
+      trace("Type application", kind, pos)
+
+      val tpCsts = gather(tp)
       trace("Type to apply", tpCsts)
 
-      val tparamCsts = appliedTps.flatMap(gather(_, pos))
+      val tparamCsts = appliedTps.flatMap(gather)
 
       tparamCsts.zipWithIndex.foreach {
         case (csts, idx) =>
@@ -68,9 +82,10 @@ object Kindchecker extends LazyLogging {
 
       val tparamKinds = appliedTps.map(_.kind)
       val appliedKind = Parameterized(tparamKinds, kind)
-      trace("Applied kind", appliedKind)
 
       val appCst = List(EqualKind(tp.kind, appliedKind, pos))
+
+      trace("Applied kind", appCst)
 
       tpCsts ++ tparamCsts ++ appCst
   }
@@ -79,10 +94,10 @@ object Kindchecker extends LazyLogging {
     case DataConstructor(name, params, _, _) =>
       val constraints = params.foldLeft(List.empty[KindConstraint]) {
         case (cstsSoFar, Param(paramName, _, meta)) =>
-          val paramResultCst = List(EqualKind(meta.typ.typ.kind, Atomic, meta.pos))
+          val paramResultCst = EqualKind(meta.typ.typ.kind, Atomic, meta.pos)
           trace(paramName, paramResultCst)
-          val paramCsts = gather(meta.typ.typ, meta.pos)
-          cstsSoFar ++ paramResultCst ++ paramCsts
+          val paramCsts = gather(meta.typ.typ)
+          cstsSoFar ++ List(paramResultCst) ++ paramCsts
       }
 
       trace(name, constraints)
@@ -91,18 +106,22 @@ object Kindchecker extends LazyLogging {
   }
 
   def gather(data: Data[NamePosType]): Infer[List[KindConstraint]] = data match {
-    case Data(name, _, cases, meta) =>
-      val parentKind = KindVariable()
-      val parentConstraints = List(EqualKind(parentKind, data.kind, meta.pos))
+    case Data(name, tparams, cases, meta) =>
+      val TypeApply(TypeConstructor(_, kind, _), _, _, _) = meta.typ.typ
+      val parentConstraint = EqualKind(kind, data.kind, meta.pos)
+
+      tparams.foreach { tparam =>
+        trace(tparam.name, tparam.kind, tparam.pos)
+      }
+
+      trace(name, parentConstraint)
 
       val constraintsFromConstrs = cases.foldLeft(List.empty[KindConstraint]) {
         case (cstsSoFar, nextConstr) =>
           cstsSoFar ++ gather(nextConstr)
       }
 
-      val allConstraints = constraintsFromConstrs ++ parentConstraints
-
-      trace(name, allConstraints)
+      val allConstraints = parentConstraint :: constraintsFromConstrs
 
       Right(allConstraints)
   }
@@ -116,7 +135,7 @@ object Kindchecker extends LazyLogging {
   def chainSubstitution(s1: Substitution, s2: Substitution): Substitution =
     s2 ++ s1.view.map { case (kindVar, kind) =>  (kindVar, kind.substitute(s2)) }.toMap
 
-  def bind(pos: Pos, kindVar: KindVariable, kind: Kind): Infer[Substitution] =
+  def bind(kindVar: KindVariable, kind: Kind, pos: Pos): Infer[Substitution] =
     kind match {
       case k @ KindVariable(_) if kindVar == k =>
         Right(EmptySubst)
@@ -129,17 +148,21 @@ object Kindchecker extends LazyLogging {
   def unify(left: Kind, right: Kind, pos: Pos): Infer[Substitution] = {
     lazy val ll = Printer.print(left)
     lazy val rr = Printer.print(right)
-    lazy val llRed = ll.style(Style.Ansi.Fg.Red).render(80)
-    lazy val rrRed = rr.style(Style.Ansi.Fg.Red).render(80)
-    lazy val llYellow = ll.style(Style.Ansi.Fg.Yellow).render(80)
-    lazy val rrYellow = rr.style(Style.Ansi.Fg.Yellow).render(80)
+    lazy val llRed = ll.style(Style.Ansi.Fg.Red)
+    lazy val rrRed = rr.style(Style.Ansi.Fg.Red)
+    lazy val llYellow = ll.style(Style.Ansi.Fg.Yellow)
+    lazy val rrYellow = rr.style(Style.Ansi.Fg.Yellow)
 
-    logger.info(NL + s"Unify ${llYellow} with ${rrYellow}")
+    if (isTraceEnabled) {
+      val traceMsg = Doc.hardLine + Doc.text("Unifying") & llYellow & Doc.text("with") & rrYellow
+      logger.info(traceMsg.render(context.consoleWidth))
+    }
 
     def go(left: Kind, right: Kind): Infer[Substitution] = {
       (left, right) match {
         case (Parameterized(lparams, _), Parameterized(rparams, _)) if lparams.length != rparams.length =>
-          TypeError.singleton(pos, s"${llRed} does not unify with ${rrRed}")
+          val errorMsg = llRed & Doc.text("does not unify with") & rrRed
+          TypeError.singleton(pos, errorMsg.render(context.consoleWidth))
 
         case (Parameterized(largs, lres), Parameterized(rargs, rres)) =>
           val emptyRes: Infer[Substitution] = Right(EmptySubst)
@@ -160,13 +183,14 @@ object Kindchecker extends LazyLogging {
           Right(EmptySubst)
 
         case (kindVar @ KindVariable(_), kind) =>
-          bind(pos, kindVar, kind)
+          bind(kindVar, kind, pos)
 
         case (kind, kindVar @ KindVariable(_)) =>
-          bind(pos, kindVar, kind)
+          bind(kindVar, kind, pos)
 
         case (_, _) =>
-          TypeError.singleton(pos, s"${llRed} does not unify with ${rrRed}")
+          val errorMsg = llRed & Doc.text("does not unify with") & rrRed
+          TypeError.singleton(pos, errorMsg.render(context.consoleWidth))
       }
     }
 
@@ -190,9 +214,10 @@ object Kindchecker extends LazyLogging {
 
       subst <- solve(csts)
 
-      _ = if (subst.nonEmpty) {
-        val substitution = Printer.printKindSubst(subst).render(80)
-        logger.info(NL + "Apply substitution: " + substitution)
+      _ = if (subst.nonEmpty && isTraceEnabled) {
+        val header = Doc.hardLine + Doc.text("Apply substitution:")
+        val substMsg = header & Printer.printKindSubst(subst)
+        logger.info(substMsg.render(context.consoleWidth))
       }
 
       checkedData = data.substituteKinds(subst).defaultKinds
@@ -201,7 +226,7 @@ object Kindchecker extends LazyLogging {
         .map(tv => tv.name -> tv.kind)
         .toMap.updated(checkedData.name, checkedData.kind)
 
-      _ = if (kindEnv.nonEmpty) {
+      _ = if (kindEnv.nonEmpty && isTraceEnabled) {
         trace("Final kind environment", kindEnv)
       }
 

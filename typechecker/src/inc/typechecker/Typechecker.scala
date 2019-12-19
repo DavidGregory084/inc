@@ -2,24 +2,50 @@ package inc.typechecker
 
 import inc.common._
 import java.lang.String
+import org.typelevel.paiges._
 import scala.Boolean
-import scala.collection.immutable.Map
-import scala.Predef.{ ArrowAssoc, augmentString }
+import scala.collection.immutable.{ List, Map }
 import com.typesafe.scalalogging.LazyLogging
 
 object Typechecker extends Typechecker(false)
 
 class Typechecker(isTraceEnabled: Boolean) extends LazyLogging {
 
-  def trace(name: String, env: Environment) = {
+  def trace(context: Printer.SourceContext, name: String, env: Environment) = {
     if (isTraceEnabled) {
-      val formattedMsg = NL + name + ": " + (NL * 2) + env.map {
-        case (nm, tp) =>
-          val tpStr = Printer.print(tp).render(80)
-          nm + ": " + tpStr
-      }.mkString(NL)
+      val header = Doc.hardLine + Doc.text(name + ":") + (Doc.hardLine * 2)
 
-      logger.info(formattedMsg)
+      val formattedMsg = header + Doc.intercalate(Doc.hardLine, env.map {
+        case (nm, tp) =>
+          val tpStr = Printer.print(tp)
+          Doc.text(nm + ":") & tpStr
+      })
+
+      val formattedStr = formattedMsg.render(context.consoleWidth)
+
+      logger.info(formattedStr)
+    }
+  }
+
+  def trace(context: Printer.SourceContext, msg: String, declarations: List[TopLevelDeclaration[NamePosType]]) = {
+    if (isTraceEnabled) {
+      val header = Doc.hardLine + Doc.text(msg + ":") + (Doc.hardLine * 2)
+
+      val formattedMsg = header + Doc.intercalate(Doc.hardLine, declarations.flatMap {
+        case let @ Let(_, _, _) =>
+          val tpStr = Printer.print(let.meta.typ)
+          List(Doc.text(let.name + ":") & tpStr)
+        case data @ Data(_, _, _, _) =>
+          data.cases.map {
+            case constr @ DataConstructor(_, _, _, _) =>
+              val tpStr = Printer.print(constr.meta.typ)
+              Doc.text(constr.name + ":") & tpStr
+          }
+      })
+
+      val formattedStr = formattedMsg.render(context.consoleWidth)
+
+      logger.info(formattedStr)
     }
   }
 
@@ -46,9 +72,7 @@ class Typechecker(isTraceEnabled: Boolean) extends LazyLogging {
       // Apply the substitution from the constraint solution to the module
       typedMod = mod.substitute(subst)
 
-      typeEnv = typedMod.declarations.map(decl => decl.name -> decl.meta.typ)
-
-      _ = trace("Final type environment", typeEnv.toMap)
+      _ = trace(context, "Final type environment", typedMod.declarations)
 
     } yield typedMod
   }

@@ -146,7 +146,7 @@ trait Generators { self: Matchers =>
 
       Let(nm, Lambda(_, _, _), lambdaMeta) = lam
 
-      TypeScheme(_, TypeApply(TypeConstructor("->", _), tpArgs, _)) = lambdaMeta.typ
+      TypeScheme(_, TypeApply(TypeConstructor("->", _, _), tpArgs, _, _)) = lambdaMeta.typ
 
       args <- tpArgs.init.traverse(tp => genArg(tp)(decls))
 

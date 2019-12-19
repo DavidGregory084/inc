@@ -7,7 +7,7 @@ import scala.{ Either, Right, Int, Some, None, StringContext }
 import scala.collection.immutable.{ List, Map, Seq }
 import scala.Predef.augmentString
 
-class ExprParser(typeVars: Map[String, TypeVariable]) {
+class ExprParser(typeEnv: Map[String, Type]) {
   import Parser._
 
   def ifExpr[_: P] = P(
@@ -20,7 +20,14 @@ class ExprParser(typeVars: Map[String, TypeVariable]) {
       If(cond, thenExpr, elseExpr, Pos(from, to))
   }
 
-  def param[_: P] = P(
+  def constructorParam[_: P] = P(
+    Index ~ identifier ~ ":" ~ typeExpr ~ Index
+  ).map {
+    case (from, name, ascribedAs, to) =>
+      Param(name, Some(TypeScheme(List.empty, ascribedAs)), Pos(from, to))
+  }
+
+  def lambdaParam[_: P] = P(
     Index ~ identifier ~ (":" ~ typeExpr).? ~ Index
   ).map {
     case (from, name, ascribedAs, to) =>
@@ -29,7 +36,7 @@ class ExprParser(typeVars: Map[String, TypeVariable]) {
 
   def lambda[_: P] = P(
     Index ~
-    (inParens(param.rep(sep = comma./)) | param.map(Seq(_))) ~ "->" ~/
+    (inParens(lambdaParam.rep(sep = comma./)) | lambdaParam.map(Seq(_))) ~ "->" ~/
       expression ~
       Index
   ).map {
@@ -38,23 +45,31 @@ class ExprParser(typeVars: Map[String, TypeVariable]) {
   }
 
   def funTypeExpr[_: P]: P[Type] = P(
-    (inParens(typeExpr.rep(sep = comma./)) | primaryTypeExpr.map(Seq(_))) ~ "->" ~/ typeExpr
+    Index ~ (inParens(typeExpr.rep(sep = comma./)) | primaryTypeExpr.map(Seq(_))) ~ "->" ~/ typeExpr ~ Index
   ).map {
-    case (paramTyps, returnTyp) =>
-      Type.Function(paramTyps.toList, returnTyp)
+    case (from, paramTyps, returnTyp, to) =>
+      Type.Function(paramTyps.toList, returnTyp, Pos(from, to))
   }
 
   def primaryTypeExpr[_: P]: P[Type] = P(
-    identifier.rep(min = 1, sep = ".") ~ inSquareBraces(typeExpr.rep(min = 1, sep = comma./)).?
+    Index ~ identifier.rep(min = 1, sep = ".") ~ Index ~ inSquareBraces(typeExpr.rep(min = 1, sep = comma./)).? ~ Index
   ).map {
-    case (id, Some(params)) =>
+    case (from, id, endTyCon, Some(params), endTyApp) =>
       val kind = Kind.Function(params.length)
       val name = id.mkString(".")
-      val tp = typeVars.getOrElse(name, TypeConstructor(name, kind))
-      TypeApply(tp, params.toList, KindVariable())
-    case (id, None) =>
+
+      val tp = typeEnv
+        .getOrElse(name, TypeConstructor(name, kind))
+        .withPos(Pos(from, endTyCon))
+
+      TypeApply(tp, params.toList, KindVariable(), Pos(from, endTyApp))
+
+    case (from, id, _, None, to) =>
       val name = id.mkString(".")
-      typeVars.getOrElse(name, TypeConstructor(name, Atomic))
+
+      typeEnv
+        .getOrElse(name, TypeConstructor(name, KindVariable()))
+        .withPos(Pos(from, to))
   }
 
   def typeExpr[_: P]: P[Type] =
@@ -79,7 +94,7 @@ class ExprParser(typeVars: Map[String, TypeVariable]) {
       Index
   ).map {
     case (from, expr, Some(ascribedAs), to) =>
-      Ascription(expr, TypeScheme(List.empty, ascribedAs), Pos(from, to))
+      Ascription(expr, TypeScheme(List.empty, ascribedAs.defaultKinds), Pos(from, to))
     case (_, expr, None, _) =>
       expr
   }
@@ -195,7 +210,7 @@ object Parser {
 
 
   def letDeclaration[_: P] = {
-    val exprParser = new ExprParser(typeVars = Map.empty)
+    val exprParser = new ExprParser(typeEnv = Map.empty)
 
     P(
       Index ~ "let" ~/ identifier ~ "=" ~
@@ -207,42 +222,48 @@ object Parser {
     }
   }
 
-  def dataConstructor[_: P](parentType: TypeScheme, typeVars: Map[String, TypeVariable]) ={
-    val exprParser = new ExprParser(typeVars)
+  def dataConstructor[_: P](parentType: TypeScheme, typeEnv: Map[String, Type]) ={
+    val exprParser = new ExprParser(typeEnv)
 
     P(
-      Index ~ "case" ~/ identifier ~ inParens(exprParser.param.rep(sep = comma./)) ~ Index
+      Index ~ "case" ~/ identifier ~ inParens(exprParser.constructorParam.rep(sep = comma./)) ~ Index
     ).map {
       case (from, name, params, to) =>
         DataConstructor(name, params.toList, parentType, Pos(from, to))
     }
   }
 
-  def typeParams[_: P] = P(
-    "[" ~ identifier.rep(min = 1, sep = comma./) ~ "]"
-  ).map { tparams =>
-    tparams.map { nm =>
-      (nm, NamedTypeVariable(nm, kind = KindVariable()))
-    }
+  def typeParam[_: P] = P( Index ~ identifier ~ Index ).map {
+    case (from, nm, to) =>
+      (nm, NamedTypeVariable(nm, kind = KindVariable(), Pos(from, to)))
   }
 
+  def typeParams[_: P] = P(
+    "[" ~ typeParam.rep(min = 1, sep = comma./) ~ "]"
+  )
+
   def dataDeclaration[_: P] = P(
-    Index ~ "data" ~/ (identifier ~ typeParams.?).flatMap {
-        case (name, Some(mapping)) =>
+    (Index ~ "data" ~/ identifier ~ Index ~ typeParams.? ~ Index).flatMap {
+        case (from, name, endTyCon, Some(mapping), endTyApp) =>
           val tparams = mapping.map { case (_, typ) => typ }.toList
           val kind = Parameterized(tparams.map(_.kind), Atomic)
-          val typ = TypeScheme(tparams.toList, TypeApply(TypeConstructor(name, kind), tparams, Atomic))
-          inBraces(dataConstructor(typ, mapping.toMap).rep(sep = maybeSemi./)).map { cases =>
-            (name, tparams, cases)
+          val tyCon = TypeConstructor(name, kind, Pos(from, endTyCon))
+          val tyApp = TypeApply(tyCon, tparams, Atomic, Pos(from, endTyApp))
+          val typ = TypeScheme(tparams.toList, tyApp)
+          val typeEnv = mapping.toMap.updated(name, tyCon)
+          inBraces(dataConstructor(typ, typeEnv).rep(sep = maybeSemi./)).map { cases =>
+            (from, name, tparams, cases)
           }
-        case (name, None) =>
-          val typ = TypeScheme(List.empty, TypeConstructor(name, Atomic))
-          inBraces(dataConstructor(typ, Map.empty).rep(sep = maybeSemi./)).map { cases =>
-            (name, List.empty, cases)
+        case (from, name, _, None, to) =>
+          val tyCon = TypeConstructor(name, Atomic, Pos(from, to))
+          val typ = TypeScheme(List.empty, tyCon)
+          val typeEnv = Map.empty.updated(name, tyCon)
+          inBraces(dataConstructor(typ, typeEnv).rep(sep = maybeSemi./)).map { cases =>
+            (from, name, List.empty, cases)
           }
       } ~ Index
   ).map {
-    case (from, (name, tparams, cases), to) =>
+    case (from, name, tparams, cases, to) =>
       Data(name, tparams.toList, cases.toList, Pos(from, to))
   }
 

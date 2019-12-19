@@ -51,9 +51,9 @@ object TypeScheme {
       val tyVars = bound.toList.map(TypeVariable.fromProto)
 
       val (freshVars, subst) = tyVars.foldLeft((Vector.empty[TypeVariable], Map.empty[TypeVariable, Type])) {
-        case ((vars, subst), named @ NamedTypeVariable(_, _)) =>
+        case ((vars, subst), named @ NamedTypeVariable(_, _, _)) =>
           (vars :+ named, subst)
-        case ((vars, subst), inferred @ InferredTypeVariable(_, kind)) =>
+        case ((vars, subst), inferred @ InferredTypeVariable(_, kind, _)) =>
           val freshVar = TypeVariable(kind)
           (vars :+ freshVar, subst.updated(inferred, freshVar))
       }

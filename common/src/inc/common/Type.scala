@@ -8,40 +8,53 @@ import scala.collection.immutable.{ List, Map, Set }
 sealed abstract class Type extends Product with Serializable {
   def kind: Kind
 
+  def pos: Pos
+
+  def withPos(pos: Pos): Type = this match {
+    case tv @ NamedTypeVariable(_, _, _) =>
+      tv.copy(pos = pos)
+    case tv @ InferredTypeVariable(_, _, _) =>
+      tv.copy(pos = pos)
+    case tc @ TypeConstructor(_, _, _) =>
+      tc.copy(pos = pos)
+    case ta @ TypeApply(_, _, _, _) =>
+      ta.copy(pos = pos)
+  }
+
   def toProto: proto.Type = this match {
-    case NamedTypeVariable(n, kind) =>
+    case NamedTypeVariable(n, kind, _) =>
       proto.TypeVariable(
         proto.TypeVariable.TyVar.Named(
           proto.NamedTypeVariable(n, kind.toProto)))
-    case InferredTypeVariable(i, kind) =>
+    case InferredTypeVariable(i, kind, _) =>
       proto.TypeVariable(
         proto.TypeVariable.TyVar.Inferred(
           proto.InferredTypeVariable(i, kind.toProto)))
-    case TypeApply(typ, params, kind) =>
+    case TypeApply(typ, params, kind, _) =>
       proto.TypeApply(typ.toProto, params.map(_.toProto), kind.toProto)
-    case TypeConstructor(name, kind) =>
+    case TypeConstructor(name, kind, _) =>
       proto.TypeConstructor(name, kind.toProto)
   }
 
   def isPrimitive = this match {
-    case TypeConstructor(name, _) =>
+    case TypeConstructor(name, _, _) =>
       Type.primitives.contains(name)
     case _ =>
       false
   }
 
   def freeTypeVariables: Set[TypeVariable] = this match {
-    case tyVar @ NamedTypeVariable(_, _) =>
+    case tyVar @ NamedTypeVariable(_, _, _) =>
       Set(tyVar)
-    case tyVar @ InferredTypeVariable(_, _) =>
+    case tyVar @ InferredTypeVariable(_, _, _) =>
       Set(tyVar)
-    case TypeApply(tyVar @ InferredTypeVariable(_, _), params, _) =>
+    case TypeApply(tyVar @ InferredTypeVariable(_, _, _), params, _, _) =>
       params.flatMap(_.freeTypeVariables).toSet + tyVar
-    case TypeApply(tyVar @ NamedTypeVariable(_, _), params, _) =>
+    case TypeApply(tyVar @ NamedTypeVariable(_, _, _), params, _, _) =>
       params.flatMap(_.freeTypeVariables).toSet + tyVar
-    case TypeApply(typ, params, _) =>
+    case TypeApply(typ, params, _, _) =>
       typ.freeTypeVariables ++ params.flatMap(_.freeTypeVariables).toSet
-    case TypeConstructor(_, _) =>
+    case TypeConstructor(_, _, _) =>
       Set.empty
   }
 
@@ -49,47 +62,46 @@ sealed abstract class Type extends Product with Serializable {
     if (subst.isEmpty)
       this
     else this match {
-      case tyVar @ NamedTypeVariable(_, _) =>
+      case tyVar @ NamedTypeVariable(_, _, _) =>
         subst.getOrElse(tyVar, tyVar)
-      case tyVar @ InferredTypeVariable(_, _) =>
+      case tyVar @ InferredTypeVariable(_, _, _) =>
         subst.getOrElse(tyVar, tyVar)
-      case tyCon @ TypeConstructor(_, _) =>
+      case tyCon @ TypeConstructor(_, _, _) =>
         tyCon
-      case ta @ TypeApply(typ, params, _) =>
+      case ta @ TypeApply(typ, params, _, _) =>
         ta.copy(
           typ = typ.substitute(subst),
           params = params.map(_.substitute(subst)))
     }
 
   def defaultKinds: Type = this match {
-    case NamedTypeVariable(name, kind) =>
-      NamedTypeVariable(name, kind.default)
-    case InferredTypeVariable(id, kind) =>
-      InferredTypeVariable(id, kind.default)
-    case TypeConstructor(name, kind) =>
-      TypeConstructor(name, kind.default)
-    case TypeApply(typ, tparams, _) =>
-      val defaultedTyp = typ.defaultKinds
-      val defaultedTparams = tparams.map(_.defaultKinds)
-      val resultKind = defaultedTyp.kind
-      TypeApply(
-        defaultedTyp,
-        defaultedTparams,
-        resultKind)
+    case tv @ NamedTypeVariable(_, _, _) =>
+      tv.copy(kind = tv.kind.default)
+    case tv @ InferredTypeVariable(_, _, _) =>
+      tv.copy(kind = tv.kind.default)
+    case tc @ TypeConstructor(_, _, _) =>
+      tc.copy(kind = tc.kind.default)
+    case ta @ TypeApply(_, _, _, _) =>
+      val defaultedTyp = ta.typ.defaultKinds
+      val defaultedTparams = ta.params.map(_.defaultKinds)
+      ta.copy(
+        typ = defaultedTyp,
+        params = defaultedTparams,
+        kind = ta.kind.default)
   }
 
   def substituteKinds(subst: Map[KindVariable, Kind]): Type = this match {
-    case NamedTypeVariable(name, kind) =>
-      NamedTypeVariable(name, kind.substitute(subst))
-    case InferredTypeVariable(id, kind) =>
-      InferredTypeVariable(id, kind.substitute(subst))
-    case TypeConstructor(name, kind) =>
-      TypeConstructor(name, kind.substitute(subst))
-    case TypeApply(typ, tparams, kind) =>
-      TypeApply(
-        typ.substituteKinds(subst),
-        tparams.map(_.substituteKinds(subst)),
-        kind.substitute(subst))
+    case tv @ NamedTypeVariable(_, _, _) =>
+      tv.copy(kind = kind.substitute(subst))
+    case tv @ InferredTypeVariable(_, _, _) =>
+      tv.copy(kind = kind.substitute(subst))
+    case tc @ TypeConstructor(_, _, _) =>
+      tc.copy(kind = kind.substitute(subst))
+    case ta @ TypeApply(_, _, _, _) =>
+      ta.copy(
+        typ = ta.typ.substituteKinds(subst),
+        params = ta.params.map(_.substituteKinds(subst)),
+        kind = ta.kind.substitute(subst))
   }
 }
 
@@ -107,11 +119,12 @@ object Type {
   val String = TypeConstructor("String", Atomic)
   val Module = TypeConstructor("Module", Atomic)
   val Unit = TypeConstructor(UnitClass, Atomic)
-  def Function(from: List[Type], to: Type) = {
-    TypeApply(
-      TypeConstructor("->", Parameterized(from.map(_ => Atomic), Atomic)),
-      from :+ to,
-      Atomic)
+
+  def Function(from: List[Type], to: Type, pos: Pos = Pos.Empty) = {
+    val typeArgs = (from :+ to)
+    val kindArgs = typeArgs.map(_ => Atomic)
+    val funKind = Parameterized(kindArgs, Atomic)
+    TypeApply(TypeConstructor("->", funKind), typeArgs, Atomic, pos)
   }
 
   def fromProto(typ: proto.Type): Type = typ match {
@@ -135,37 +148,47 @@ sealed abstract class TypeVariable extends Type {
   def occursIn(typ: Type) = typ.freeTypeVariables.contains(this)
 
   override def toProto: proto.TypeVariable = this match {
-    case NamedTypeVariable(n, kind) =>
+    case NamedTypeVariable(n, kind, _) =>
       proto.TypeVariable(
         proto.TypeVariable.TyVar.Named(
           proto.NamedTypeVariable(n, kind.toProto)))
-    case InferredTypeVariable(i, kind) =>
+    case InferredTypeVariable(i, kind, _) =>
       proto.TypeVariable(
         proto.TypeVariable.TyVar.Inferred(
           proto.InferredTypeVariable(i, kind.toProto)))
   }
 }
 
-case class NamedTypeVariable(name: String, kind: Kind) extends TypeVariable
+case class NamedTypeVariable(name: String, kind: Kind, pos: Pos) extends TypeVariable
 
-case class InferredTypeVariable(id: Int, kind: Kind) extends TypeVariable {
+case class InferredTypeVariable(id: Int, kind: Kind, pos: Pos) extends TypeVariable {
   def name = "T" + id.toString
 }
 
 object TypeVariable {
   val nextId = new AtomicInteger(1)
-  def apply(kind: Kind = Atomic): TypeVariable =
-    InferredTypeVariable(nextId.getAndIncrement, kind)
+  def apply(kind: Kind = Atomic, pos: Pos = Pos.Empty): TypeVariable =
+    InferredTypeVariable(nextId.getAndIncrement, kind, pos)
   def fromProto(tyVar: proto.TypeVariable) = tyVar.tyVar match {
     case proto.TypeVariable.TyVar.Named(proto.NamedTypeVariable(name, kind)) =>
-      NamedTypeVariable(name, Kind.fromProto(kind))
+      NamedTypeVariable(name, Kind.fromProto(kind), Pos.Empty)
     case proto.TypeVariable.TyVar.Inferred(proto.InferredTypeVariable(id, kind)) =>
-      InferredTypeVariable(id, Kind.fromProto(kind))
+      InferredTypeVariable(id, Kind.fromProto(kind), Pos.Empty)
     case proto.TypeVariable.TyVar.Empty =>
       throw new Exception("Empty TypeVariable in protobuf")
   }
 }
 
-case class TypeConstructor(name: String, kind: Kind) extends Type
+case class TypeConstructor(name: String, kind: Kind, pos: Pos) extends Type
 
-case class TypeApply(typ: Type, params: List[Type], kind: Kind) extends Type
+object TypeConstructor {
+  def apply(name: String, kind: Kind): TypeConstructor =
+    TypeConstructor(name, kind, Pos.Empty)
+}
+
+case class TypeApply(typ: Type, params: List[Type], kind: Kind, pos: Pos) extends Type
+
+object TypeApply {
+  def apply(typ: Type, params: List[Type], kind: Kind): TypeApply =
+    TypeApply(typ, params, kind, Pos.Empty)
+}
