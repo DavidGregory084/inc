@@ -214,7 +214,8 @@ object main extends ScalaSettingsModule with BuildInfo {
         'hyperfine,
         s"java -jar ${assemblyJar.path.toIO.getAbsolutePath} ${src.toIO.getAbsolutePath}",
         s"--export-json",
-        s"${dest / src.baseName}.json"
+        s"${dest / src.baseName}.json",
+        "--ignore-failure"
       ).call(millSourcePath)
 
       addRunData(src.baseName, executionTime)
