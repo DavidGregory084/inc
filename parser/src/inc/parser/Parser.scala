@@ -94,7 +94,7 @@ class ExprParser(typeEnv: Map[String, Type]) {
       Index
   ).map {
     case (from, expr, Some(ascribedAs), to) =>
-      Ascription(expr, TypeScheme(List.empty, ascribedAs.defaultKinds), Pos(from, to))
+      Ascription(expr, TypeScheme(List.empty, ascribedAs), Pos(from, to))
     case (_, expr, None, _) =>
       expr
   }
