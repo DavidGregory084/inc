@@ -281,9 +281,17 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
             constr.copy(params = checkedParams, meta = caseMeta.withType(typeScheme))
         }
 
-        val typeScheme = TypeScheme(
-          tparams,
-          TypeApply(TypeConstructor(name, KindVariable(), meta.pos), tparams, KindVariable()))
+        val tyCon =
+          TypeConstructor(name, KindVariable(), meta.pos)
+
+        val typeScheme =
+          if (tparams.isEmpty)
+            TypeScheme(List.empty, tyCon)
+          else
+            TypeScheme(
+              tparams,
+              TypeApply(tyCon, tparams, KindVariable())
+            )
 
         val checkedData = data.copy(
           cases = checkedCases,

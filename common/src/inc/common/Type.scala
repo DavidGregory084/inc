@@ -167,6 +167,8 @@ case class InferredTypeVariable(id: Int, kind: Kind, pos: Pos) extends TypeVaria
 
 object TypeVariable {
   val nextId = new AtomicInteger(1)
+  def named(name: String, kind: Kind = KindVariable(), pos: Pos = Pos.Empty) =
+    NamedTypeVariable(name, kind, pos)
   def apply(kind: Kind = Atomic, pos: Pos = Pos.Empty): TypeVariable =
     InferredTypeVariable(nextId.getAndIncrement, kind, pos)
   def fromProto(tyVar: proto.TypeVariable) = tyVar.tyVar match {

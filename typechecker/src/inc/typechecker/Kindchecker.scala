@@ -107,21 +107,35 @@ class Kindchecker(context: Printer.SourceContext, isTraceEnabled: Boolean) exten
 
   def gather(data: Data[NamePosType]): Infer[List[KindConstraint]] = data match {
     case Data(name, tparams, cases, meta) =>
-      val TypeApply(TypeConstructor(_, kind, _), _, _, _) = meta.typ.typ
-      val parentConstraint = EqualKind(kind, data.kind, meta.pos)
+      val kind =
+        if (tparams.isEmpty) {
+          val TypeConstructor(_, tyConKind, _) = meta.typ.typ
+          tyConKind
+        } else {
+          val TypeApply(TypeConstructor(_, tyConKind, _), _, _, _) = meta.typ.typ
+          tyConKind
+        }
+
+      val parentConstraint =
+        if (kind == data.kind)
+          List.empty
+        else
+          List(EqualKind(kind, data.kind, meta.pos))
 
       tparams.foreach { tparam =>
         trace(tparam.name, tparam.kind, tparam.pos)
       }
 
-      trace(name, parentConstraint)
+      parentConstraint.foreach { cst =>
+        trace(name, cst)
+      }
 
       val constraintsFromConstrs = cases.foldLeft(List.empty[KindConstraint]) {
         case (cstsSoFar, nextConstr) =>
           cstsSoFar ++ gather(nextConstr)
       }
 
-      val allConstraints = parentConstraint :: constraintsFromConstrs
+      val allConstraints = parentConstraint ++ constraintsFromConstrs
 
       Right(allConstraints)
   }
