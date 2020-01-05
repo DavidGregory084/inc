@@ -8,7 +8,7 @@ import cats.syntax.functor._
 import org.typelevel.paiges._
 import java.lang.String
 import scala.{ Boolean, Some, None, Either, Right, StringContext }
-import scala.collection.immutable.{ List, Map }
+import scala.collection.immutable.List
 import scala.Predef.ArrowAssoc
 import com.typesafe.scalalogging.LazyLogging
 
@@ -52,18 +52,18 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
     }
   }
 
-  def withTypeScheme(expr: Expr[NameWithPos], typ: TypeScheme): Infer[(Expr[NamePosType], List[Constraint])] = {
+  def withTypeScheme(expr: Expr[Meta.Untyped], typ: TypeScheme): Infer[(Expr[Meta.Typed], List[Constraint])] = {
     val exprWithType = expr.map(_.withType(typ))
     Right((exprWithType, List.empty))
   }
 
-  def withSimpleType(expr: Expr[NameWithPos], typ: Type): Infer[(Expr[NamePosType], List[Constraint])] =
+  def withSimpleType(expr: Expr[Meta.Untyped], typ: Type): Infer[(Expr[Meta.Typed], List[Constraint])] =
     withTypeScheme(expr, TypeScheme(typ))
 
   def gather(
-    expr: Expr[NameWithPos],
+    expr: Expr[Meta.Untyped],
     env: Environment
-  ): Infer[(Expr[NamePosType], List[Constraint])] =
+  ): Infer[(Expr[Meta.Typed], List[Constraint])] =
     expr match {
       case int @ LiteralInt(_, _) =>
         withSimpleType(int, Type.Int)
@@ -90,18 +90,19 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
         withSimpleType(unit, Type.Unit)
 
       case ref @ Reference(_, name, meta)  =>
-        env.get(ref.fullName).map { typ =>
-          val tp = typ.instantiate
+        env.declarations.get(ref.fullName).map { refMeta =>
+          val refTyp = refMeta.typ
+          val instTyp = refTyp.instantiate
 
-          if (typ.bound.nonEmpty && isTraceEnabled) {
-            val generalized = Printer.print(typ).render(context.consoleWidth)
-            val instantiated = Printer.print(tp).render(context.consoleWidth)
+          if (refTyp.bound.nonEmpty && isTraceEnabled) {
+            val generalized = Printer.print(refTyp).render(context.consoleWidth)
+            val instantiated = Printer.print(instTyp).render(context.consoleWidth)
             logger.info(NL + s"Instantiate ${generalized} as ${instantiated}")
           }
 
-          trace(s"Reference to $name", meta.pos, tp)
+          trace(s"Reference to $name", meta.pos, instTyp)
 
-          Right((expr.map(_.withSimpleType(tp)), List.empty))
+          Right((expr.map(_.withSimpleType(instTyp)), List.empty))
         }.getOrElse(TypeError.singleton(meta.pos, s"Reference to undefined symbol: $name"))
 
       case If(cond, thenExpr, elseExpr, meta) =>
@@ -109,21 +110,21 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
           // Gather constraints from the condition
           (c, condCst) <- gather(cond, env)
 
-          NamePosType(_, _, condType) = c.meta
+          Meta.Typed(_, condType, _) = c.meta
 
           _ = trace("If condition", c.meta.pos, condCst)
 
           // Gather constraints from the then expression
           (t, thenCst) <- gather(thenExpr, env)
 
-          NamePosType(_, _, thenType) = t.meta
+          Meta.Typed(_, thenType, _) = t.meta
 
           _ = trace("Then expression", t.meta.pos, thenCst)
 
           // Gather constraints from the else expression
           (e, elseCst) <- gather(elseExpr, env)
 
-          NamePosType(_, _, elseType) = e.meta
+          Meta.Typed(_, elseType, _) = e.meta
 
           _ = trace("Else expression", e.meta.pos, elseCst)
 
@@ -150,7 +151,7 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
             Param(name, None, meta.withSimpleType(TypeVariable()))
         }
 
-        val paramMappings = typedParams.map(p => p.name -> p.meta.typ)
+        val paramMappings = typedParams.map(p => p.name -> p.meta)
 
         typedParams.foreach {
           case Param(name, _, meta) =>
@@ -159,7 +160,7 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
 
         for {
           // Gather constraints from the body with the params in scope
-          (body, bodyCst) <- gather(body, env ++ paramMappings)
+          (body, bodyCst) <- gather(body, env.withDeclarations(paramMappings))
 
           _ = trace("Lambda body", body.meta.pos, bodyCst)
 
@@ -207,7 +208,7 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
 
           _ = trace("Function to apply", f.meta.pos, fnCst)
 
-          initialResult = Either.right[List[TypeError], (Chain[Expr[NamePosType]], List[Constraint])]((Chain.empty, List.empty))
+          initialResult = Either.right[List[TypeError], (Chain[Expr[Meta.Typed]], List[Constraint])]((Chain.empty, List.empty))
 
           // Gather constraints from the arg expressions
           (as, argCsts) <- args.zipWithIndex.foldLeft(initialResult) {
@@ -242,9 +243,9 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
     }
 
   def gather(
-    decl: TopLevelDeclaration[NameWithPos],
+    decl: TopLevelDeclaration[Meta.Untyped],
     env: Environment
-  ): Infer[(TopLevelDeclaration[NamePosType], List[Constraint])] =
+  ): Infer[(TopLevelDeclaration[Meta.Typed], List[Constraint])] =
     decl match {
       case let @ Let(name, expr, meta) =>
         for {
@@ -271,7 +272,7 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
             (checkedLet, constraints)
         }
       case data @ Data(name, tparams, cases, meta) =>
-        val checkedCases: List[DataConstructor[NamePosType]] = cases.map {
+        val checkedCases: List[DataConstructor[Meta.Typed]] = cases.map {
           case constr @ DataConstructor(caseName, params, returnType, caseMeta) =>
             val checkedParams = params.map(_.withAscribedType)
             val typeScheme = TypeScheme(tparams, Type.Function(checkedParams.map(_.meta.typ.typ), returnType.typ))
@@ -304,32 +305,33 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
     }
 
   def gather(
-    module: Module[NameWithPos],
-    importedDecls: Map[String, TopLevelDeclaration[NameWithType]]
-  ): Infer[(Module[NamePosType], List[Constraint])] =
+    module: Module[Meta.Untyped],
+    importedEnv: Environment
+  ): Infer[(Module[Meta.Typed], List[Constraint])] =
     module match {
       case Module(_, _, _, decls, meta) =>
 
-        val importedEnv = importedDecls.view.map {
-          case (sym, tld) => sym -> tld.meta.typ
-        }.toMap
-
         val initialDecls = decls.flatMap {
-          case Let(name, _, _) =>
-            List(name -> TypeScheme(List.empty, TypeVariable()))
+          case Let(name, _, meta) =>
+            List(name -> meta.withType(TypeScheme(List.empty, TypeVariable())))
           case Data(dataName, tparams, cases, _) =>
             cases.map {
-              case DataConstructor(caseName, params, returnTyp, _) =>
+              case DataConstructor(caseName, params, returnTyp, meta) =>
                 val paramTypes = params.map { p => p.ascribedAs.get.typ }
                 val dataTyp = TypeConstructor(dataName, returnTyp.typ.kind)
                 val typeScheme = TypeScheme(tparams, Type.Function(paramTypes, dataTyp))
-                caseName -> typeScheme
+                caseName -> meta.withType(typeScheme)
             }
-        }.toMap
+        }
 
-        val initialEnv = importedEnv ++ initialDecls
+        val initialTypes = decls.collect {
+          case data @ Data(name, _, _, _) =>
+            name -> data.kind
+        }
 
-        val emptyRes: Infer[(Chain[TopLevelDeclaration[NamePosType]], Environment, List[Constraint])] =
+        val initialEnv = importedEnv ++ Environment(initialDecls.toMap, initialTypes.toMap)
+
+        val emptyRes: Infer[(Chain[TopLevelDeclaration[Meta.Typed]], Environment, List[Constraint])] =
           Right((Chain.empty, initialEnv, List.empty))
 
         val constraintsFromDecls = decls.foldLeft(emptyRes) {
@@ -337,7 +339,7 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
             for {
               (checkedSoFar, envSoFar, constraintsSoFar) <- resSoFar
               (checkedDecl, constraints) <- gather(nextDecl, envSoFar)
-              updatedEnv = envSoFar.updated(checkedDecl.name, checkedDecl.meta.typ)
+              updatedEnv = envSoFar.withDeclaration(checkedDecl.name, checkedDecl.meta)
             } yield (checkedSoFar :+ checkedDecl, updatedEnv, constraintsSoFar ++ constraints)
         }
 

@@ -1,53 +1,49 @@
 package inc.common
 
-import scala.Some
+import scala.{ Product, Serializable, Some }
 import scala.collection.immutable.Map
 
-case class NameWithPos(name: Name, pos: Pos) {
-  def withType(typ: TypeScheme): NamePosType =
-    NamePosType(name, pos, typ)
-  def withSimpleType(typ: Type): NamePosType =
-    withType(TypeScheme(typ))
+sealed abstract class Meta extends Product with Serializable {
+  def pos: Pos
 }
 
-case class NameWithType(name: Name, typ: TypeScheme) {
-  def withEmptyPos: NamePosType =
-    NamePosType(name, Pos.Empty, typ)
+object Meta {
+  case class Untyped(name: Name, pos: Pos) extends Meta {
+    def forgetPos = copy(pos = Pos.Empty)
 
-  def substitute(subst: Map[TypeVariable, Type]): NameWithType =
-    if (subst.isEmpty)
-      this
-    else
-      copy(typ = typ.substitute(subst))
-}
+    def withType(typ: TypeScheme): Typed =
+      Typed(name, typ, pos)
 
-object NameWithType {
-  def fromProto(nameWithType: proto.NameWithType): NameWithType =
-    NameWithType(
-      Name.fromProto(nameWithType.name),
-      TypeScheme.fromProto(nameWithType.getType)
+    def withSimpleType(typ: Type): Typed =
+      withType(TypeScheme(typ))
+  }
+
+  case class Typed(name: Name, typ: TypeScheme, pos: Pos) extends Meta {
+    def toProto = proto.NameWithType(
+      name = name.toProto,
+      `type` = Some(typ.toProto)
     )
-}
 
-case class NamePosType(name: Name, pos: Pos, typ: TypeScheme) {
-  def toProto = proto.NameWithType(
-    name = name.toProto,
-    `type` = Some(typ.toProto)
-  )
+    def forgetPos: Typed =
+      copy(pos = Pos.Empty)
 
-  def withEmptyPos = copy(pos = Pos.Empty)
+    def substitute(subst: Map[TypeVariable, Type]): Typed =
+      if (subst.isEmpty)
+        this
+      else
+        copy(typ = typ.substitute(subst))
 
-  def forgetPos = NameWithType(name, typ)
+    def substituteKinds(subst: Map[KindVariable, Kind]): Typed =
+      copy(typ = typ.substituteKinds(subst))
 
-  def substitute(subst: Map[TypeVariable, Type]): NamePosType =
-    if (subst.isEmpty)
-      this
-    else
-      copy(typ = typ.substitute(subst))
+    def defaultKinds: Typed =
+      copy(typ = typ.defaultKinds)
+  }
 
-  def substituteKinds(subst: Map[KindVariable, Kind]): NamePosType =
-    copy(typ = typ.substituteKinds(subst))
-
-  def defaultKinds: NamePosType =
-    copy(typ = typ.defaultKinds)
+  def fromProto(nameWithType: proto.NameWithType): Typed =
+    Typed(
+      Name.fromProto(nameWithType.name),
+      TypeScheme.fromProto(nameWithType.getType),
+      Pos.Empty
+    )
 }

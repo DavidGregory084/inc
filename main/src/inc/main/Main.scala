@@ -84,11 +84,11 @@ object Main extends LazyLogging {
 
       mod <- runPhase[Module[Pos]]("parser", context, config, _.printParser, Parser.parse(context.source))
 
-      importedDecls <- Classpath.readEnvironment(mod.imports, new URLClassLoader(urls))
+      importedEnv <- Classpath.readEnvironment(mod.imports, new URLClassLoader(urls))
 
-      resolved <- runPhase[Module[NameWithPos]]("resolver", context, config, _.printResolver, Resolver.resolve(mod, importedDecls))
+      resolved <- runPhase[Module[Meta.Untyped]]("resolver", context, config, _.printResolver, Resolver.resolve(mod, importedEnv))
 
-      checked <- runPhase[Module[NamePosType]]("typechecker", context, config, _.printTyper, typechecker.typecheck(resolved, importedDecls, context))
+      checked <- runPhase[Module[Meta.Typed]]("typechecker", context, config, _.printTyper, typechecker.typecheck(resolved, importedEnv, context))
 
       code <- runPhase[Array[Byte]]("codegen", context, config, _.printCodegen, codegen.generate(checked), codegen.print(_))
 

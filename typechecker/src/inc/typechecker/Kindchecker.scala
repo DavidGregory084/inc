@@ -90,7 +90,7 @@ class Kindchecker(context: Printer.SourceContext, isTraceEnabled: Boolean) exten
       tpCsts ++ tparamCsts ++ appCst
   }
 
-  def gather(constr: DataConstructor[NamePosType]): List[KindConstraint] = constr match {
+  def gather(constr: DataConstructor[Meta.Typed]): List[KindConstraint] = constr match {
     case DataConstructor(name, params, _, _) =>
       val constraints = params.foldLeft(List.empty[KindConstraint]) {
         case (cstsSoFar, Param(paramName, _, meta)) =>
@@ -105,7 +105,7 @@ class Kindchecker(context: Printer.SourceContext, isTraceEnabled: Boolean) exten
       constraints
   }
 
-  def gather(data: Data[NamePosType]): Infer[List[KindConstraint]] = data match {
+  def gather(data: Data[Meta.Typed]): Infer[List[KindConstraint]] = data match {
     case Data(name, tparams, cases, meta) =>
       val kind =
         if (tparams.isEmpty) {
@@ -222,7 +222,7 @@ class Kindchecker(context: Printer.SourceContext, isTraceEnabled: Boolean) exten
     }
   }
 
-  def kindcheck(data: Data[NamePosType]): Infer[Data[NamePosType]] = {
+  def kindcheck(data: Data[Meta.Typed]): Infer[Data[Meta.Typed]] = {
     for {
       csts <- gather(data)
 

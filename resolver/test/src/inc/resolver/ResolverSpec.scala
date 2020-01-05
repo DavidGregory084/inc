@@ -17,17 +17,17 @@ class ResolverSpec extends FlatSpec with Matchers {
   def mkInt(i: Int) = LiteralInt(i, Pos.Empty)
   def mkRef(r: String) = Reference(List.empty, r, Pos.Empty)
 
-  def mkResolvedModule(name: String, decls: List[TopLevelDeclaration[NameWithPos]]) = Module(
+  def mkResolvedModule(name: String, decls: List[TopLevelDeclaration[Meta.Untyped]]) = Module(
     pkg = List("Test", "Resolver"),
     name = name,
     imports = List.empty,
     declarations = decls,
-    meta = NameWithPos(ModuleName(List("Test", "Resolver"), name), Pos.Empty))
+    meta = Meta.Untyped(ModuleName(List("Test", "Resolver"), name), Pos.Empty))
 
-  def mkResolvedLet(modName: String, name: String, binding: Expr[NameWithPos]) =
-    Let(name, binding, NameWithPos(MemberName(List("Test", "Resolver"), modName, name), Pos.Empty))
+  def mkResolvedLet(modName: String, name: String, binding: Expr[Meta.Untyped]) =
+    Let(name, binding, Meta.Untyped(MemberName(List("Test", "Resolver"), modName, name), Pos.Empty))
 
-  def mkResolvedInt(i: Int) = LiteralInt(i, NameWithPos(NoName, Pos.Empty))
+  def mkResolvedInt(i: Int) = LiteralInt(i, Meta.Untyped(NoName, Pos.Empty))
 
   "Resolver" should "resolve names for local let bindings" in {
     val mod = mkModule("Int", List(mkLet("int", mkInt(42))))

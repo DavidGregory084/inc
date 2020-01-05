@@ -4,7 +4,7 @@ import inc.common._
 import java.lang.String
 import org.typelevel.paiges._
 import scala.Boolean
-import scala.collection.immutable.{ List, Map }
+import scala.collection.immutable.List
 import com.typesafe.scalalogging.LazyLogging
 
 object Typechecker extends Typechecker(false)
@@ -15,9 +15,9 @@ class Typechecker(isTraceEnabled: Boolean) extends LazyLogging {
     if (isTraceEnabled) {
       val header = Doc.hardLine + Doc.text(name + ":") + (Doc.hardLine * 2)
 
-      val formattedMsg = header + Doc.intercalate(Doc.hardLine, env.map {
-        case (nm, tp) =>
-          val tpStr = Printer.print(tp)
+      val formattedMsg = header + Doc.intercalate(Doc.hardLine, env.declarations.map {
+        case (nm, meta) =>
+          val tpStr = Printer.print(meta.typ)
           Doc.text(nm + ":") & tpStr
       })
 
@@ -27,7 +27,7 @@ class Typechecker(isTraceEnabled: Boolean) extends LazyLogging {
     }
   }
 
-  def trace(context: Printer.SourceContext, msg: String, declarations: List[TopLevelDeclaration[NamePosType]]) = {
+  def trace(context: Printer.SourceContext, msg: String, declarations: List[TopLevelDeclaration[Meta.Typed]]) = {
     if (isTraceEnabled) {
       val header = Doc.hardLine + Doc.text(msg + ":") + (Doc.hardLine * 2)
 
@@ -50,16 +50,16 @@ class Typechecker(isTraceEnabled: Boolean) extends LazyLogging {
   }
 
   def typecheck(
-    module: Module[NameWithPos],
-    importedDecls: Map[String, TopLevelDeclaration[NameWithType]],
+    module: Module[Meta.Untyped],
+    importedEnv: Environment,
     context: Printer.SourceContext
-  ): Infer[Module[NamePosType]] = {
+  ): Infer[Module[Meta.Typed]] = {
     val solve = new Solve(context, isTraceEnabled)
     val gather = new Gather(solve, context, isTraceEnabled)
 
     for {
       // Gather constraints from the module's definitions
-      (mod, csts) <- gather.gather(module, importedDecls)
+      (mod, csts) <- gather.gather(module, importedEnv)
 
       // Try to solve the constraints
       subst       <- solve.solve(csts)
@@ -72,7 +72,7 @@ class Typechecker(isTraceEnabled: Boolean) extends LazyLogging {
       // Apply the substitution from the constraint solution to the module
       typedMod = mod.substitute(subst)
 
-      _ = trace(context, "Final type environment", typedMod.declarations)
+      _ = trace(context, "Final type environment", typedMod.environment)
 
     } yield typedMod
   }

@@ -82,7 +82,7 @@ class Codegen(verifyCodegen: Boolean) {
     reader.accept(visitor, ClassReader.SKIP_DEBUG)
   }
 
-  def readInterface(code: Array[Byte]): Either[List[Error], Module[NameWithType]] = {
+  def readInterface(code: Array[Byte]): Either[List[Error], Module[Meta.Typed]] = {
     val reader = new ClassReader(code)
     val visitor = new InterfaceAttributeVisitor()
 
@@ -285,7 +285,7 @@ class Codegen(verifyCodegen: Boolean) {
       staticInitializer.visitFieldInsn(PUTSTATIC, enclosingClass, fieldName, fieldDescriptor)
     }
 
-  def newExpr(classWriter: ClassWriter, className: String, generator: GeneratorAdapter, outerName: String, arguments: Map[String, Int], locals: Map[String, Int])(expr: Expr[NamePosType]): Either[List[CodegenError], Unit] = expr match {
+  def newExpr(classWriter: ClassWriter, className: String, generator: GeneratorAdapter, outerName: String, arguments: Map[String, Int], locals: Map[String, Int])(expr: Expr[Meta.Typed]): Either[List[CodegenError], Unit] = expr match {
     case LiteralInt(i, _) =>
       Right(generator.visitLdcInsn(i))
     case LiteralLong(l, _) =>
@@ -317,11 +317,11 @@ class Codegen(verifyCodegen: Boolean) {
         _ <- newExpr(classWriter, className, generator, outerName, arguments, locals)(elseExpr)
         _ = generator.visitLabel(trueLabel)
       } yield ()
-    case Reference(mod, name, nameWithType) =>
+    case Reference(mod, name, typedMeta) =>
       for {
-        descriptor <- descriptorFor(nameWithType.typ.typ)
-        internalName = getInternalName(nameWithType.name, className)
-        _ <- nameWithType.name match {
+        descriptor <- descriptorFor(typedMeta.typ.typ)
+        internalName = getInternalName(typedMeta.name, className)
+        _ <- typedMeta.name match {
           case MemberName(_, _, _) =>
             Right(generator.visitFieldInsn(GETSTATIC, internalName, name, descriptor))
           case LocalName(nm) =>
@@ -336,13 +336,13 @@ class Codegen(verifyCodegen: Boolean) {
     case Ascription(expr, _, _) =>
       newExpr(classWriter, className, generator, outerName, arguments, locals)(expr)
 
-    case Apply(fn, args, nameWithType) =>
+    case Apply(fn, args, typedMeta) =>
       val TypeScheme(_, TypeApply(TypeConstructor("->", _, _), tpArgs, _, _)) = fn.meta.typ
       val objectType = AsmType.getType(classOf[Object])
 
       for {
         fnTp <- asmTypeOf(fn.meta.typ.typ)
-        retTp <- asmTypeOf(nameWithType.typ.typ)
+        retTp <- asmTypeOf(typedMeta.typ.typ)
 
         descriptor = AsmType.getMethodDescriptor(objectType, tpArgs.init.as(objectType): _*)
 
@@ -359,12 +359,12 @@ class Codegen(verifyCodegen: Boolean) {
 
       } yield {
         generator.visitMethodInsn(INVOKEINTERFACE, fnTp.getInternalName, "apply", descriptor, true)
-        if (nameWithType.typ.typ.isPrimitive) generator.unbox(retTp)
-        if (!nameWithType.typ.typ.isPrimitive) generator.visitTypeInsn(CHECKCAST, retTp.getInternalName)
+        if (typedMeta.typ.typ.isPrimitive) generator.unbox(retTp)
+        if (!typedMeta.typ.typ.isPrimitive) generator.visitTypeInsn(CHECKCAST, retTp.getInternalName)
       }
 
-    case lam @ Lambda(params, body, nameWithType) =>
-      val TypeScheme(_, TypeApply(TypeConstructor("->", _, _), tpArgs, _, _)) = nameWithType.typ
+    case lam @ Lambda(params, body, typedMeta) =>
+      val TypeScheme(_, TypeApply(TypeConstructor("->", _, _), tpArgs, _, _)) = typedMeta.typ
 
       val capturedVars = lam.capturedVariables.toList
       val capturedVarsWithIdx = capturedVars.zipWithIndex
@@ -392,10 +392,10 @@ class Codegen(verifyCodegen: Boolean) {
       val replaceCaptured = capturedVarsWithIdx.map {
         case (v, i) =>
           val newName = "captured$" + i
-          (v.copy(meta = v.meta.withEmptyPos), Reference(List.empty, newName, v.meta.copy(name = LocalName(newName))))
+          (v.copy(meta = v.meta.forgetPos), Reference(List.empty, newName, v.meta.copy(name = LocalName(newName))))
       }.toMap
 
-      val typeForLambda = asmTypeOf(nameWithType.typ.typ)
+      val typeForLambda = asmTypeOf(typedMeta.typ.typ)
 
       for {
         functionDescriptor <- descriptorForFunction
@@ -447,7 +447,7 @@ class Codegen(verifyCodegen: Boolean) {
       }
   }
 
-  def newTopLevelLet(className: String, classWriter: ClassWriter, staticInitializer: GeneratorAdapter, let: Let[NamePosType]): Either[List[CodegenError], Unit] = {
+  def newTopLevelLet(className: String, classWriter: ClassWriter, staticInitializer: GeneratorAdapter, let: Let[Meta.Typed]): Either[List[CodegenError], Unit] = {
     let.binding match {
       case LiteralInt(i, _) =>
         newStaticField(classWriter)(let.name, AsmType.INT_TYPE.getDescriptor, i)
@@ -470,33 +470,33 @@ class Codegen(verifyCodegen: Boolean) {
         newStaticFieldFrom(classWriter, className, staticInitializer)(let.name, descriptor, internalName, "instance")
       case Ascription(expr, _, _) =>
         newTopLevelLet(className, classWriter, staticInitializer, let.copy(binding = expr))
-      case Reference(_, name, nameWithType) =>
-        descriptorFor(nameWithType.typ.typ).flatMap { descriptor =>
-          val internalName = getInternalName(nameWithType.name, enclosingClass = className)
+      case Reference(_, name, typedMeta) =>
+        descriptorFor(typedMeta.typ.typ).flatMap { descriptor =>
+          val internalName = getInternalName(typedMeta.name, enclosingClass = className)
           newStaticFieldFrom(classWriter, className, staticInitializer)(let.name, descriptor, internalName, name)
         }
-      case ifExpr @ If(_, _, _, nameWithType) =>
+      case ifExpr @ If(_, _, _, typedMeta) =>
         for {
-          descriptor <- descriptorFor(nameWithType.typ.typ)
+          descriptor <- descriptorFor(typedMeta.typ.typ)
           _ <- newStaticField(classWriter)(let.name, descriptor, null)
           _ <- newExpr(classWriter, className, staticInitializer, let.name, Map.empty, Map.empty)(ifExpr)
         } yield staticInitializer.visitFieldInsn(PUTSTATIC, className, let.name, descriptor)
-      case lam @ Lambda(_, _, nameWithType) =>
+      case lam @ Lambda(_, _, typedMeta) =>
         for {
-          descriptor <- descriptorFor(nameWithType.typ.typ)
+          descriptor <- descriptorFor(typedMeta.typ.typ)
           _ <- newStaticField(classWriter)(let.name, descriptor, null)
           _ <- newExpr(classWriter, className, staticInitializer, let.name, Map.empty, Map.empty)(lam)
         } yield staticInitializer.visitFieldInsn(PUTSTATIC, className, let.name, descriptor)
-      case apply @ Apply(_, _, nameWithType) =>
+      case apply @ Apply(_, _, typedMeta) =>
         for {
-          descriptor <- descriptorFor(nameWithType.typ.typ)
+          descriptor <- descriptorFor(typedMeta.typ.typ)
           _ <- newStaticField(classWriter)(let.name, descriptor, null)
           _ <- newExpr(classWriter, className, staticInitializer, let.name, Map.empty, Map.empty)(apply)
         } yield staticInitializer.visitFieldInsn(PUTSTATIC, className, let.name, descriptor)
     }
   }
 
-  def newTopLevelDeclaration(internalName: String, cw: ClassWriter, siv: GeneratorAdapter, decl: TopLevelDeclaration[NamePosType]): Either[List[CodegenError], Unit] =
+  def newTopLevelDeclaration(internalName: String, cw: ClassWriter, siv: GeneratorAdapter, decl: TopLevelDeclaration[Meta.Typed]): Either[List[CodegenError], Unit] =
     decl match {
       case let @ Let(_, _, _) =>
         newTopLevelLet(internalName, cw, siv, let)
@@ -528,7 +528,7 @@ class Codegen(verifyCodegen: Boolean) {
     }
   }
 
-  def generate(mod: Module[NamePosType]): Either[List[CodegenError], Array[Byte]] = {
+  def generate(mod: Module[Meta.Typed]): Either[List[CodegenError], Array[Byte]] = {
     val className = getInternalName(mod.meta.name, mod.name)
 
     liftedDefns.set(0)

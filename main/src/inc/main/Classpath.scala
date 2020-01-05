@@ -7,15 +7,16 @@ import cats.instances.either._
 import cats.instances.list._
 import cats.syntax.either._
 import cats.syntax.traverse._
+import com.typesafe.scalalogging.LazyLogging
 import java.lang.{ ClassLoader, String }
 import java.io.{ ByteArrayOutputStream, File, InputStream, OutputStream }
 import java.nio.file.Paths
 import java.net.URL
 import scala.{ Array, Byte, Either, Option, Unit }
-import scala.collection.immutable.{ List, Map }
+import scala.collection.immutable.List
 import scala.Predef.{ ArrowAssoc, wrapRefArray }
 
-object Classpath {
+object Classpath extends LazyLogging {
   def parseUrls(classpath: String): Either[List[Error], Array[URL]] = {
     val urlStrings = classpath.split(File.pathSeparator)
     Chain.fromSeq(urlStrings.toIndexedSeq).traverse { p =>
@@ -54,7 +55,7 @@ object Classpath {
     }
   }
 
-  def readEnvironment(imports: List[Import], classloader: ClassLoader): Either[List[Error], Map[String, TopLevelDeclaration[NameWithType]]] = {
+  def readEnvironment(imports: List[Import], classloader: ClassLoader): Either[List[Error], Environment] = {
     val distinctPrefixes = imports.map {
       case ImportModule(pkg, nm, pos) =>
         (pkg, nm, pos)
@@ -73,22 +74,19 @@ object Classpath {
         } yield (mod.fullName -> mod)
     }
 
-    val declarations = classpathModules.map(_.toMap).map { modules =>
-      imports.flatMap {
+    val environment = classpathModules.map(_.toMap).map { modules =>
+      val environments = imports.map {
         case i @ ImportModule(_, _, _) =>
           val mod = modules(i.moduleName)
-          mod.declarations.map { d =>
-            (mod.name + "." + d.name) -> d
-          }
+          mod.environment.prefixed(mod.name)
         case i @ ImportSymbols(_, _, syms, _) =>
           val mod = modules(i.moduleName)
-          mod.declarations
-            .filter(d => syms.contains(d.name))
-            .map(d => d.name -> d)
+          mod.environment.filter(d => syms.contains(d))
       }
+
+      environments.foldLeft(Environment.empty)(_ ++ _)
     }
 
-    declarations.map(_.toMap)
+    environment
   }
-
 }

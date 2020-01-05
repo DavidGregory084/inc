@@ -12,7 +12,7 @@ sealed abstract class TopLevelDeclaration[A] extends Product with Serializable {
 
   def meta: A
 
-  def toProto(implicit eqv: A =:= NamePosType): proto.TopLevelDeclaration = this match {
+  def toProto(implicit eqv: A =:= Meta.Typed): proto.TopLevelDeclaration = this match {
     case Let(name, expr, meta) =>
       val nameWithType = Some(eqv(meta).toProto)
       proto.Let(name, expr.toProto, nameWithType)
@@ -25,7 +25,7 @@ sealed abstract class TopLevelDeclaration[A] extends Product with Serializable {
         nameWithType)
   }
 
-  def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= NamePosType): TopLevelDeclaration[A] =
+  def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= Meta.Typed): TopLevelDeclaration[A] =
     if (subst.isEmpty)
       this
     else {
@@ -35,18 +35,18 @@ sealed abstract class TopLevelDeclaration[A] extends Product with Serializable {
 }
 
 object TopLevelDeclaration {
-  def fromProto(decl: proto.TopLevelDeclaration): TopLevelDeclaration[NameWithType] = decl match {
+  def fromProto(decl: proto.TopLevelDeclaration): TopLevelDeclaration[Meta.Typed] = decl match {
     case let @ proto.Let(name, binding, _) =>
       Let(
         name,
         Expr.fromProto(binding),
-        NameWithType.fromProto(let.getNameWithType))
+        Meta.fromProto(let.getNameWithType))
     case data @ proto.Data(name, tparams, cases, _) =>
       Data(
         name,
         tparams.map(TypeVariable.fromProto).toList,
         cases.map(DataConstructor.fromProto).toList,
-        NameWithType.fromProto(data.getNameWithType))
+        Meta.fromProto(data.getNameWithType))
     case proto.TopLevelDeclaration.Empty =>
       throw new Exception("Empty TopLevelDeclaration in protobuf")
   }
@@ -70,12 +70,12 @@ final case class DataConstructor[A](
   returnType: TypeScheme,
   meta: A
 ) {
-  def toProto(implicit eqv: A =:= NamePosType): proto.DataConstructor = {
+  def toProto(implicit eqv: A =:= Meta.Typed): proto.DataConstructor = {
     val nameWithType = Some(eqv(meta).toProto)
     proto.DataConstructor(name, params.map(_.toProto), Some(returnType.toProto), nameWithType)
   }
 
-  def defaultKinds(implicit to: A =:= NamePosType): DataConstructor[A] = {
+  def defaultKinds(implicit to: A =:= Meta.Typed): DataConstructor[A] = {
     val from = to.flip
     val namePosType = to(meta)
     copy(
@@ -84,7 +84,7 @@ final case class DataConstructor[A](
       meta = from(namePosType.defaultKinds))
   }
 
-  def substituteKinds(subst: Map[KindVariable, Kind])(implicit to: A =:= NamePosType): DataConstructor[A] = {
+  def substituteKinds(subst: Map[KindVariable, Kind])(implicit to: A =:= Meta.Typed): DataConstructor[A] = {
     val from = to.flip
     val namePosType = to(meta)
     copy(
@@ -95,13 +95,13 @@ final case class DataConstructor[A](
 }
 
 object DataConstructor {
-  def fromProto(data: proto.DataConstructor): DataConstructor[NameWithType] = data match {
+  def fromProto(data: proto.DataConstructor): DataConstructor[Meta.Typed] = data match {
     case data @ proto.DataConstructor(name, params, _, _) =>
       DataConstructor(
         name,
         params.map(Param.fromProto).toList,
         TypeScheme.fromProto(data.getReturnType),
-        NameWithType.fromProto(data.getNameWithType))
+        Meta.fromProto(data.getNameWithType))
   }
 }
 
@@ -118,7 +118,7 @@ final case class Data[A](
     else
       Parameterized(typeParams.map(_.kind), Atomic)
 
-  def defaultKinds(implicit to: A =:= NamePosType): Data[A] = {
+  def defaultKinds(implicit to: A =:= Meta.Typed): Data[A] = {
     val from = to.flip
     val namePosType = to(meta)
     copy(
@@ -127,7 +127,7 @@ final case class Data[A](
       meta = from(namePosType.defaultKinds))
   }
 
-  def substituteKinds(subst: Map[KindVariable, Kind])(implicit to: A =:= NamePosType): Data[A] = {
+  def substituteKinds(subst: Map[KindVariable, Kind])(implicit to: A =:= Meta.Typed): Data[A] = {
     val from = to.flip
     val namePosType = to(meta)
     copy(

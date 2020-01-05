@@ -10,22 +10,22 @@ class KindcheckerSpec extends FlatSpec with Matchers {
 
   def mkParam(name: String, typ: Type) = {
     val scheme = TypeScheme(List.empty, typ)
-    Param(name, Some(scheme), NamePosType(LocalName(name), Pos.Empty, scheme))
+    Param(name, Some(scheme), Meta.Typed(LocalName(name), scheme, Pos.Empty))
   }
 
-  def mkConstr(name: String, params: List[Param[NamePosType]], parent: Data[NamePosType]) = {
+  def mkConstr(name: String, params: List[Param[Meta.Typed]], parent: Data[Meta.Typed]) = {
     val typ = TypeScheme(parent.typeParams, Type.Function(params.map(_.meta.typ.typ), parent.meta.typ.typ))
-    DataConstructor(name, params, parent.meta.typ, NamePosType(LocalName(name), Pos.Empty, typ))
+    DataConstructor(name, params, parent.meta.typ, Meta.Typed(LocalName(name), typ, Pos.Empty))
   }
 
-  def mkData(name: String, typeParams: List[TypeVariable], kind: Option[Kind] = None)(mkCases: Data[NamePosType] => List[DataConstructor[NamePosType]]) = {
+  def mkData(name: String, typeParams: List[TypeVariable], kind: Option[Kind] = None)(mkCases: Data[Meta.Typed] => List[DataConstructor[Meta.Typed]]) = {
     val typ =
       if (typeParams.isEmpty)
         TypeScheme(List.empty, TypeConstructor(name, kind.getOrElse(KindVariable())))
       else
         TypeScheme(typeParams, TypeApply(TypeConstructor(name, kind.getOrElse(KindVariable())), typeParams, kind.map(_ => `*`).getOrElse(KindVariable())))
 
-    val data = Data(name, typeParams, List.empty, NamePosType(LocalName(name), Pos.Empty, typ))
+    val data = Data(name, typeParams, List.empty, Meta.Typed(LocalName(name), typ, Pos.Empty))
 
     val cases = mkCases(data)
 

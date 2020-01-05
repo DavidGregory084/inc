@@ -6,6 +6,7 @@ import java.lang.String
 import scala.Some
 import scala.=:=
 import scala.collection.immutable.{ List, Map }
+import scala.Predef.ArrowAssoc
 
 final case class Module[A](
   pkg: List[String],
@@ -14,7 +15,7 @@ final case class Module[A](
   declarations: List[TopLevelDeclaration[A]],
   meta: A,
 ) {
-  def toProto(implicit eqv: A =:= NamePosType): proto.Module = proto.Module(
+  def toProto(implicit eqv: A =:= Meta.Typed): proto.Module = proto.Module(
     pkg = pkg,
     name = name,
     imports = imports.map(_.toProto),
@@ -24,7 +25,30 @@ final case class Module[A](
 
   def fullName = (pkg :+ name).mkString("/")
 
-  def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= NamePosType): Module[A] =
+  def environment(implicit eqv: A =:= Meta.Typed): Environment = {
+    val to = eqv.liftCo[TopLevelDeclaration]
+
+    val typedDeclarations = declarations.map(to.apply)
+
+    val decls = typedDeclarations.flatMap {
+      case Let(name, _, meta) =>
+        List(name -> meta)
+      case Data(_, _, cases, _) =>
+        cases.map {
+          case DataConstructor(name, _, _, meta) =>
+            name -> meta
+        }
+    }
+
+    val types = typedDeclarations.collect {
+      case Data(name, _, _, meta) =>
+        name -> meta.typ.typ.kind
+    }
+
+    Environment(decls.toMap, types.toMap)
+  }
+
+  def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= Meta.Typed): Module[A] =
     if (subst.isEmpty)
       this
     else {
@@ -34,12 +58,12 @@ final case class Module[A](
 }
 
 object Module {
-  def fromProto(mod: proto.Module): Module[NameWithType] = Module(
+  def fromProto(mod: proto.Module): Module[Meta.Typed] = Module(
     pkg = mod.pkg.toList,
     name = mod.name,
     imports = mod.imports.toList.map(Import.fromProto),
     declarations = mod.declarations.toList.map(TopLevelDeclaration.fromProto),
-    meta = NameWithType.fromProto(mod.getNameWithType),
+    meta = Meta.fromProto(mod.getNameWithType),
   )
   implicit val moduleFunctor: Functor[Module] = new Functor[Module] {
     def map[A, B](ma: Module[A])(f: A => B): Module[B] = {

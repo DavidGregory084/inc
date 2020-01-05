@@ -11,19 +11,19 @@ import org.scalatestplus.scalacheck._
 
 class CodegenSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyChecks with Generators {
 
-  def mkModule(name: String, decls: List[TopLevelDeclaration[NamePosType]]) = Module(
+  def mkModule(name: String, decls: List[TopLevelDeclaration[Meta.Typed]]) = Module(
     pkg = List("Test", "Codegen"),
     name = name,
     imports = List.empty,
     declarations = decls,
-    meta = NamePosType(ModuleName(List("Test", "Codegen"), name), Pos.Empty, TypeScheme(Type.Module)))
+    meta = Meta.Typed(ModuleName(List("Test", "Codegen"), name), TypeScheme(Type.Module), Pos.Empty))
 
-  def mkLet(name: String, binding: Expr[NamePosType]) =
-    Let(name, binding, NamePosType(LocalName(name), Pos.Empty, binding.meta.typ))
+  def mkLet(name: String, binding: Expr[Meta.Typed]) =
+    Let(name, binding, Meta.Typed(LocalName(name), binding.meta.typ, Pos.Empty))
 
-  def mkInt(i: Int) = LiteralInt(i, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Int)))
-  def mkRef(r: String, typ: TypeScheme) = Reference(List.empty, r, NamePosType(NoName, Pos.Empty, typ))
-  def mkUnit() = LiteralUnit(NamePosType(NoName, Pos.Empty, TypeScheme(Type.Unit)))
+  def mkInt(i: Int) = LiteralInt(i, Meta.Typed(NoName, TypeScheme(Type.Int), Pos.Empty))
+  def mkRef(r: String, typ: TypeScheme) = Reference(List.empty, r, Meta.Typed(NoName, typ, Pos.Empty))
+  def mkUnit() = LiteralUnit(Meta.Typed(NoName, TypeScheme(Type.Unit), Pos.Empty))
 
   "Codegen" should "generate code for a simple module" in {
     val mod = mkModule("Ref", List(
@@ -107,7 +107,7 @@ class CodegenSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCh
     finally dir.delete()
   }
 
-  it should "round trip arbitrary module files" in forAll(minSuccessful(1000)) { mod: Module[NamePosType] =>
+  it should "round trip arbitrary module files" in forAll(minSuccessful(1000)) { mod: Module[Meta.Typed] =>
     withTmpDir { dir =>
       try {
         val result = Codegen.generate(mod).fold(

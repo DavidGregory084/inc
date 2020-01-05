@@ -1,6 +1,5 @@
 package inc.common
 
-import java.lang.String
 import scala.collection.immutable.{ List, Map, Set, Vector }
 
 case class TypeScheme(bound: List[TypeVariable], typ: Type) {
@@ -36,8 +35,8 @@ case class TypeScheme(bound: List[TypeVariable], typ: Type) {
 object TypeScheme {
   def apply(typ: Type): TypeScheme = TypeScheme(List.empty, typ)
 
-  def generalize(env: Map[String, TypeScheme], typ: Type): TypeScheme = {
-    val freeInEnv = env.values.flatMap(_.freeTypeVariables).toSet
+  def generalize(env: Environment, typ: Type): TypeScheme = {
+    val freeInEnv = env.declarations.values.flatMap(_.typ.freeTypeVariables).toSet
     val bound = typ.freeTypeVariables diff freeInEnv
     val scheme = TypeScheme(bound.toList, typ)
     scheme
