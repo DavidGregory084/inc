@@ -70,6 +70,12 @@ final case class DataConstructor[A](
   returnType: TypeScheme,
   meta: A
 ) {
+  def withAscribedTypes(tparams: List[TypeVariable])(implicit eqv: A =:= Meta.Untyped): DataConstructor[Meta.Typed] = {
+    val checkedParams = params.map(_.withAscribedType)
+    val typeScheme = TypeScheme(tparams, Type.Function(checkedParams.map(_.meta.typ.typ), returnType.typ))
+    copy(params = checkedParams, meta = eqv(meta).withType(typeScheme))
+  }
+
   def toProto(implicit eqv: A =:= Meta.Typed): proto.DataConstructor = {
     val nameWithType = Some(eqv(meta).toProto)
     proto.DataConstructor(name, params.map(_.toProto), Some(returnType.toProto), nameWithType)
@@ -117,6 +123,27 @@ final case class Data[A](
       Atomic
     else
       Parameterized(typeParams.map(_.kind), Atomic)
+
+  def withAscribedTypes(implicit eqv: A =:= Meta.Untyped): Data[Meta.Typed] = {
+    val checkedCases =
+      cases.map(_.withAscribedTypes(typeParams))
+
+    val tyCon =
+      TypeConstructor(name, KindVariable(), meta.pos)
+
+    val typeScheme =
+      if (typeParams.isEmpty)
+        TypeScheme(List.empty, tyCon)
+      else
+        TypeScheme(
+          typeParams,
+          TypeApply(tyCon, typeParams, KindVariable())
+        )
+
+    copy(
+      cases = checkedCases,
+      meta = meta.withType(typeScheme))
+  }
 
   def defaultKinds(implicit to: A =:= Meta.Typed): Data[A] = {
     val from = to.flip

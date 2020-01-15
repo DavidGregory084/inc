@@ -58,22 +58,31 @@ class Kindchecker(context: Printer.SourceContext, isTraceEnabled: Boolean) exten
     }
   }
 
-  def gather(typ: Type): List[KindConstraint] = typ match {
+  def gather(typ: Type, env: Environment): List[KindConstraint] = typ match {
     case NamedTypeVariable(nm, kind, pos) =>
       trace(s"Reference to $nm", kind, pos)
       List.empty
+
     case InferredTypeVariable(_, _, _) =>
       List.empty
+
     case TypeConstructor(nm, kind, pos) =>
       trace(s"Reference to $nm", kind, pos)
-      List.empty
+
+      val envKind = env.types.getOrElse(nm, kind)
+
+      if (kind != envKind)
+        List(EqualKind(kind, envKind, pos))
+      else
+        List.empty
+
     case TypeApply(tp, appliedTps, kind, pos) =>
       trace("Type application", kind, pos)
 
-      val tpCsts = gather(tp)
+      val tpCsts = gather(tp, env)
       trace("Type to apply", tpCsts)
 
-      val tparamCsts = appliedTps.flatMap(gather)
+      val tparamCsts = appliedTps.flatMap(gather(_, env))
 
       tparamCsts.zipWithIndex.foreach {
         case (csts, idx) =>
@@ -90,13 +99,13 @@ class Kindchecker(context: Printer.SourceContext, isTraceEnabled: Boolean) exten
       tpCsts ++ tparamCsts ++ appCst
   }
 
-  def gather(constr: DataConstructor[Meta.Typed]): List[KindConstraint] = constr match {
+  def gather(constr: DataConstructor[Meta.Typed], env: Environment): List[KindConstraint] = constr match {
     case DataConstructor(name, params, _, _) =>
       val constraints = params.foldLeft(List.empty[KindConstraint]) {
         case (cstsSoFar, Param(paramName, _, meta)) =>
           val paramResultCst = EqualKind(meta.typ.typ.kind, Atomic, meta.pos)
           trace(paramName, paramResultCst)
-          val paramCsts = gather(meta.typ.typ)
+          val paramCsts = gather(meta.typ.typ, env)
           cstsSoFar ++ List(paramResultCst) ++ paramCsts
       }
 
@@ -105,7 +114,7 @@ class Kindchecker(context: Printer.SourceContext, isTraceEnabled: Boolean) exten
       constraints
   }
 
-  def gather(data: Data[Meta.Typed]): Infer[List[KindConstraint]] = data match {
+  def gather(data: Data[Meta.Typed], env: Environment): Infer[List[KindConstraint]] = data match {
     case Data(name, tparams, cases, meta) =>
       val kind =
         if (tparams.isEmpty) {
@@ -132,7 +141,7 @@ class Kindchecker(context: Printer.SourceContext, isTraceEnabled: Boolean) exten
 
       val constraintsFromConstrs = cases.foldLeft(List.empty[KindConstraint]) {
         case (cstsSoFar, nextConstr) =>
-          cstsSoFar ++ gather(nextConstr)
+          cstsSoFar ++ gather(nextConstr, env)
       }
 
       val allConstraints = parentConstraint ++ constraintsFromConstrs
@@ -222,9 +231,9 @@ class Kindchecker(context: Printer.SourceContext, isTraceEnabled: Boolean) exten
     }
   }
 
-  def kindcheck(data: Data[Meta.Typed]): Infer[Data[Meta.Typed]] = {
+  def kindcheck(data: Data[Meta.Typed], env: Environment): Infer[(Data[Meta.Typed], Environment)] = {
     for {
-      csts <- gather(data)
+      csts <- gather(data, env)
 
       subst <- solve(csts)
 
@@ -236,14 +245,14 @@ class Kindchecker(context: Printer.SourceContext, isTraceEnabled: Boolean) exten
 
       checkedData = data.substituteKinds(subst).defaultKinds
 
-      kindEnv = checkedData.typeParams
+      updatedEnv = checkedData.typeParams
         .map(tv => tv.name -> tv.kind)
         .toMap.updated(checkedData.name, checkedData.kind)
 
-      _ = if (kindEnv.nonEmpty && isTraceEnabled) {
-        trace("Final kind environment", kindEnv)
+      _ = if (updatedEnv.nonEmpty && isTraceEnabled) {
+        trace("Final kind environment", updatedEnv)
       }
 
-    } yield checkedData
+    } yield (checkedData, env.withTypes(updatedEnv))
   }
 }

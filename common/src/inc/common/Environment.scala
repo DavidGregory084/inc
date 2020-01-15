@@ -15,6 +15,11 @@ case class Environment(
   def withDeclarations(decls: Iterable[(String, Meta.Typed)]) =
     copy(declarations = declarations ++ decls)
 
+  def withType(name: String, kind: Kind) =
+    copy(types = types.updated(name, kind))
+  def withTypes(tps: Iterable[(String, Kind)]) =
+    copy(types = types ++ tps)
+
   def prefixed(mod: String) = {
     Environment(
       declarations.map { case (nm, meta) => (mod + "." + nm) -> meta },

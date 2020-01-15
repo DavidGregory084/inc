@@ -52,6 +52,31 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
     }
   }
 
+  def trace(context: Printer.SourceContext, name: String, env: Environment) = {
+    if (isTraceEnabled) {
+      val header = Doc.hardLine + Doc.text(name + ":") + (Doc.hardLine * 2)
+
+      val formattedDeclsMsg = header + Doc.intercalate(Doc.hardLine, env.declarations.map {
+        case (nm, meta) =>
+          val tpStr = Printer.print(meta.typ)
+          Doc.text(nm + ":") & tpStr
+      })
+
+      val formattedTypesMsg = Doc.intercalate(Doc.hardLine, env.types.map {
+        case (nm, kind) =>
+          val kindStr = Printer.print(kind)
+          Doc.text(nm + ":") & kindStr
+      })
+
+      val formattedMsg = formattedDeclsMsg + (Doc.hardLine * 2) + formattedTypesMsg
+
+      val formattedStr = formattedMsg.render(context.consoleWidth)
+
+      logger.info(formattedStr)
+    }
+  }
+
+
   def withTypeScheme(expr: Expr[Meta.Untyped], typ: TypeScheme): Infer[(Expr[Meta.Typed], List[Constraint])] = {
     val exprWithType = expr.map(_.withType(typ))
     Right((exprWithType, List.empty))
@@ -245,7 +270,7 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
   def gather(
     decl: TopLevelDeclaration[Meta.Untyped],
     env: Environment
-  ): Infer[(TopLevelDeclaration[Meta.Typed], List[Constraint])] =
+  ): Infer[(TopLevelDeclaration[Meta.Typed], Environment, List[Constraint])] =
     decl match {
       case let @ Let(name, expr, meta) =>
         for {
@@ -269,38 +294,13 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
 
             val checkedLet = let.copy(binding = checkedExpr, meta = meta.withType(tp))
 
-            (checkedLet, constraints)
+            (checkedLet, env, constraints)
         }
-      case data @ Data(name, tparams, cases, meta) =>
-        val checkedCases: List[DataConstructor[Meta.Typed]] = cases.map {
-          case constr @ DataConstructor(caseName, params, returnType, caseMeta) =>
-            val checkedParams = params.map(_.withAscribedType)
-            val typeScheme = TypeScheme(tparams, Type.Function(checkedParams.map(_.meta.typ.typ), returnType.typ))
-
-            trace(caseName, caseMeta.pos, typeScheme)
-
-            constr.copy(params = checkedParams, meta = caseMeta.withType(typeScheme))
-        }
-
-        val tyCon =
-          TypeConstructor(name, KindVariable(), meta.pos)
-
-        val typeScheme =
-          if (tparams.isEmpty)
-            TypeScheme(List.empty, tyCon)
-          else
-            TypeScheme(
-              tparams,
-              TypeApply(tyCon, tparams, KindVariable())
-            )
-
-        val checkedData = data.copy(
-          cases = checkedCases,
-          meta = meta.withType(typeScheme)
-        )
-
-        kindchecker.kindcheck(checkedData).map { d =>
-          (d, List.empty)
+      case data @ Data(_, _, _, _) =>
+        val checkedData = data.withAscribedTypes
+        kindchecker.kindcheck(checkedData, env).map {
+          case (kindCheckedData, updatedEnv) =>
+            (kindCheckedData, updatedEnv, List.empty)
         }
     }
 
@@ -331,6 +331,8 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
 
         val initialEnv = importedEnv ++ Environment(initialDecls.toMap, initialTypes.toMap)
 
+        trace(context, "Initial environment", initialEnv)
+
         val emptyRes: Infer[(Chain[TopLevelDeclaration[Meta.Typed]], Environment, List[Constraint])] =
           Right((Chain.empty, initialEnv, List.empty))
 
@@ -338,9 +340,9 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
           case (resSoFar, nextDecl) =>
             for {
               (checkedSoFar, envSoFar, constraintsSoFar) <- resSoFar
-              (checkedDecl, constraints) <- gather(nextDecl, envSoFar)
-              updatedEnv = envSoFar.withDeclaration(checkedDecl.name, checkedDecl.meta)
-            } yield (checkedSoFar :+ checkedDecl, updatedEnv, constraintsSoFar ++ constraints)
+              (checkedDecl, updatedEnv, constraints) <- gather(nextDecl, envSoFar)
+              envWithDecl = updatedEnv.withDeclaration(checkedDecl.name, checkedDecl.meta)
+            } yield (checkedSoFar :+ checkedDecl, envWithDecl, constraintsSoFar ++ constraints)
         }
 
         constraintsFromDecls.map {
