@@ -4,7 +4,7 @@ import inc.common._
 import inc.parser.Parser
 import inc.resolver.Resolver
 import inc.typechecker.Typechecker
-import inc.codegen.Codegen
+import inc.codegen.{ Codegen, ClassFile }
 import com.typesafe.scalalogging.LazyLogging
 import java.lang.{ String, System }
 import java.net.URLClassLoader
@@ -12,7 +12,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path, Paths}
 import org.jline.terminal.TerminalBuilder
 import org.typelevel.paiges.Style
-import scala.{ Array, Boolean, Byte, Unit, Either, StringContext }
+import scala.{ Array, Boolean, Unit, Either, StringContext }
 import scala.collection.immutable.List
 import scala.jdk.CollectionConverters._
 import scala.Predef.wrapRefArray
@@ -73,7 +73,7 @@ object Main extends LazyLogging {
     } yield out
   }
 
-  def compileModule(dest: Path, context: Printer.SourceContext, config: Configuration = Configuration.default): Either[List[Error], Path] = {
+  def compileModule(dest: Path, context: Printer.SourceContext, config: Configuration = Configuration.default): Either[List[Error], List[Path]] = {
     val beforeAll = System.nanoTime
 
     val typechecker = new Typechecker(config.traceTyper)
@@ -90,26 +90,26 @@ object Main extends LazyLogging {
 
       checked <- runPhase[Module[Meta.Typed]]("typechecker", context, config, _.printTyper, typechecker.typecheck(resolved, importedEnv, context))
 
-      code <- runPhase[Array[Byte]]("codegen", context, config, _.printCodegen, codegen.generate(checked), codegen.print(_))
+      classFiles <- runPhase[List[ClassFile]]("codegen", context, config, _.printCodegen, codegen.generate(checked, importedEnv), _.foreach(f => codegen.print(f.bytes)))
 
     } yield {
       val outDir = mod.pkg.foldLeft(dest) {
         case (path, next) => path.resolve(next)
       }
 
-      val out = outDir.resolve(s"${mod.name}.class")
-
-      Files.deleteIfExists(out)
-
-      Files.createDirectories(out.getParent)
-
-      Files.write(out, code)
+      val outFiles = classFiles.map { classFile =>
+        val outFile = outDir.resolve(s"${classFile.name}.class")
+        Files.deleteIfExists(outFile)
+        Files.createDirectories(outFile.getParent)
+        Files.write(outFile, classFile.bytes)
+        outFile
+      }
 
       val afterAll = System.nanoTime
 
       logger.info(Messages.compilationTime(context, beforeAll, afterAll))
 
-      out
+      outFiles
     }
 
     res.left.foreach { _ =>

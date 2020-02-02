@@ -136,7 +136,7 @@ object Expr {
       LiteralUnit(Meta.fromProto(unit.getNameWithType))
     case ref @ proto.Reference(nm, _) =>
       val mod = nm.split("/").toList
-      val name = mod.last.split("\\.").last
+      val name = mod.last
       Reference(mod.dropRight(1), name, Meta.fromProto(ref.getNameWithType))
     case ifExpr @ proto.If(cond, thenExpr, elseExpr, _) =>
       If(

@@ -7,41 +7,50 @@ import scala.collection.immutable.Map
 import scala.Predef.ArrowAssoc
 
 case class Environment(
-  declarations: Map[String, Meta.Typed],
-  types: Map[String, Kind]
+  names: Map[String, Name] = Map.empty,
+  types: Map[String, TypeScheme] = Map.empty,
+  kinds: Map[String, Kind] = Map.empty
 ) {
-  def withDeclaration(name: String, meta: Meta.Typed) =
-    copy(declarations = declarations.updated(name, meta))
-  def withDeclarations(decls: Iterable[(String, Meta.Typed)]) =
-    copy(declarations = declarations ++ decls)
+  def withName(name: String, fullName: Name) =
+    copy(names = names.updated(name, fullName))
+  def withNames(nms: Iterable[(String, Name)]) =
+    copy(names = names ++ nms)
 
-  def withType(name: String, kind: Kind) =
-    copy(types = types.updated(name, kind))
-  def withTypes(tps: Iterable[(String, Kind)]) =
+  def withType(name: String, typ: TypeScheme) =
+    copy(types = types.updated(name, typ))
+  def withTypes(tps: Iterable[(String, TypeScheme)]) =
     copy(types = types ++ tps)
 
-  def prefixed(mod: String) = {
+  def withKind(name: String, kind: Kind) =
+    copy(kinds = kinds.updated(name, kind))
+  def withKinds(knds: Iterable[(String, Kind)]) =
+    copy(kinds = kinds ++ knds)
+
+  def prefixed(prefix: String) = {
     Environment(
-      declarations.map { case (nm, meta) => (mod + "." + nm) -> meta },
-      types
+      names.map { case (nm, fullName) => (prefix + "." + nm) -> fullName },
+      types.map { case (nm, typ) => (prefix + "." + nm) -> typ },
+      kinds
     )
   }
 
   def ++(env: Environment) = {
     Environment(
-      declarations ++ env.declarations,
-      types ++ env.types
+      names ++ env.names,
+      types ++ env.types,
+      kinds ++ env.kinds
     )
   }
 
   def filter(pred: String => Boolean): Environment = {
     Environment(
-      declarations.view.filterKeys(pred).toMap,
-      types.view.filterKeys(pred).toMap
+      names.view.filterKeys(pred).toMap,
+      types.view.filterKeys(pred).toMap,
+      kinds.view.filterKeys(pred).toMap,
     )
   }
 }
 
 object Environment {
-  def empty = Environment(Map.empty, Map.empty)
+  def empty = Environment()
 }

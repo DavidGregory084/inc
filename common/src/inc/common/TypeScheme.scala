@@ -36,7 +36,7 @@ object TypeScheme {
   def apply(typ: Type): TypeScheme = TypeScheme(List.empty, typ)
 
   def generalize(env: Environment, typ: Type): TypeScheme = {
-    val freeInEnv = env.declarations.values.flatMap(_.typ.freeTypeVariables).toSet
+    val freeInEnv = env.types.values.flatMap(_.typ.freeTypeVariables).toSet
     val bound = typ.freeTypeVariables diff freeInEnv
     val scheme = TypeScheme(bound.toList, typ)
     scheme

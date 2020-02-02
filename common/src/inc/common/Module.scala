@@ -30,22 +30,32 @@ final case class Module[A](
 
     val typedDeclarations = declarations.map(to.apply)
 
-    val decls = typedDeclarations.flatMap {
+    val names = typedDeclarations.flatMap {
       case Let(name, _, meta) =>
-        List(name -> meta)
-      case Data(_, _, cases, _) =>
-        cases.map {
-          case DataConstructor(name, _, _, meta) =>
-            name -> meta
+        List(name -> meta.name)
+      case Data(name, _, cases, meta) =>
+        (name -> meta.name) :: cases.map {
+          case DataConstructor(caseName, _, _, caseMeta) =>
+            caseName -> caseMeta.name
         }
     }
 
-    val types = typedDeclarations.collect {
+    val types = typedDeclarations.flatMap {
+      case Let(name, _, meta) =>
+        List(name -> meta.typ)
+      case Data(_, _, cases, _) =>
+        cases.map {
+          case DataConstructor(name, _, _, meta) =>
+            name -> meta.typ
+        }
+    }
+
+    val kinds = typedDeclarations.collect {
       case Data(name, _, _, meta) =>
         name -> meta.typ.typ.kind
     }
 
-    Environment(decls.toMap, types.toMap)
+    Environment(names.toMap, types.toMap, kinds.toMap)
   }
 
   def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= Meta.Typed): Module[A] =

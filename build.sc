@@ -111,7 +111,7 @@ object typechecker extends ScalaSettingsModule {
 
 object codegen extends ScalaSettingsModule {
   def moduleDeps = Seq(common, rts)
-  def asmVersion = T { "7.2" }
+  def asmVersion = T { "7.3.1" }
   def ivyDeps = Agg(
     ivy"org.ow2.asm:asm:${asmVersion()}",
     ivy"org.ow2.asm:asm-commons:${asmVersion()}",

@@ -5,7 +5,7 @@ import cats.instances.either._
 import cats.instances.list._
 import cats.syntax.either._
 import cats.syntax.functor._
-import cats.syntax.traverse._
+import cats.syntax.foldable._
 import inc.common._
 import java.lang.String
 import scala.{ Either, Right, StringContext }
@@ -112,24 +112,24 @@ object Resolver {
           Right((Let(name, resolvedExpr, Meta.Untyped(memberName, pos)), updatedTbl))
       }
 
-    case data @ Data(name, _, cases, pos) =>
+    case data @ Data(_, _, cases, pos) =>
       val resolvedCases = cases.map {
-        case constr @ DataConstructor(caseName, params, _, casePos) =>
+        case constr @ DataConstructor(_, params, _, constrPos) =>
           val resolvedParams = params.map { param =>
             param.map(pos => Meta.Untyped(LocalName(param.name), pos))
           }
-          val memberName = MemberName(mod.pkg, mod.name, caseName)
-          constr.copy(params = resolvedParams, meta = Meta.Untyped(memberName, casePos))
+          val constrName = ConstrName(mod.pkg, mod.name, data.name, constr.name)
+          constr.copy(params = resolvedParams, meta = Meta.Untyped(constrName, constrPos))
       }
 
       val updatedData = data.copy(
         cases = resolvedCases,
-        meta = Meta.Untyped(NoName, pos)
+        meta = Meta.Untyped(MemberName(mod.pkg, mod.name, data.name), pos)
       )
 
       val updatedTbl = resolvedCases.foldLeft(tbl) {
         case (tbl, nextCase) =>
-          tbl.updated(name, nextCase.meta.name)
+          tbl.updated(nextCase.name, nextCase.meta.name)
       }
 
       Right((updatedData, updatedTbl))
@@ -140,7 +140,7 @@ object Resolver {
     importedEnv: Environment = Environment.empty
   ): Either[List[ResolverError], Module[Meta.Untyped]] = module match {
     case Module(pkg, name, _, decls, pos) =>
-      val importedTbl = importedEnv.declarations.view.map { case (sym, meta) => (sym, meta.name) }.toMap
+      val importedTbl = importedEnv.names
 
       // Do an initial pass over the top level declarations
       val initialRes = decls.foldLeft(importedTbl.asRight[List[ResolverError]]) {
@@ -151,15 +151,15 @@ object Resolver {
             else
               Right(tbl.updated(name, MemberName(module.pkg, module.name, name)))
           }
-        case (resSoFar, Data(_, _, cases, _)) =>
-          resSoFar.flatMap { tbl =>
-            cases.traverse {
-              case DataConstructor(name, _, _, pos) =>
+        case (resSoFar, Data(dataName, _, cases, _)) =>
+          resSoFar.flatMap { outerTbl =>
+            cases.foldM(outerTbl) {
+              case (tbl, DataConstructor(name, _, _, pos)) =>
                 if (tbl.contains(name))
                   ResolverError.singleton(pos, s"Symbol $name is already defined")
                 else
-                  Right(tbl.updated(name, MemberName(module.pkg, module.name, name)))
-            }.map { tbls => tbls.foldLeft(Map.empty: SymbolTable)(_ ++ _) }
+                  Right(tbl.updated(name, ConstrName(module.pkg, module.name, dataName, name)))
+            }
           }
       }
 

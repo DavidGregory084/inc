@@ -130,7 +130,7 @@ class KindcheckerSpec extends FlatSpec with Matchers {
 
     val ctx = Printer.SourceContext(80, "NonEmptyList.inc", Printer.print(data).render(80))
     val checker = new Kindchecker(ctx, false)
-    val env = Environment.empty.withType("List", `* -> *`)
+    val env = Environment.empty.withKind("List", `* -> *`)
     val actual = checker.kindcheck(data, env).map(_._1)
 
     val expectedTyVar = TypeVariable.named("A", kind = `*`)
@@ -164,7 +164,7 @@ class KindcheckerSpec extends FlatSpec with Matchers {
 
     val ctx = Printer.SourceContext(80, "NonEmptyList.inc", Printer.print(data).render(80))
     val checker = new Kindchecker(ctx, false)
-    val env = Environment.empty.withType("List", `* -> *`)
+    val env = Environment.empty.withKind("List", `* -> *`)
     val actual = checker.kindcheck(data, env).map(_._1)
 
     val expected = TypeError.singleton(Pos.Empty, s"""${Red("*")} does not unify with ${Red("* -> *")}""")

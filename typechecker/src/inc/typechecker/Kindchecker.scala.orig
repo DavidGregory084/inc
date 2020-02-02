@@ -68,14 +68,17 @@ class Kindchecker(context: Printer.SourceContext, isTraceEnabled: Boolean) exten
 
     case TypeConstructor(nm, kind, pos) =>
       trace(s"Reference to $nm", kind, pos)
+<<<<<<< Updated upstream
 
-      val envKind = env.kinds.getOrElse(nm, kind)
+      val envKind = env.types.getOrElse(nm, kind)
 
       if (kind != envKind)
         List(EqualKind(kind, envKind, pos))
       else
         List.empty
 
+=======
+>>>>>>> Stashed changes
     case TypeApply(tp, appliedTps, kind, pos) =>
       trace("Type application", kind, pos)
 
@@ -253,6 +256,6 @@ class Kindchecker(context: Printer.SourceContext, isTraceEnabled: Boolean) exten
         trace("Final kind environment", updatedEnv)
       }
 
-    } yield (checkedData, env.withKinds(updatedEnv))
+    } yield (checkedData, env.withTypes(updatedEnv))
   }
 }

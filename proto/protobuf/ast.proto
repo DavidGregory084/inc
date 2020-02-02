@@ -80,13 +80,20 @@ message LocalName {
 
 message ModuleName {
   repeated string pkg = 1;
-  string cls = 2;
+  string mod = 2;
 }
 
 message MemberName {
   repeated string pkg = 1;
-  string cls = 2;
+  string mod = 2;
   string name = 3;
+}
+
+message ConstrName {
+  repeated string pkg = 1;
+  string mod = 2;
+  string data = 3;
+  string name = 4;
 }
 
 message Name {
@@ -95,6 +102,7 @@ message Name {
     LocalName localName = 2;
     ModuleName moduleName = 3;
     MemberName memberName = 4;
+    ConstrName constrName = 5;
   }
 }
 

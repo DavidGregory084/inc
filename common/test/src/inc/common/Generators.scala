@@ -199,11 +199,11 @@ trait Generators { self: Matchers =>
       // Make sure we don't generate duplicate names
       name <- nameGen.suchThat(nm => !decls.map(_.name).contains(nm))
       expr <- exprGen(decls)
-    } yield Let(name, expr, Meta.Typed(MemberName(modName.pkg, modName.cls, name), expr.meta.typ, Pos.Empty))
+    } yield Let(name, expr, Meta.Typed(MemberName(modName.pkg, modName.mod, name), expr.meta.typ, Pos.Empty))
 
-  def constructorGen(modName: ModuleName, dataType: TypeScheme) =
+  def constructorGen(dataName: MemberName, dataType: TypeScheme) =
     for {
-      name <- nameGen
+      name <- nameGen.suchThat(_ != dataName.name)
 
       numArgs <- Gen.choose(1, 4)
 
@@ -227,7 +227,7 @@ trait Generators { self: Matchers =>
 
       typeScheme = TypeScheme(List.empty, Type.Function(pTps.map(_.typ), dataType.typ))
 
-    } yield DataConstructor(name, params, typeScheme, Meta.Typed(MemberName(modName.pkg, modName.cls, name), typeScheme, Pos.Empty))
+    } yield DataConstructor(name, params, typeScheme, Meta.Typed(ConstrName(dataName.pkg, dataName.mod, dataName.name, name), typeScheme, Pos.Empty))
 
   def dataGen(modName: ModuleName) =
     for {
@@ -237,14 +237,20 @@ trait Generators { self: Matchers =>
 
       typeScheme = TypeScheme(List.empty, TypeConstructor(name, Atomic))
 
-      constrs <- Gen.listOfN(numConstrs, constructorGen(modName, typeScheme))
+      dataName = MemberName(modName.pkg, modName.mod, name)
 
-    } yield Data(name, List.empty, constrs, Meta.Typed(NoName, typeScheme, Pos.Empty))
+      constrs <- Gen.listOfN(numConstrs, constructorGen(dataName, typeScheme)).suchThat { cs =>
+        // Don't generate duplicate names
+        val constrNames = cs.map(_.name)
+        constrNames.distinct.length == cs.length
+      }
+
+    } yield Data(name, List.empty, constrs, Meta.Typed(dataName, typeScheme, Pos.Empty))
 
   def declGen(modName: ModuleName) =
     StateT.modifyF[Gen, (Decls, Int)] {
       case (decls, remaining) =>
-        val declGens = List(letGen(modName, decls)/*, dataGen(modName)*/)
+        val declGens = List(letGen(modName, decls), dataGen(modName))
         Gen.oneOf(declGens).flatMap { declGen =>
           declGen.map { decl => (decls :+ decl, remaining - 1) }
         }

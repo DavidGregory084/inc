@@ -15,10 +15,9 @@ class Typechecker(isTraceEnabled: Boolean) extends LazyLogging {
     if (isTraceEnabled) {
       val header = Doc.hardLine + Doc.text(name + ":") + (Doc.hardLine * 2)
 
-      val formattedMsg = header + Doc.intercalate(Doc.hardLine, env.declarations.map {
-        case (nm, meta) =>
-          val tpStr = Printer.print(meta.typ)
-          Doc.text(nm + ":") & tpStr
+      val formattedMsg = header + Doc.intercalate(Doc.hardLine, env.types.map {
+        case (nm, typ) =>
+          Doc.text(nm + ":") & Printer.print(typ)
       })
 
       val formattedStr = formattedMsg.render(context.consoleWidth)
@@ -65,7 +64,8 @@ class Typechecker(isTraceEnabled: Boolean) extends LazyLogging {
       subst       <- solve.solve(csts)
 
       _ = if (subst.nonEmpty && isTraceEnabled) {
-        val substitution = Printer.print(subst).render(context.consoleWidth)
+        val substDoc = Printer.print(subst)(Printer.print, Printer.print)
+        val substitution = substDoc.render(context.consoleWidth)
         logger.info(NL + "Apply substitution: " + substitution)
       }
 

@@ -106,8 +106,6 @@ sealed abstract class Type extends Product with Serializable {
 }
 
 object Type {
-  val UnitClass = "inc.rts.Unit"
-
   val primitives = Set("Int", "Long", "Float", "Double", "Boolean", "Char")
 
   val Int = TypeConstructor("Int", Atomic)
@@ -118,7 +116,7 @@ object Type {
   val Char = TypeConstructor("Char", Atomic)
   val String = TypeConstructor("String", Atomic)
   val Module = TypeConstructor("Module", Atomic)
-  val Unit = TypeConstructor(UnitClass, Atomic)
+  val Unit = TypeConstructor("Unit", Atomic)
 
   def Function(from: List[Type], to: Type, pos: Pos = Pos.Empty) = {
     val typeArgs = (from :+ to)

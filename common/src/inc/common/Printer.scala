@@ -54,17 +54,10 @@ object Printer {
       print(l) + Doc.text(" \u2261 ") + print(r)
   }
 
-  def print(subst: Map[TypeVariable, Type]): Doc = {
+  def print[K, V](subst: Map[K, V])(printKey: K => Doc, printValue: V => Doc): Doc = {
     Doc.intercalate(Doc.char(',') + Doc.space, subst.map {
-      case (tyVar, typ) =>
-        print(tyVar) + Doc.text(" |-> ") + print(typ)
-    })
-  }
-
-  def printKindSubst(subst: Map[KindVariable, Kind]): Doc = {
-    Doc.intercalate(Doc.char(',') + Doc.space, subst.map {
-      case (kindVar, kind) =>
-        print(kindVar) + Doc.text(" |-> ") + print(kind)
+      case (k, v) =>
+        printKey(k) + Doc.text(" |-> ") + printValue(v)
     })
   }
 

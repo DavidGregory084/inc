@@ -75,13 +75,19 @@ object Classpath extends LazyLogging {
     }
 
     val environment = classpathModules.map(_.toMap).map { modules =>
+
       val environments = imports.map {
         case i @ ImportModule(_, _, _) =>
           val mod = modules(i.moduleName)
-          mod.environment.prefixed(mod.name)
+          val fqn = if (mod.pkg.isEmpty) mod.name else mod.pkg.mkString("/") + "/" + mod.name
+          val modPrefix = mod.environment.prefixed(mod.name)
+          val fullPrefix = mod.environment.prefixed(fqn)
+          modPrefix ++ fullPrefix
         case i @ ImportSymbols(_, _, syms, _) =>
           val mod = modules(i.moduleName)
-          mod.environment.filter(d => syms.contains(d))
+          val fqn = if (mod.pkg.isEmpty) mod.name else mod.pkg.mkString("/") + "/" + mod.name
+          val decls = mod.environment.filter(d => syms.contains(d))
+          decls ++ decls.prefixed(fqn)
       }
 
       environments.foldLeft(Environment.empty)(_ ++ _)

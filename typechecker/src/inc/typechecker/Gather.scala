@@ -8,7 +8,7 @@ import cats.syntax.functor._
 import org.typelevel.paiges._
 import java.lang.String
 import scala.{ Boolean, Some, None, Either, Right, StringContext }
-import scala.collection.immutable.List
+import scala.collection.immutable.{ List, Map }
 import scala.Predef.ArrowAssoc
 import com.typesafe.scalalogging.LazyLogging
 
@@ -56,19 +56,19 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
     if (isTraceEnabled) {
       val header = Doc.hardLine + Doc.text(name + ":") + (Doc.hardLine * 2)
 
-      val formattedDeclsMsg = header + Doc.intercalate(Doc.hardLine, env.declarations.map {
+      val formattedTypesMsg = header + Doc.intercalate(Doc.hardLine, env.types.map {
         case (nm, meta) =>
           val tpStr = Printer.print(meta.typ)
           Doc.text(nm + ":") & tpStr
       })
 
-      val formattedTypesMsg = Doc.intercalate(Doc.hardLine, env.types.map {
+      val formattedKindsMsg = Doc.intercalate(Doc.hardLine, env.kinds.map {
         case (nm, kind) =>
           val kindStr = Printer.print(kind)
           Doc.text(nm + ":") & kindStr
       })
 
-      val formattedMsg = formattedDeclsMsg + (Doc.hardLine * 2) + formattedTypesMsg
+      val formattedMsg = formattedTypesMsg + (Doc.hardLine * 2) + formattedKindsMsg
 
       val formattedStr = formattedMsg.render(context.consoleWidth)
 
@@ -115,8 +115,7 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
         withSimpleType(unit, Type.Unit)
 
       case ref @ Reference(_, name, meta)  =>
-        env.declarations.get(ref.fullName).map { refMeta =>
-          val refTyp = refMeta.typ
+        env.types.get(ref.fullName).map { refTyp =>
           val instTyp = refTyp.instantiate
 
           if (refTyp.bound.nonEmpty && isTraceEnabled) {
@@ -176,7 +175,7 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
             Param(name, None, meta.withSimpleType(TypeVariable()))
         }
 
-        val paramMappings = typedParams.map(p => p.name -> p.meta)
+        val paramMappings = typedParams.map(p => p.name -> p.meta.typ)
 
         typedParams.foreach {
           case Param(name, _, meta) =>
@@ -185,7 +184,7 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
 
         for {
           // Gather constraints from the body with the params in scope
-          (body, bodyCst) <- gather(body, env.withDeclarations(paramMappings))
+          (body, bodyCst) <- gather(body, env.withTypes(paramMappings))
 
           _ = trace("Lambda body", body.meta.pos, bodyCst)
 
@@ -311,25 +310,25 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
     module match {
       case Module(_, _, _, decls, meta) =>
 
-        val initialDecls = decls.flatMap {
-          case Let(name, _, meta) =>
-            List(name -> meta.withType(TypeScheme(List.empty, TypeVariable())))
+        val initialTypes = decls.flatMap {
+          case Let(name, _, _) =>
+            List(name -> TypeScheme(List.empty, TypeVariable()))
           case Data(dataName, tparams, cases, _) =>
             cases.map {
-              case DataConstructor(caseName, params, returnTyp, meta) =>
-                val paramTypes = params.map { p => p.ascribedAs.get.typ }
+              case DataConstructor(caseName, params, returnTyp, _) =>
+                val paramTypes = params.map(_.ascribedAs.get.typ)
                 val dataTyp = TypeConstructor(dataName, returnTyp.typ.kind)
                 val typeScheme = TypeScheme(tparams, Type.Function(paramTypes, dataTyp))
-                caseName -> meta.withType(typeScheme)
+                caseName -> typeScheme
             }
         }
 
-        val initialTypes = decls.collect {
+        val initialKinds = decls.collect {
           case data @ Data(name, _, _, _) =>
             name -> data.kind
         }
 
-        val initialEnv = importedEnv ++ Environment(initialDecls.toMap, initialTypes.toMap)
+        val initialEnv = importedEnv ++ Environment(Map.empty, initialTypes.toMap, initialKinds.toMap)
 
         trace(context, "Initial environment", initialEnv)
 
@@ -341,7 +340,7 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
             for {
               (checkedSoFar, envSoFar, constraintsSoFar) <- resSoFar
               (checkedDecl, updatedEnv, constraints) <- gather(nextDecl, envSoFar)
-              envWithDecl = updatedEnv.withDeclaration(checkedDecl.name, checkedDecl.meta)
+              envWithDecl = updatedEnv.withType(checkedDecl.name, checkedDecl.meta.typ)
             } yield (checkedSoFar :+ checkedDecl, envWithDecl, constraintsSoFar ++ constraints)
         }
 
