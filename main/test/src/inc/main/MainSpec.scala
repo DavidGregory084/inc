@@ -1,9 +1,9 @@
 package inc.main
 
 import better.files._
+import java.lang.Throwable
 import java.net.URLClassLoader
 import java.nio.file.{Files, Path}
-
 import org.scalatest._
 import org.scalatestplus.scalacheck._
 import inc.common._
@@ -14,7 +14,11 @@ class MainSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCheck
     val className = moduleName.replaceAll("/", ".")
     val classLoader = Thread.currentThread.getContextClassLoader
     val childLoader = URLClassLoader.newInstance(Array(classFileDir.url), classLoader)
-    Class.forName(s"${className}", true, childLoader)
+    try Class.forName(s"${className}", true, childLoader) catch {
+      case e: Throwable =>
+        e.printStackTrace()
+        fail("Unable to load compiled class", e)
+    }
   }
 
   def getStatic(clazz: Class[_], name: String) = {

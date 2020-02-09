@@ -2,7 +2,7 @@ package inc.common
 
 import java.lang.{ Exception, String }
 import java.util.concurrent.atomic.AtomicInteger
-import scala.{ Int, Product, Serializable }
+import scala.{ Option, Some, None, Int, Product, Serializable }
 import scala.collection.immutable.{ List, Map, Set }
 
 sealed abstract class Type extends Product with Serializable {
@@ -118,11 +118,27 @@ object Type {
   val Module = TypeConstructor("Module", Atomic)
   val Unit = TypeConstructor("Unit", Atomic)
 
-  def Function(from: List[Type], to: Type, pos: Pos = Pos.Empty) = {
-    val typeArgs = (from :+ to)
-    val kindArgs = typeArgs.map(_ => Atomic)
-    val funKind = Parameterized(kindArgs, Atomic)
-    TypeApply(TypeConstructor("->", funKind), typeArgs, Atomic, pos)
+  def isFunction(typ: Type) = typ match {
+    case TypeApply(TypeConstructor("->", _, _), _, _, _) =>
+      true
+    case _ =>
+      false
+  }
+
+  object Function {
+    def apply(from: List[Type], to: Type, pos: Pos = Pos.Empty) = {
+      val typeArgs = (from :+ to)
+      val kindArgs = typeArgs.map(_ => Atomic)
+      val funKind = Parameterized(kindArgs, Atomic)
+      TypeApply(TypeConstructor("->", funKind), typeArgs, Atomic, pos)
+    }
+
+    def unapply(typ: Type): Option[List[Type]] = typ match {
+      case TypeApply(TypeConstructor("->", _, _), tpArgs, _, _) =>
+        Some(tpArgs)
+      case _ =>
+        None
+    }
   }
 
   def fromProto(typ: proto.Type): Type = typ match {
@@ -143,7 +159,8 @@ object Type {
 sealed abstract class TypeVariable extends Type {
   def name: String
 
-  def occursIn(typ: Type) = typ.freeTypeVariables.contains(this)
+  def occursIn(typ: Type) =
+    typ.freeTypeVariables.exists(_.name == this.name)
 
   override def toProto: proto.TypeVariable = this match {
     case NamedTypeVariable(n, kind, _) =>

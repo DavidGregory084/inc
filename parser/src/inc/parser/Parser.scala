@@ -208,7 +208,6 @@ object Parser {
       Reference(List.empty, id, Pos(from, to))
   }
 
-
   def letDeclaration[_: P] = {
     val exprParser = new ExprParser(typeEnv = Map.empty)
 

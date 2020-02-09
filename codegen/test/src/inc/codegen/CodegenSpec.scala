@@ -22,14 +22,20 @@ class CodegenSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCh
     Let(name, binding, Meta.Typed(LocalName(name), binding.meta.typ, Pos.Empty))
 
   def mkInt(i: Int) = LiteralInt(i, Meta.Typed(NoName, TypeScheme(Type.Int), Pos.Empty))
-  def mkRef(r: String, typ: TypeScheme) = Reference(List.empty, r, Meta.Typed(NoName, typ, Pos.Empty))
+  def mkRef(r: String, env: Map[String, Name], typ: TypeScheme) = Reference(List.empty, r, Meta.Typed(env(r), typ, Pos.Empty))
   def mkUnit() = LiteralUnit(Meta.Typed(NoName, TypeScheme(Type.Unit), Pos.Empty))
 
   "Codegen" should "generate code for a simple module" in {
+    val env = Map(
+      "int" -> MemberName(List("Test", "Codegen"), "Ref", "int"),
+      "int2" -> MemberName(List("Test", "Codegen"), "Ref", "int2"),
+      "int3" -> MemberName(List("Test", "Codegen"), "Ref", "int3")
+    )
+
     val mod = mkModule("Ref", List(
       mkLet("int", mkInt(42)),
-      mkLet("int2", mkRef("int", TypeScheme(Type.Int))),
-      mkLet("int3", mkRef("int2", TypeScheme(Type.Int)))
+      mkLet("int2", mkRef("int", env, TypeScheme(Type.Int))),
+      mkLet("int3", mkRef("int2", env, TypeScheme(Type.Int)))
     ))
 
     val result = Codegen.generate(mod, Environment.empty).fold(
@@ -73,9 +79,14 @@ class CodegenSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCh
   }
 
   it should "generate code for a module with a Unit field reference" in {
+    val env = Map(
+      "unit" -> MemberName(List("Test", "Codegen"), "Ref", "unit"),
+      "unit2" -> MemberName(List("Test", "Codegen"), "Ref", "unit2")
+    )
+
     val mod = mkModule("Ref", List(
       mkLet("unit", mkUnit()),
-      mkLet("unit2", mkRef("unit", TypeScheme(Type.Unit)))
+      mkLet("unit2", mkRef("unit", env, TypeScheme(Type.Unit)))
     ))
 
     val result = Codegen.generate(mod, Environment.empty)
@@ -87,10 +98,16 @@ class CodegenSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCh
   }
 
   it should "parse a module definition from a generated class file" in {
+    val env = Map(
+      "int" -> MemberName(List("Test", "Codegen"), "Ref", "int"),
+      "int2" -> MemberName(List("Test", "Codegen"), "Ref", "int2"),
+      "int3" -> MemberName(List("Test", "Codegen"), "Ref", "int3")
+    )
+
     val mod = mkModule("Ref", List(
       mkLet("int", mkInt(42)),
-      mkLet("int2", mkRef("int", TypeScheme(Type.Int))),
-      mkLet("int3", mkRef("int2", TypeScheme(Type.Int)))
+      mkLet("int2", mkRef("int", env, TypeScheme(Type.Int))),
+      mkLet("int3", mkRef("int2", env, TypeScheme(Type.Int)))
     ))
 
     val result = Codegen.generate(mod, Environment.empty).fold(
@@ -150,7 +167,6 @@ class CodegenSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCh
       } catch {
         case e: Throwable =>
           println(Printer.print(mod).render(80))
-          e.printStackTrace()
           throw e
       }
     }

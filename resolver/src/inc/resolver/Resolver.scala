@@ -6,6 +6,7 @@ import cats.instances.list._
 import cats.syntax.either._
 import cats.syntax.functor._
 import cats.syntax.foldable._
+import cats.syntax.traverse._
 import inc.common._
 import java.lang.String
 import scala.{ Either, Right, StringContext }
@@ -59,9 +60,9 @@ object Resolver {
 
     case Lambda(params, body, pos) =>
       // Allow name shadowing in lambda params
-      val tblWithoutParams = tbl.filterNot { case (nm, _) => params.map(_.name).contains(nm) }
+      val emptyTbl: SymbolTable = Map.empty
       val emptyParams: Chain[Param[Meta.Untyped]] = Chain.empty
-      val emptyRes: Either[List[ResolverError], (Chain[Param[Meta.Untyped]], SymbolTable)] = Right((emptyParams, tblWithoutParams))
+      val emptyRes: Either[List[ResolverError], (Chain[Param[Meta.Untyped]], SymbolTable)] = Right((emptyParams, emptyTbl))
 
       val resolvedParams = params.foldLeft(emptyRes) {
         case (resSoFar, param @ Param(name, _, pos)) =>
@@ -78,8 +79,8 @@ object Resolver {
       }
 
       for {
-        (parms, updatedTbl) <- resolvedParams
-        (b, _) <- resolve(body, updatedTbl)
+        (parms, paramTbl) <- resolvedParams
+        (b, _) <- resolve(body, tbl ++ paramTbl)
       } yield (Lambda(parms.toList, b, Meta.Untyped(NoName, pos)), tbl)
 
 
@@ -113,26 +114,46 @@ object Resolver {
       }
 
     case data @ Data(_, _, cases, pos) =>
-      val resolvedCases = cases.map {
+      val resolvedCases = cases.traverse {
         case constr @ DataConstructor(_, params, _, constrPos) =>
-          val resolvedParams = params.map { param =>
-            param.map(pos => Meta.Untyped(LocalName(param.name), pos))
+          val emptyTbl: SymbolTable = Map.empty
+          val emptyParams: Chain[Param[Meta.Untyped]] = Chain.empty
+          val emptyRes: Either[List[ResolverError], (Chain[Param[Meta.Untyped]], SymbolTable)] = Right((emptyParams, emptyTbl))
+
+          val resolvedParams = params.foldLeft(emptyRes) {
+            case (resSoFar, param @ Param(name, _, pos)) =>
+              resSoFar.flatMap {
+                case (paramsSoFar, updatedTbl) =>
+                  if (updatedTbl.contains(name))
+                    ResolverError.singleton(pos, s"Symbol $name is already defined")
+                  else {
+                    val localName = LocalName(name)
+                    val paramWithName = param.copy(meta = Meta.Untyped(localName, pos))
+                    Right((paramsSoFar :+ paramWithName, updatedTbl.updated(name, localName)))
+                  }
+              }
           }
-          val constrName = ConstrName(mod.pkg, mod.name, data.name, constr.name)
-          constr.copy(params = resolvedParams, meta = Meta.Untyped(constrName, constrPos))
+
+          resolvedParams.map {
+            case (parms, _) =>
+              val constrName = ConstrName(mod.pkg, mod.name, data.name, constr.name)
+              constr.copy(params = parms.toList, meta = Meta.Untyped(constrName, constrPos))
+          }
       }
 
-      val updatedData = data.copy(
-        cases = resolvedCases,
-        meta = Meta.Untyped(MemberName(mod.pkg, mod.name, data.name), pos)
-      )
+      resolvedCases.map { cses =>
+        val updatedData = data.copy(
+          cases = cses,
+          meta = Meta.Untyped(DataName(mod.pkg, mod.name, data.name), pos)
+        )
 
-      val updatedTbl = resolvedCases.foldLeft(tbl) {
-        case (tbl, nextCase) =>
-          tbl.updated(nextCase.name, nextCase.meta.name)
+        val updatedTbl = cses.foldLeft(tbl) {
+          case (tbl, nextCase) =>
+            tbl.updated(nextCase.name, nextCase.meta.name)
+        }
+
+        (updatedData, updatedTbl)
       }
-
-      Right((updatedData, updatedTbl))
   }
 
   def resolve(
@@ -153,7 +174,7 @@ object Resolver {
           }
         case (resSoFar, Data(dataName, _, cases, _)) =>
           resSoFar.flatMap { outerTbl =>
-            cases.foldM(outerTbl) {
+            cases.foldM(outerTbl.updated(dataName, DataName(module.pkg, module.name, dataName))) {
               case (tbl, DataConstructor(name, _, _, pos)) =>
                 if (tbl.contains(name))
                   ResolverError.singleton(pos, s"Symbol $name is already defined")

@@ -197,17 +197,17 @@ trait Generators { self: Matchers =>
   def letGen(modName: ModuleName, decls: Decls) =
     for {
       // Make sure we don't generate duplicate names
-      name <- nameGen.suchThat(nm => !decls.map(_.name).contains(nm))
+      name <- nameGen.suchThat(!collides(decls, _))
       expr <- exprGen(decls)
     } yield Let(name, expr, Meta.Typed(MemberName(modName.pkg, modName.mod, name), expr.meta.typ, Pos.Empty))
 
-  def constructorGen(dataName: MemberName, dataType: TypeScheme) =
+  def constructorGen(dataName: DataName, dataType: TypeScheme, decls: Decls) =
     for {
-      name <- nameGen.suchThat(_ != dataName.name)
+      name <- nameGen.suchThat(nm => nm != dataName.name && !collides(decls, nm))
 
       numArgs <- Gen.choose(1, 4)
 
-      pNms <- Gen.listOfN(numArgs, nameGen).suchThat(vs => vs.distinct.length == vs.length)
+      pNms <- Gen.listOfN(numArgs, nameGen).suchThat(vs =>  vs.distinct.length == vs.length)
 
       pTps <- Gen.listOfN(numArgs, Gen.oneOf(
                             TypeScheme(Type.Int),
@@ -229,17 +229,32 @@ trait Generators { self: Matchers =>
 
     } yield DataConstructor(name, params, typeScheme, Meta.Typed(ConstrName(dataName.pkg, dataName.mod, dataName.name, name), typeScheme, Pos.Empty))
 
-  def dataGen(modName: ModuleName) =
+  def collides(decls: Decls, name: String): Boolean = {
+    val names = for {
+      decl <- decls
+      member <- decl.members
+      name <- member.name match {
+        case DataName(_, _, name) => List(name)
+        case MemberName(_, _, name) => List(name)
+        case ConstrName(_, _, _, name) => List(name)
+        case _ => List.empty
+      }
+    } yield name
+
+    names.contains(name)
+  }
+
+  def dataGen(modName: ModuleName, decls: Decls) =
     for {
-      name <- nameGen
+      name <- nameGen.suchThat(!collides(decls, _))
 
       numConstrs <- Gen.choose(1, 4)
 
       typeScheme = TypeScheme(List.empty, TypeConstructor(name, Atomic))
 
-      dataName = MemberName(modName.pkg, modName.mod, name)
+      dataName = DataName(modName.pkg, modName.mod, name)
 
-      constrs <- Gen.listOfN(numConstrs, constructorGen(dataName, typeScheme)).suchThat { cs =>
+      constrs <- Gen.listOfN(numConstrs, constructorGen(dataName, typeScheme, decls)).suchThat { cs =>
         // Don't generate duplicate names
         val constrNames = cs.map(_.name)
         constrNames.distinct.length == cs.length
@@ -250,7 +265,7 @@ trait Generators { self: Matchers =>
   def declGen(modName: ModuleName) =
     StateT.modifyF[Gen, (Decls, Int)] {
       case (decls, remaining) =>
-        val declGens = List(letGen(modName, decls), dataGen(modName))
+        val declGens = List(letGen(modName, decls), dataGen(modName, decls))
         Gen.oneOf(declGens).flatMap { declGen =>
           declGen.map { decl => (decls :+ decl, remaining - 1) }
         }

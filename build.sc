@@ -83,6 +83,8 @@ object common extends ScalaSettingsModule {
   def moduleDeps = Seq(proto)
   def ivyDeps = T {
     super.ivyDeps() ++ Agg(
+      ivy"com.lihaoyi::pprint:0.5.6",
+      ivy"com.lihaoyi::sourcecode:0.2.1",
       ivy"org.typelevel::cats-core:2.0.0",
       ivy"org.typelevel::paiges-core:0.3.0",
       ivy"com.typesafe.scala-logging::scala-logging:3.9.2"

@@ -15,6 +15,9 @@ final case class Module[A](
   declarations: List[TopLevelDeclaration[A]],
   meta: A,
 ) {
+
+  override def toString = pprint.apply(this).toString()
+
   def toProto(implicit eqv: A =:= Meta.Typed): proto.Module = proto.Module(
     pkg = pkg,
     name = name,
@@ -55,7 +58,10 @@ final case class Module[A](
         name -> meta.typ.typ.kind
     }
 
-    Environment(names.toMap, types.toMap, kinds.toMap)
+    val fqn = if (pkg.isEmpty) name else pkg.mkString("/") + "/" + name
+    val env = Environment(names.toMap, types.toMap, kinds.toMap)
+
+    env ++ env.prefixed(fqn)
   }
 
   def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= Meta.Typed): Module[A] =

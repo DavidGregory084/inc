@@ -12,6 +12,8 @@ sealed abstract class TopLevelDeclaration[A] extends Product with Serializable {
 
   def meta: A
 
+  def members: List[A]
+
   def toProto(implicit eqv: A =:= Meta.Typed): proto.TopLevelDeclaration = this match {
     case Let(name, expr, meta) =>
       val nameWithType = Some(eqv(meta).toProto)
@@ -124,6 +126,8 @@ final case class Data[A](
     else
       Parameterized(typeParams.map(_.kind), Atomic)
 
+  def members = meta :: cases.map(_.meta)
+
   def withAscribedTypes(implicit eqv: A =:= Meta.Untyped): Data[Meta.Typed] = {
     val checkedCases =
       cases.map(_.withAscribedTypes(typeParams))
@@ -168,4 +172,6 @@ final case class Let[A](
   name: String,
   binding: Expr[A],
   meta: A
-) extends TopLevelDeclaration[A]
+) extends TopLevelDeclaration[A] {
+  def members = List(meta)
+}

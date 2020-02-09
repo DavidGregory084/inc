@@ -12,7 +12,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path, Paths}
 import org.jline.terminal.TerminalBuilder
 import org.typelevel.paiges.Style
-import scala.{ Array, Boolean, Unit, Either, StringContext }
+import scala.{ Array, Boolean, Unit, Either }
 import scala.collection.immutable.List
 import scala.jdk.CollectionConverters._
 import scala.Predef.wrapRefArray
@@ -98,7 +98,7 @@ object Main extends LazyLogging {
       }
 
       val outFiles = classFiles.map { classFile =>
-        val outFile = outDir.resolve(s"${classFile.name}.class")
+        val outFile = outDir.resolve(classFile.name + ".class")
         Files.deleteIfExists(outFile)
         Files.createDirectories(outFile.getParent)
         Files.write(outFile, classFile.bytes)
