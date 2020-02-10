@@ -11,35 +11,41 @@ import org.scalatestplus.scalacheck._
 
 class CodegenSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyChecks with Generators {
 
-  def mkModule(name: String, decls: List[TopLevelDeclaration[NamePosType]]) = Module(
+  def mkModule(name: String, decls: List[TopLevelDeclaration[Meta.Typed]]) = Module(
     pkg = List("Test", "Codegen"),
     name = name,
     imports = List.empty,
     declarations = decls,
-    meta = NamePosType(ModuleName(List("Test", "Codegen"), name), Pos.Empty, TypeScheme(Type.Module)))
+    meta = Meta.Typed(ModuleName(List("Test", "Codegen"), name), TypeScheme(Type.Module), Pos.Empty))
 
-  def mkLet(name: String, binding: Expr[NamePosType]) =
-    Let(name, binding, NamePosType(LocalName(name), Pos.Empty, binding.meta.typ))
+  def mkLet(name: String, binding: Expr[Meta.Typed]) =
+    Let(name, binding, Meta.Typed(LocalName(name), binding.meta.typ, Pos.Empty))
 
-  def mkInt(i: Int) = LiteralInt(i, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Int)))
-  def mkRef(r: String, typ: TypeScheme) = Reference(List.empty, r, NamePosType(NoName, Pos.Empty, typ))
-  def mkUnit() = LiteralUnit(NamePosType(NoName, Pos.Empty, TypeScheme(Type.Unit)))
+  def mkInt(i: Int) = LiteralInt(i, Meta.Typed(NoName, TypeScheme(Type.Int), Pos.Empty))
+  def mkRef(r: String, env: Map[String, Name], typ: TypeScheme) = Reference(List.empty, r, Meta.Typed(env(r), typ, Pos.Empty))
+  def mkUnit() = LiteralUnit(Meta.Typed(NoName, TypeScheme(Type.Unit), Pos.Empty))
 
   "Codegen" should "generate code for a simple module" in {
+    val env = Map(
+      "int" -> MemberName(List("Test", "Codegen"), "Ref", "int"),
+      "int2" -> MemberName(List("Test", "Codegen"), "Ref", "int2"),
+      "int3" -> MemberName(List("Test", "Codegen"), "Ref", "int3")
+    )
+
     val mod = mkModule("Ref", List(
       mkLet("int", mkInt(42)),
-      mkLet("int2", mkRef("int", TypeScheme(Type.Int))),
-      mkLet("int3", mkRef("int2", TypeScheme(Type.Int)))
+      mkLet("int2", mkRef("int", env, TypeScheme(Type.Int))),
+      mkLet("int3", mkRef("int2", env, TypeScheme(Type.Int)))
     ))
 
-    val result = Codegen.generate(mod).fold(
+    val result = Codegen.generate(mod, Environment.empty).fold(
       errs => fail(s"""Code generation failed with errors ${errs.mkString(", ")}"""),
       identity
     )
 
     val baos = new ByteArrayOutputStream()
 
-    Codegen.print(result, baos)
+    Codegen.print(result.head.bytes, baos)
 
     baos.toString shouldBe (
       """// class version 52.0 (52)
@@ -73,12 +79,17 @@ class CodegenSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCh
   }
 
   it should "generate code for a module with a Unit field reference" in {
+    val env = Map(
+      "unit" -> MemberName(List("Test", "Codegen"), "Ref", "unit"),
+      "unit2" -> MemberName(List("Test", "Codegen"), "Ref", "unit2")
+    )
+
     val mod = mkModule("Ref", List(
       mkLet("unit", mkUnit()),
-      mkLet("unit2", mkRef("unit", TypeScheme(Type.Unit)))
+      mkLet("unit2", mkRef("unit", env, TypeScheme(Type.Unit)))
     ))
 
-    val result = Codegen.generate(mod)
+    val result = Codegen.generate(mod, Environment.empty)
 
     result.fold(
       errs => fail(s"""Code generation failed with errors ${errs.mkString(", ")}"""),
@@ -87,18 +98,24 @@ class CodegenSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCh
   }
 
   it should "parse a module definition from a generated class file" in {
+    val env = Map(
+      "int" -> MemberName(List("Test", "Codegen"), "Ref", "int"),
+      "int2" -> MemberName(List("Test", "Codegen"), "Ref", "int2"),
+      "int3" -> MemberName(List("Test", "Codegen"), "Ref", "int3")
+    )
+
     val mod = mkModule("Ref", List(
       mkLet("int", mkInt(42)),
-      mkLet("int2", mkRef("int", TypeScheme(Type.Int))),
-      mkLet("int3", mkRef("int2", TypeScheme(Type.Int)))
+      mkLet("int2", mkRef("int", env, TypeScheme(Type.Int))),
+      mkLet("int3", mkRef("int2", env, TypeScheme(Type.Int)))
     ))
 
-    val result = Codegen.generate(mod).fold(
+    val result = Codegen.generate(mod, Environment.empty).fold(
       errs => fail(s"""Code generation failed with errors ${errs.mkString(", ")}"""),
       identity
     )
 
-    Codegen.readInterface(result) shouldBe Right(mod.map(_.forgetPos))
+    Codegen.readInterface(result.head.bytes) shouldBe Right(mod.map(_.forgetPos))
   }
 
   def withTmpDir[A](test: File => A) = {
@@ -107,25 +124,32 @@ class CodegenSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCh
     finally dir.delete()
   }
 
-  it should "round trip arbitrary module files" in forAll(minSuccessful(1000)) { mod: Module[NamePosType] =>
+  it should "round trip arbitrary module files" in forAll(minSuccessful(1000)) { mod: Module[Meta.Typed] =>
     withTmpDir { dir =>
       try {
-        val result = Codegen.generate(mod).fold(
+        val classFiles = Codegen.generate(mod, Environment.empty).fold(
           errs => fail(s"""Code generation failed with errors ${errs.mkString(", ")}"""),
           identity
         )
 
-        Codegen.readInterface(result) shouldBe Right(mod.map(_.forgetPos))
+        Codegen.readInterface(classFiles.head.bytes) shouldBe Right(mod.map(_.forgetPos))
 
         val outDir = mod.pkg.foldLeft(dir) {
           case (path, next) => path / next
         }
 
-        val out = outDir / s"${mod.name}.class"
+        val outFiles = classFiles.map { classFile =>
+          val outFile = outDir / s"${classFile.name}.class"
 
-        out
-          .createIfNotExists(createParents = true)
-          .writeByteArray(result)
+          if (outFile.exists)
+            outFile.delete()
+
+          outFile
+            .createIfNotExists(createParents = true)
+            .writeByteArray(classFile.bytes)
+
+          outFile
+        }
 
         val classLoader = Thread.currentThread.getContextClassLoader.asInstanceOf[URLClassLoader]
 
@@ -134,16 +158,15 @@ class CodegenSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCh
         val pkg = if (mod.pkg.isEmpty) "" else mod.pkg.mkString(".") + "."
 
         try {
-          Class.forName(s"${pkg + out.nameWithoutExtension}", true, childLoader)
+          Class.forName(s"${pkg + outFiles.head.nameWithoutExtension}", true, childLoader)
         } catch {
           case e: Throwable =>
-            Codegen.print(result)
+            classFiles.foreach(classFile => Codegen.print(classFile.bytes))
             throw e
         }
       } catch {
         case e: Throwable =>
           println(Printer.print(mod).render(80))
-          e.printStackTrace()
           throw e
       }
     }

@@ -4,49 +4,49 @@ import inc.common._
 import org.scalatest._
 
 class TypecheckerSpec extends FlatSpec with Matchers {
-  def mkModule(name: String, decls: List[TopLevelDeclaration[NameWithPos]]) = Module(
+  def mkModule(name: String, decls: List[TopLevelDeclaration[Meta.Untyped]]) = Module(
     pkg = List("Test", "Typechecker"),
     name = name,
     imports = List.empty,
     declarations = decls,
-    meta = NameWithPos(ModuleName(List("Test", "Typechecker"), name), Pos.Empty))
+    meta = Meta.Untyped(ModuleName(List("Test", "Typechecker"), name), Pos.Empty))
 
-  def mkLet(name: String, binding: Expr[NameWithPos]) =
-    Let(name, binding, NameWithPos(LocalName(name), Pos.Empty))
+  def mkLet(name: String, binding: Expr[Meta.Untyped]) =
+    Let(name, binding, Meta.Untyped(LocalName(name), Pos.Empty))
 
-  def mkInt(i: Int) = LiteralInt(i, NameWithPos(NoName, Pos.Empty))
-  def mkStr(s: String) = LiteralString(s, NameWithPos(NoName, Pos.Empty))
-  def mkDbl(d: Double) = LiteralDouble(d, NameWithPos(NoName, Pos.Empty))
-  def mkBool(b: Boolean) = LiteralBoolean(b, NameWithPos(NoName, Pos.Empty))
-  def mkRef(r: String) = Reference(List.empty, r, NameWithPos(NoName, Pos.Empty))
+  def mkInt(i: Int) = LiteralInt(i, Meta.Untyped(NoName, Pos.Empty))
+  def mkStr(s: String) = LiteralString(s, Meta.Untyped(NoName, Pos.Empty))
+  def mkDbl(d: Double) = LiteralDouble(d, Meta.Untyped(NoName, Pos.Empty))
+  def mkBool(b: Boolean) = LiteralBoolean(b, Meta.Untyped(NoName, Pos.Empty))
+  def mkRef(r: String) = Reference(List.empty, r, Meta.Untyped(NoName, Pos.Empty))
 
-  def mkIf(cond: Expr[NameWithPos], thenExpr: Expr[NameWithPos], elseExpr: Expr[NameWithPos]) =
-    If(cond, thenExpr, elseExpr, NameWithPos(NoName, Pos.Empty))
+  def mkIf(cond: Expr[Meta.Untyped], thenExpr: Expr[Meta.Untyped], elseExpr: Expr[Meta.Untyped]) =
+    If(cond, thenExpr, elseExpr, Meta.Untyped(NoName, Pos.Empty))
 
-  def mkLam(params: List[String], body: Expr[NameWithPos]) = Lambda(
-    params.map(nm => Param(nm, None, NameWithPos(LocalName(nm), Pos.Empty))),
+  def mkLam(params: List[String], body: Expr[Meta.Untyped]) = Lambda(
+    params.map(nm => Param(nm, None, Meta.Untyped(LocalName(nm), Pos.Empty))),
     body,
-    NameWithPos(NoName, Pos.Empty)
+    Meta.Untyped(NoName, Pos.Empty)
   )
 
-  def mkApp(fn: Expr[NameWithPos], args: List[Expr[NameWithPos]]) =
-    Apply(fn, args, NameWithPos(NoName, Pos.Empty))
+  def mkApp(fn: Expr[Meta.Untyped], args: List[Expr[Meta.Untyped]]) =
+    Apply(fn, args, Meta.Untyped(NoName, Pos.Empty))
 
-  def mkCheckedModule(name: String, decls: List[TopLevelDeclaration[NamePosType]]) = Module(
+  def mkCheckedModule(name: String, decls: List[TopLevelDeclaration[Meta.Typed]]) = Module(
     pkg = List("Test", "Typechecker"),
     name = name,
     imports = List.empty,
     declarations = decls,
-    meta = NamePosType(ModuleName(List("Test", "Typechecker"), name), Pos.Empty, TypeScheme(Type.Module)))
+    meta = Meta.Typed(ModuleName(List("Test", "Typechecker"), name), TypeScheme(Type.Module), Pos.Empty))
 
-  def mkCheckedLet(name: String, binding: Expr[NamePosType]) =
-    Let(name, binding, NamePosType(LocalName(name), Pos.Empty, binding.meta.typ))
+  def mkCheckedLet(name: String, binding: Expr[Meta.Typed]) =
+    Let(name, binding, Meta.Typed(LocalName(name), binding.meta.typ, Pos.Empty))
 
-  def mkCheckedInt(i: Int) = LiteralInt(i, NamePosType(NoName, Pos.Empty, TypeScheme(Type.Int)))
-  def mkCheckedRef(r: String, typ: TypeScheme) = Reference(List.empty, r, NamePosType(NoName, Pos.Empty, typ))
+  def mkCheckedInt(i: Int) = LiteralInt(i, Meta.Typed(NoName, TypeScheme(Type.Int), Pos.Empty))
+  def mkCheckedRef(r: String, typ: TypeScheme) = Reference(List.empty, r, Meta.Typed(NoName, typ, Pos.Empty))
 
 
-  val noImports = Map.empty[String, TopLevelDeclaration[NameWithType]]
+  val noImports = Environment.empty
 
   "Typechecker" should "typecheck let bound literals successfully" in {
     val mod = mkModule("Int", List(mkLet("int", mkInt(42))))
@@ -104,7 +104,7 @@ class TypecheckerSpec extends FlatSpec with Matchers {
 
     val ctx2 = Printer.SourceContext(80, "If.inc", "")
 
-    Typechecker.typecheck(mod2, noImports, ctx2) shouldBe TypeError.singleton(Pos.Empty, Red("Int") + " does not unify with " + Red("Boolean"))
+    Typechecker.typecheck(mod2, noImports, ctx2) shouldBe TypeError.typeUnification(Pos.Empty, Type.Int, Type.Boolean)
   }
 
   it should "ensure the expressions provided to both branches of an if are compatible" in {
@@ -123,7 +123,7 @@ class TypecheckerSpec extends FlatSpec with Matchers {
       mkLet("integer", mkIf(mkBool(true), mkInt(42), mkDbl(41.0)))
     ))
 
-    Typechecker.typecheck(mod2, noImports, ctx) shouldBe TypeError.singleton(Pos.Empty, Red("Int") + " does not unify with " + Red("Double")),
+    Typechecker.typecheck(mod2, noImports, ctx) shouldBe TypeError.typeUnification(Pos.Empty, Type.Int, Type.Double)
   }
 
   it should "infer the parameter and return type of lambda expressions" in {
@@ -200,6 +200,9 @@ class TypecheckerSpec extends FlatSpec with Matchers {
 
     val ctx = Printer.SourceContext(80, "Occurs.inc", "")
 
-    Typechecker.typecheck(mod, noImports, ctx) shouldBe TypeError.singleton(Pos.Empty, "Attempt to construct infinite type"),
+    Typechecker.typecheck(mod, noImports, ctx).fold(
+      err => err.head shouldBe an[TypeOccursCheck],
+      _ => fail("Typechecking should fail as this code fails the occurs check")
+    )
   }
 }

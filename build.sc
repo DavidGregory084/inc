@@ -5,7 +5,7 @@ import mill.contrib.scalapblib._
 
 import ammonite.ops._
 
-import $ivy.`com.lihaoyi::mill-contrib-buildinfo:0.3.6`
+import $ivy.`com.lihaoyi::mill-contrib-buildinfo:0.5.2`
 import mill.contrib.BuildInfo
 
 import $ivy.`io.github.davidgregory084::mill-tpolecat:0.1.2`
@@ -60,10 +60,10 @@ trait ScalaSettingsModule extends TpolecatModule with PublishSettingsModule {
   trait Test extends Tests {
     def ivyDeps = Agg(
       ivy"io.chrisdavenport::cats-scalacheck:0.2.0",
-      ivy"com.lihaoyi::pprint:0.5.6",
+      ivy"com.lihaoyi::pprint:0.5.9",
       ivy"com.github.pathikrit::better-files:3.8.0",
       ivy"org.scalatest::scalatest:3.0.8",
-      ivy"org.scalacheck::scalacheck:1.14.2"
+      ivy"org.scalacheck::scalacheck:1.14.3"
     )
     def testFrameworks = Seq("org.scalatest.tools.Framework")
     def scalacOptions = T { super.scalacOptions().filterNot(Set("-Yno-imports")) }
@@ -83,7 +83,9 @@ object common extends ScalaSettingsModule {
   def moduleDeps = Seq(proto)
   def ivyDeps = T {
     super.ivyDeps() ++ Agg(
-      ivy"org.typelevel::cats-core:2.0.0",
+      ivy"com.lihaoyi::pprint:0.5.9",
+      ivy"com.lihaoyi::sourcecode:0.2.1",
+      ivy"org.typelevel::cats-core:2.1.0",
       ivy"org.typelevel::paiges-core:0.3.0",
       ivy"com.typesafe.scala-logging::scala-logging:3.9.2"
     )
@@ -95,7 +97,7 @@ object rts extends JavaModule with PublishSettingsModule
 
 object parser extends ScalaSettingsModule {
   def moduleDeps = Seq(common)
-  def ivyDeps = Agg(ivy"com.lihaoyi::fastparse:2.1.3")
+  def ivyDeps = Agg(ivy"com.lihaoyi::fastparse:2.2.4")
   object test extends super.Test
 }
 
@@ -111,7 +113,7 @@ object typechecker extends ScalaSettingsModule {
 
 object codegen extends ScalaSettingsModule {
   def moduleDeps = Seq(common, rts)
-  def asmVersion = T { "7.2" }
+  def asmVersion = T { "7.3.1" }
   def ivyDeps = Agg(
     ivy"org.ow2.asm:asm:${asmVersion()}",
     ivy"org.ow2.asm:asm-commons:${asmVersion()}",
@@ -128,14 +130,14 @@ object main extends ScalaSettingsModule with BuildInfo {
 
   def moduleDeps = Seq(common, rts, parser, resolver, typechecker, codegen)
 
-  def jlineVersion = T { "3.13.2" }
+  def jlineVersion = T { "3.13.3" }
 
   def ivyDeps = Agg(
     ivy"org.jline:jline-terminal:${jlineVersion()}",
     ivy"org.jline:jline-terminal-jansi:${jlineVersion()}",
-    ivy"org.apache.logging.log4j:log4j-slf4j-impl:2.12.1",
+    ivy"org.apache.logging.log4j:log4j-slf4j-impl:2.13.0",
     ivy"com.github.scopt::scopt:3.7.1",
-    ivy"com.lihaoyi::pprint:0.5.6",
+    ivy"com.lihaoyi::pprint:0.5.9",
     // PPrint definitely requires scala-reflect
     ivy"org.scala-lang:scala-reflect:${scalaVersion()}"
   )
@@ -214,7 +216,8 @@ object main extends ScalaSettingsModule with BuildInfo {
         'hyperfine,
         s"java -jar ${assemblyJar.path.toIO.getAbsolutePath} ${src.toIO.getAbsolutePath}",
         s"--export-json",
-        s"${dest / src.baseName}.json"
+        s"${dest / src.baseName}.json",
+        "--ignore-failure"
       ).call(millSourcePath)
 
       addRunData(src.baseName, executionTime)

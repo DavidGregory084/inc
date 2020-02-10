@@ -1,26 +1,18 @@
 package decompiled;
 
-abstract class List<A> {
-    public abstract boolean isEmpty();
+class Collection {
+    static abstract class List<A> {
+        static final class Cons<A> extends List<A> {
+            final A a;
 
-    final static class Cons<A> extends List<A> {
-        final A value;
-
-        private Cons(final A a) {
-            value = a;
+            private Cons(final A a) {
+                this.a = a;
+            }
         }
 
-        public boolean isEmpty() {
-            return false;
-        }
-    }
-
-    final static class Nil<A> extends List<A> {
-        private Nil() {
-        }
-
-        public boolean isEmpty() {
-            return true;
+        static final class Nil<A> extends List<A> {
+            private Nil() {
+            }
         }
     }
 }

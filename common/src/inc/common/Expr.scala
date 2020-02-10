@@ -10,7 +10,7 @@ import scala.Predef.wrapRefArray
 sealed abstract class Expr[A] extends Product with Serializable {
   def meta: A
 
-  def capturedVariables(implicit eqv: A =:= NamePosType): Set[Reference[NamePosType]] = this match {
+  def capturedVariables(implicit eqv: A =:= Meta.Typed): Set[Reference[Meta.Typed]] = this match {
     case LiteralInt(_, _) => Set.empty
     case LiteralLong(_, _) => Set.empty
     case LiteralFloat(_, _) => Set.empty
@@ -24,8 +24,8 @@ sealed abstract class Expr[A] extends Product with Serializable {
     case If(cond, thenExpr, elseExpr, _) =>
       cond.capturedVariables ++ thenExpr.capturedVariables ++ elseExpr.capturedVariables
     case Lambda(params, body, _) =>
-      val lambdaParams = params.map(p => Reference(List.empty, p.name, eqv(p.meta).withEmptyPos))
-      val capturedInBody = body.capturedVariables.map(v => v.copy(meta = v.meta.withEmptyPos))
+      val lambdaParams = params.map(p => Reference(List.empty, p.name, eqv(p.meta).forgetPos))
+      val capturedInBody = body.capturedVariables.map(v => v.copy(meta = v.meta.forgetPos))
       capturedInBody -- lambdaParams
     case Apply(fn, args, _) =>
       fn.capturedVariables ++ args.flatMap(_.capturedVariables)
@@ -33,7 +33,7 @@ sealed abstract class Expr[A] extends Product with Serializable {
       expr.capturedVariables
   }
 
-  def replace(mapping: Map[Reference[A], Reference[A]])(implicit to: A =:= NamePosType): Expr[A] = this match {
+  def replace(mapping: Map[Reference[A], Reference[A]])(implicit to: A =:= Meta.Typed): Expr[A] = this match {
     case int @ LiteralInt(_, _) => int
     case long @ LiteralLong(_, _) => long
     case flt @ LiteralFloat(_, _) => flt
@@ -45,7 +45,7 @@ sealed abstract class Expr[A] extends Product with Serializable {
     case ref @ Reference(_, _, _) =>
       val from = to.flip
       mapping.getOrElse(
-        ref.copy(meta = from(to(meta).withEmptyPos)),
+        ref.copy(meta = from(to(meta).forgetPos)),
         ref
       )
     case ifExpr @ If(cond, thenExpr, elseExpr, _) =>
@@ -63,51 +63,51 @@ sealed abstract class Expr[A] extends Product with Serializable {
       asc.copy(expr = expr.replace(mapping))
   }
 
-  def toProto(implicit eqv: A =:= NamePosType): proto.Expr = this match {
+  def toProto(implicit eqv: A =:= Meta.Typed): proto.Expr = this match {
     case LiteralInt(i, meta) =>
-      val nameWithType = Some(eqv(meta).toProto)
-      proto.LiteralInt(i, nameWithType)
+      val typedMeta = Some(eqv(meta).toProto)
+      proto.LiteralInt(i, typedMeta)
     case LiteralLong(l, meta) =>
-      val nameWithType = Some(eqv(meta).toProto)
-      proto.LiteralLong(l, nameWithType)
+      val typedMeta = Some(eqv(meta).toProto)
+      proto.LiteralLong(l, typedMeta)
     case LiteralFloat(f, meta) =>
-      val nameWithType = Some(eqv(meta).toProto)
-      proto.LiteralFloat(f, nameWithType)
+      val typedMeta = Some(eqv(meta).toProto)
+      proto.LiteralFloat(f, typedMeta)
     case LiteralDouble(d, meta) =>
-      val nameWithType = Some(eqv(meta).toProto)
-      proto.LiteralDouble(d, nameWithType)
+      val typedMeta = Some(eqv(meta).toProto)
+      proto.LiteralDouble(d, typedMeta)
     case LiteralBoolean(b, meta) =>
-      val nameWithType = Some(eqv(meta).toProto)
-      proto.LiteralBoolean(b, nameWithType)
+      val typedMeta = Some(eqv(meta).toProto)
+      proto.LiteralBoolean(b, typedMeta)
     case LiteralString(s, meta) =>
-      val nameWithType = Some(eqv(meta).toProto)
-      proto.LiteralString(s, nameWithType)
+      val typedMeta = Some(eqv(meta).toProto)
+      proto.LiteralString(s, typedMeta)
     case LiteralChar(c, meta) =>
-      val nameWithType = Some(eqv(meta).toProto)
-      proto.LiteralChar(c.toString, nameWithType)
+      val typedMeta = Some(eqv(meta).toProto)
+      proto.LiteralChar(c.toString, typedMeta)
     case LiteralUnit(meta) =>
-      val nameWithType = Some(eqv(meta).toProto)
-      proto.LiteralUnit(nameWithType)
+      val typedMeta = Some(eqv(meta).toProto)
+      proto.LiteralUnit(typedMeta)
     case Reference(mod, name, meta) =>
-      val nameWithType = Some(eqv(meta).toProto)
+      val typedMeta = Some(eqv(meta).toProto)
       val modString = mod.mkString("/")
       val fullName = if (mod.isEmpty) name else s"${modString}.${name}"
-      proto.Reference(fullName, nameWithType)
+      proto.Reference(fullName, typedMeta)
     case If(cond, thenExpr, elseExpr, meta) =>
-      val nameWithType = Some(eqv(meta).toProto)
-      proto.If(cond.toProto, thenExpr.toProto, elseExpr.toProto, nameWithType)
+      val typedMeta = Some(eqv(meta).toProto)
+      proto.If(cond.toProto, thenExpr.toProto, elseExpr.toProto, typedMeta)
     case Lambda(params, body, meta) =>
-      val nameWithType = Some(eqv(meta).toProto)
-      proto.Lambda(params.map(_.toProto), body.toProto, nameWithType)
+      val typedMeta = Some(eqv(meta).toProto)
+      proto.Lambda(params.map(_.toProto), body.toProto, typedMeta)
     case Apply(fn, args, meta) =>
-      val nameWithType = Some(eqv(meta).toProto)
-      proto.Apply(fn.toProto, args.map(_.toProto), nameWithType)
+      val typedMeta = Some(eqv(meta).toProto)
+      proto.Apply(fn.toProto, args.map(_.toProto), typedMeta)
     case Ascription(expr, ascribedAs, meta) =>
-      val nameWithType = Some(eqv(meta).toProto)
-      proto.Ascription(expr.toProto, Some(ascribedAs.toProto), nameWithType)
+      val typedMeta = Some(eqv(meta).toProto)
+      proto.Ascription(expr.toProto, Some(ascribedAs.toProto), typedMeta)
   }
 
-  def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= NamePosType): Expr[A] = {
+  def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= Meta.Typed): Expr[A] = {
     if (subst.isEmpty)
       this
     else {
@@ -117,48 +117,48 @@ sealed abstract class Expr[A] extends Product with Serializable {
   }
 }
 object Expr {
-  def fromProto(expr: proto.Expr): Expr[NameWithType] = expr match {
+  def fromProto(expr: proto.Expr): Expr[Meta.Typed] = expr match {
     case int @ proto.LiteralInt(i, _) =>
-      LiteralInt(i, NameWithType.fromProto(int.getNameWithType))
+      LiteralInt(i, Meta.fromProto(int.getNameWithType))
     case long @ proto.LiteralLong(l, _) =>
-      LiteralLong(l, NameWithType.fromProto(long.getNameWithType))
+      LiteralLong(l, Meta.fromProto(long.getNameWithType))
     case flt @ proto.LiteralFloat(f, _) =>
-      LiteralFloat(f, NameWithType.fromProto(flt.getNameWithType))
+      LiteralFloat(f, Meta.fromProto(flt.getNameWithType))
     case dbl @ proto.LiteralDouble(d, _) =>
-      LiteralDouble(d, NameWithType.fromProto(dbl.getNameWithType))
+      LiteralDouble(d, Meta.fromProto(dbl.getNameWithType))
     case bool @ proto.LiteralBoolean(b, _) =>
-      LiteralBoolean(b, NameWithType.fromProto(bool.getNameWithType))
+      LiteralBoolean(b, Meta.fromProto(bool.getNameWithType))
     case str @ proto.LiteralString(s, _) =>
-      LiteralString(s, NameWithType.fromProto(str.getNameWithType))
+      LiteralString(s, Meta.fromProto(str.getNameWithType))
     case char @ proto.LiteralChar(c, _) =>
-      LiteralChar(c.charAt(0), NameWithType.fromProto(char.getNameWithType))
+      LiteralChar(c.charAt(0), Meta.fromProto(char.getNameWithType))
     case unit @ proto.LiteralUnit(_) =>
-      LiteralUnit(NameWithType.fromProto(unit.getNameWithType))
+      LiteralUnit(Meta.fromProto(unit.getNameWithType))
     case ref @ proto.Reference(nm, _) =>
       val mod = nm.split("/").toList
-      val name = mod.last.split("\\.").last
-      Reference(mod.dropRight(1), name, NameWithType.fromProto(ref.getNameWithType))
+      val name = mod.last
+      Reference(mod.dropRight(1), name, Meta.fromProto(ref.getNameWithType))
     case ifExpr @ proto.If(cond, thenExpr, elseExpr, _) =>
       If(
         Expr.fromProto(cond),
         Expr.fromProto(thenExpr),
         Expr.fromProto(elseExpr),
-        NameWithType.fromProto(ifExpr.getNameWithType))
+        Meta.fromProto(ifExpr.getNameWithType))
     case lambda @ proto.Lambda(params, body, _) =>
       Lambda(
         params.map(Param.fromProto).toList,
         Expr.fromProto(body),
-        NameWithType.fromProto(lambda.getNameWithType))
+        Meta.fromProto(lambda.getNameWithType))
     case app @ proto.Apply(fn, args, _) =>
       Apply(
         Expr.fromProto(fn),
         args.toList.map(Expr.fromProto),
-        NameWithType.fromProto(app.getNameWithType))
+        Meta.fromProto(app.getNameWithType))
     case asc @ proto.Ascription(_, _, _) =>
       Ascription(
         Expr.fromProto(asc.expr),
         TypeScheme.fromProto(asc.getAscribedAs),
-        NameWithType.fromProto(asc.getNameWithType))
+        Meta.fromProto(asc.getNameWithType))
     case proto.Expr.Empty =>
       throw new Exception("Empty Expr in protobuf")
   }

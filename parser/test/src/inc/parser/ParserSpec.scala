@@ -8,7 +8,7 @@ import org.scalatestplus.scalacheck._
 class ParserSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyChecks {
 
   def parseModule(src: String): Module[Unit] =
-    Parser.parse(src).fold(err => fail(err.head.msg), identity).void
+    Parser.parse(src).fold(err => fail(err.head.message), identity).void
 
   "Parser" should "parse literal integers" in {
     val mod = Module(List.empty, "Integer", List.empty, List(Let("integer", LiteralInt(42, ()), ())), ())

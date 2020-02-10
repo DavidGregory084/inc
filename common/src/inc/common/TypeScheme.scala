@@ -1,6 +1,5 @@
 package inc.common
 
-import java.lang.String
 import scala.collection.immutable.{ List, Map, Set, Vector }
 
 case class TypeScheme(bound: List[TypeVariable], typ: Type) {
@@ -12,6 +11,16 @@ case class TypeScheme(bound: List[TypeVariable], typ: Type) {
 
   def substitute(subst: Map[TypeVariable, Type]) =
     TypeScheme(bound, typ.substitute(subst -- bound))
+
+  def defaultKinds: TypeScheme =
+    copy(
+      bound = bound.map(_.defaultKinds.asInstanceOf[TypeVariable]),
+      typ = typ.defaultKinds)
+
+  def substituteKinds(subst: Map[KindVariable, Kind]): TypeScheme =
+    copy(
+      bound = bound.map(_.substituteKinds(subst).asInstanceOf[TypeVariable]),
+      typ = typ.substituteKinds(subst))
 
   def instantiate: Type =
     if (bound.isEmpty)
@@ -26,8 +35,8 @@ case class TypeScheme(bound: List[TypeVariable], typ: Type) {
 object TypeScheme {
   def apply(typ: Type): TypeScheme = TypeScheme(List.empty, typ)
 
-  def generalize(env: Map[String, TypeScheme], typ: Type): TypeScheme = {
-    val freeInEnv = env.values.flatMap(_.freeTypeVariables).toSet
+  def generalize(env: Environment, typ: Type): TypeScheme = {
+    val freeInEnv = env.types.values.flatMap(_.typ.freeTypeVariables).toSet
     val bound = typ.freeTypeVariables diff freeInEnv
     val scheme = TypeScheme(bound.toList, typ)
     scheme
@@ -41,9 +50,9 @@ object TypeScheme {
       val tyVars = bound.toList.map(TypeVariable.fromProto)
 
       val (freshVars, subst) = tyVars.foldLeft((Vector.empty[TypeVariable], Map.empty[TypeVariable, Type])) {
-        case ((vars, subst), named @ NamedTypeVariable(_, _)) =>
+        case ((vars, subst), named @ NamedTypeVariable(_, _, _)) =>
           (vars :+ named, subst)
-        case ((vars, subst), inferred @ InferredTypeVariable(_, kind)) =>
+        case ((vars, subst), inferred @ InferredTypeVariable(_, kind, _)) =>
           val freshVar = TypeVariable(kind)
           (vars :+ freshVar, subst.updated(inferred, freshVar))
       }

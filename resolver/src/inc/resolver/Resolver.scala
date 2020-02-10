@@ -1,7 +1,12 @@
 package inc.resolver
 
 import cats.data.Chain
+import cats.instances.either._
+import cats.instances.list._
+import cats.syntax.either._
 import cats.syntax.functor._
+import cats.syntax.foldable._
+import cats.syntax.traverse._
 import inc.common._
 import java.lang.String
 import scala.{ Either, Right, StringContext }
@@ -11,12 +16,12 @@ object Resolver {
   type SymbolTable = Map[String, Name]
 
   val EmptyTable: SymbolTable = Map.empty
-  val EmptyResult: Either[List[ResolverError], Chain[Expr[NameWithPos]]] = Right(Chain.empty)
+  val EmptyResult: Either[List[ResolverError], Chain[Expr[Meta.Untyped]]] = Right(Chain.empty)
 
   def withName(expr: Expr[Pos], name: Name, tbl: SymbolTable) =
-    Right((expr.map(pos => NameWithPos(name, pos)), tbl))
+    Right((expr.map(pos => Meta.Untyped(name, pos)), tbl))
 
-  def resolve(expr: Expr[Pos], tbl: SymbolTable): Either[List[ResolverError], (Expr[NameWithPos], SymbolTable)] = expr match {
+  def resolve(expr: Expr[Pos], tbl: SymbolTable): Either[List[ResolverError], (Expr[Meta.Untyped], SymbolTable)] = expr match {
     case int @ LiteralInt(_, _) =>
       withName(int, NoName, tbl)
 
@@ -51,13 +56,13 @@ object Resolver {
         (c, _) <- resolve(cond, tbl)
         (t, _) <- resolve(thenExpr, tbl)
         (e, _) <- resolve(elseExpr, tbl)
-      } yield (If(c, t, e, NameWithPos(NoName, pos)), tbl)
+      } yield (If(c, t, e, Meta.Untyped(NoName, pos)), tbl)
 
     case Lambda(params, body, pos) =>
       // Allow name shadowing in lambda params
-      val tblWithoutParams = tbl.filterNot { case (nm, _) => params.map(_.name).contains(nm) }
-      val emptyParams: Chain[Param[NameWithPos]] = Chain.empty
-      val emptyRes: Either[List[ResolverError], (Chain[Param[NameWithPos]], SymbolTable)] = Right((emptyParams, tblWithoutParams))
+      val emptyTbl: SymbolTable = Map.empty
+      val emptyParams: Chain[Param[Meta.Untyped]] = Chain.empty
+      val emptyRes: Either[List[ResolverError], (Chain[Param[Meta.Untyped]], SymbolTable)] = Right((emptyParams, emptyTbl))
 
       val resolvedParams = params.foldLeft(emptyRes) {
         case (resSoFar, param @ Param(name, _, pos)) =>
@@ -67,16 +72,16 @@ object Resolver {
                 ResolverError.singleton(pos, s"Symbol $name is already defined")
               else {
                 val localName = LocalName(name)
-                val paramWithName = param.copy(meta = NameWithPos(localName, pos))
+                val paramWithName = param.copy(meta = Meta.Untyped(localName, pos))
                 Right((paramsSoFar :+ paramWithName, updatedTbl.updated(name, localName)))
               }
           }
       }
 
       for {
-        (parms, updatedTbl) <- resolvedParams
-        (b, _) <- resolve(body, updatedTbl)
-      } yield (Lambda(parms.toList, b, NameWithPos(NoName, pos)), tbl)
+        (parms, paramTbl) <- resolvedParams
+        (b, _) <- resolve(body, tbl ++ paramTbl)
+      } yield (Lambda(parms.toList, b, Meta.Untyped(NoName, pos)), tbl)
 
 
     case Apply(fn, args, pos) =>
@@ -91,39 +96,98 @@ object Resolver {
             } yield rs :+ r
         }
 
-      } yield (Apply(f, ra.toList, NameWithPos(NoName, pos)), tbl)
+      } yield (Apply(f, ra.toList, Meta.Untyped(NoName, pos)), tbl)
 
     case Ascription(expr, ascribedAs, pos) =>
       resolve(expr, tbl).map {
         case (e, _) =>
-          (Ascription(e, ascribedAs, NameWithPos(NoName, pos)), tbl)
+          (Ascription(e, ascribedAs, Meta.Untyped(NoName, pos)), tbl)
       }
   }
 
-  def resolve(mod: Module[Pos], decl: TopLevelDeclaration[Pos], tbl: SymbolTable): Either[List[ResolverError], (TopLevelDeclaration[NameWithPos], SymbolTable)] = decl match {
+  def resolve(mod: Module[Pos], decl: TopLevelDeclaration[Pos], tbl: SymbolTable): Either[List[ResolverError], (TopLevelDeclaration[Meta.Untyped], SymbolTable)] = decl match {
     case Let(name, expr, pos) =>
       val memberName = MemberName(mod.pkg, mod.name, name)
-
       resolve(expr, tbl).flatMap {
         case (resolvedExpr, updatedTbl) =>
-          if (updatedTbl.contains(name))
-            ResolverError.singleton(resolvedExpr.meta.pos, s"Symbol $name is already defined")
-          else
-            Right((Let(name, resolvedExpr, NameWithPos(memberName, pos)), updatedTbl.updated(name, memberName)))
+          Right((Let(name, resolvedExpr, Meta.Untyped(memberName, pos)), updatedTbl))
+      }
+
+    case data @ Data(_, _, cases, pos) =>
+      val resolvedCases = cases.traverse {
+        case constr @ DataConstructor(_, params, _, constrPos) =>
+          val emptyTbl: SymbolTable = Map.empty
+          val emptyParams: Chain[Param[Meta.Untyped]] = Chain.empty
+          val emptyRes: Either[List[ResolverError], (Chain[Param[Meta.Untyped]], SymbolTable)] = Right((emptyParams, emptyTbl))
+
+          val resolvedParams = params.foldLeft(emptyRes) {
+            case (resSoFar, param @ Param(name, _, pos)) =>
+              resSoFar.flatMap {
+                case (paramsSoFar, updatedTbl) =>
+                  if (updatedTbl.contains(name))
+                    ResolverError.singleton(pos, s"Symbol $name is already defined")
+                  else {
+                    val localName = LocalName(name)
+                    val paramWithName = param.copy(meta = Meta.Untyped(localName, pos))
+                    Right((paramsSoFar :+ paramWithName, updatedTbl.updated(name, localName)))
+                  }
+              }
+          }
+
+          resolvedParams.map {
+            case (parms, _) =>
+              val constrName = ConstrName(mod.pkg, mod.name, data.name, constr.name)
+              constr.copy(params = parms.toList, meta = Meta.Untyped(constrName, constrPos))
+          }
+      }
+
+      resolvedCases.map { cses =>
+        val updatedData = data.copy(
+          cases = cses,
+          meta = Meta.Untyped(DataName(mod.pkg, mod.name, data.name), pos)
+        )
+
+        val updatedTbl = cses.foldLeft(tbl) {
+          case (tbl, nextCase) =>
+            tbl.updated(nextCase.name, nextCase.meta.name)
+        }
+
+        (updatedData, updatedTbl)
       }
   }
 
   def resolve(
     module: Module[Pos],
-    importedDecls: Map[String, TopLevelDeclaration[NameWithType]] = Map.empty
-  ): Either[List[ResolverError], Module[NameWithPos]] = module match {
+    importedEnv: Environment = Environment.empty
+  ): Either[List[ResolverError], Module[Meta.Untyped]] = module match {
     case Module(pkg, name, _, decls, pos) =>
-      val initialTbl = importedDecls.view.map { case (sym, tld) => (sym, tld.meta.name) }.toMap
+      val importedTbl = importedEnv.names
 
-      val emptyDecls = Chain.empty[TopLevelDeclaration[NameWithPos]]
-      val emptyRes: Either[List[ResolverError], (Chain[TopLevelDeclaration[NameWithPos]], SymbolTable)] = Right((emptyDecls, initialTbl))
+      // Do an initial pass over the top level declarations
+      val initialRes = decls.foldLeft(importedTbl.asRight[List[ResolverError]]) {
+        case (resSoFar, Let(name, _, pos)) =>
+          resSoFar.flatMap { tbl =>
+            if (tbl.contains(name))
+              ResolverError.singleton(pos, s"Symbol $name is already defined")
+            else
+              Right(tbl.updated(name, MemberName(module.pkg, module.name, name)))
+          }
+        case (resSoFar, Data(dataName, _, cases, _)) =>
+          resSoFar.flatMap { outerTbl =>
+            cases.foldM(outerTbl.updated(dataName, DataName(module.pkg, module.name, dataName))) {
+              case (tbl, DataConstructor(name, _, _, pos)) =>
+                if (tbl.contains(name))
+                  ResolverError.singleton(pos, s"Symbol $name is already defined")
+                else
+                  Right(tbl.updated(name, ConstrName(module.pkg, module.name, dataName, name)))
+            }
+          }
+      }
 
-      val resolvedDecls = decls.foldLeft(emptyRes) {
+      // Resolve names within the bodies of the declarations
+      val emptyDecls = Chain.empty[TopLevelDeclaration[Meta.Untyped]]
+
+      val resolvedDecls = decls.foldLeft(initialRes.map(tbl => (emptyDecls, tbl))) {
         case (resSoFar, nextDecl) =>
           for {
             (resolvedSoFar, tblSoFar) <- resSoFar
@@ -135,7 +199,7 @@ object Resolver {
         case (resolved, _) =>
           module.copy(
             declarations = resolved.toList,
-            meta = NameWithPos(ModuleName(pkg, name), pos)
+            meta = Meta.Untyped(ModuleName(pkg, name), pos)
           )
       }
   }

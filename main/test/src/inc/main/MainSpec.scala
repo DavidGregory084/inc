@@ -1,9 +1,9 @@
 package inc.main
 
 import better.files._
+import java.lang.Throwable
 import java.net.URLClassLoader
 import java.nio.file.{Files, Path}
-
 import org.scalatest._
 import org.scalatestplus.scalacheck._
 import inc.common._
@@ -14,7 +14,11 @@ class MainSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCheck
     val className = moduleName.replaceAll("/", ".")
     val classLoader = Thread.currentThread.getContextClassLoader
     val childLoader = URLClassLoader.newInstance(Array(classFileDir.url), classLoader)
-    Class.forName(s"${className}", true, childLoader)
+    try Class.forName(s"${className}", true, childLoader) catch {
+      case e: Throwable =>
+        e.printStackTrace()
+        fail("Unable to load compiled class", e)
+    }
   }
 
   def getStatic(clazz: Class[_], name: String) = {
@@ -45,7 +49,7 @@ class MainSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCheck
     val mod = s"module ${pkg}${fieldName.capitalize} { let ${fieldName} = ${stringValue} }"
     val ctx = Printer.SourceContext(80, s"${fieldName.capitalize}.inc", mod)
     val classFile = Main.compileModule(dir, ctx, config).fold(err => fail(err.head), identity)
-    val clazz = loadClassFrom(dir, pkg + classFile.toFile.toScala.nameWithoutExtension)
+    val clazz = loadClassFrom(dir, pkg + classFile.head.toFile.toScala.nameWithoutExtension)
     getStatic(clazz, fieldName) shouldBe expectedValue
   }
 
@@ -93,7 +97,7 @@ class MainSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCheck
       errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
       identity
     )
-    val clazz = loadClassFrom(dir, pkg + result.toFile.toScala.nameWithoutExtension)
+    val clazz = loadClassFrom(dir, pkg + result.head.toFile.toScala.nameWithoutExtension)
     getStatic(clazz, fieldName) shouldBe 42
   }
 
@@ -107,7 +111,7 @@ class MainSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCheck
       errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
       identity
     )
-    val clazz = loadClassFrom(dir, pkg + result.toFile.toScala.nameWithoutExtension)
+    val clazz = loadClassFrom(dir, pkg + result.head.toFile.toScala.nameWithoutExtension)
     getStatic(clazz, fieldName) shouldBe 42
   }
 
@@ -121,7 +125,7 @@ class MainSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCheck
       errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
       identity
     )
-    val clazz = loadClassFrom(dir, pkg + result.toFile.toScala.nameWithoutExtension)
+    val clazz = loadClassFrom(dir, pkg + result.head.toFile.toScala.nameWithoutExtension)
     getStatic(clazz, fieldName) shouldBe 41
   }
 
@@ -133,7 +137,7 @@ class MainSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCheck
       errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
       identity
     )
-    loadClassFrom(dir, "Test.Main." + result.toFile.toScala.nameWithoutExtension)
+    loadClassFrom(dir, "Test.Main." + result.head.toFile.toScala.nameWithoutExtension)
   }
 
   it should "compile an identity function" in withTmpDir { dir =>
@@ -144,7 +148,7 @@ class MainSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCheck
       errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
       identity
     )
-    loadClassFrom(dir, "Test.Main." + result.toFile.toScala.nameWithoutExtension)
+    loadClassFrom(dir, "Test.Main." + result.head.toFile.toScala.nameWithoutExtension)
   }
 
   it should "compile an application of an identity function with a reference type" in withTmpDir { dir =>
@@ -155,7 +159,7 @@ class MainSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCheck
       errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
       identity
     )
-    loadClassFrom(dir, "Test.Main." + result.toFile.toScala.nameWithoutExtension)
+    loadClassFrom(dir, "Test.Main." + result.head.toFile.toScala.nameWithoutExtension)
   }
 
   it should "compile an application of an identity function with a primitive type" in withTmpDir { dir =>
@@ -166,7 +170,7 @@ class MainSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCheck
       errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
       identity
     )
-    loadClassFrom(dir, "Test.Main." + result.toFile.toScala.nameWithoutExtension)
+    loadClassFrom(dir, "Test.Main." + result.head.toFile.toScala.nameWithoutExtension)
   }
 
   it should "compile a function that accepts a function as argument" in withTmpDir { dir =>
@@ -177,7 +181,7 @@ class MainSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCheck
       errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
       identity
     )
-    loadClassFrom(dir, "Test.Main." + result.toFile.toScala.nameWithoutExtension)
+    loadClassFrom(dir, "Test.Main." + result.head.toFile.toScala.nameWithoutExtension)
   }
 
   it should "compile a module that imports from another module" in withTmpDir { dir =>
@@ -211,7 +215,7 @@ class MainSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCheck
       identity
     )
 
-    val clazz = loadClassFrom(dir, "Test." + result2.toFile.toScala.nameWithoutExtension)
+    val clazz = loadClassFrom(dir, "Test." + result2.head.toFile.toScala.nameWithoutExtension)
 
     getStatic(clazz, "int") shouldBe 1
   }
@@ -227,7 +231,7 @@ class MainSpec extends FlatSpec with Matchers with ScalaCheckDrivenPropertyCheck
           errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
           identity
         )
-        loadClassFrom(dir, "Test.Main." + result.toFile.toScala.nameWithoutExtension)
+        loadClassFrom(dir, "Test.Main." + result.head.toFile.toScala.nameWithoutExtension)
       } catch {
         case e: Throwable =>
           println(NL + mod)

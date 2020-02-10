@@ -49,6 +49,7 @@ message TypeConstructor {
 message TypeApply {
   Type typ = 1;
   repeated Type params = 2;
+  Kind kind = 3;
 }
 
 message TypeVariable {
@@ -79,13 +80,26 @@ message LocalName {
 
 message ModuleName {
   repeated string pkg = 1;
-  string cls = 2;
+  string mod = 2;
 }
 
 message MemberName {
   repeated string pkg = 1;
-  string cls = 2;
+  string mod = 2;
   string name = 3;
+}
+
+message DataName {
+  repeated string pkg = 1;
+  string mod = 2;
+  string name = 3;
+}
+
+message ConstrName {
+  repeated string pkg = 1;
+  string mod = 2;
+  string data = 3;
+  string name = 4;
 }
 
 message Name {
@@ -94,6 +108,8 @@ message Name {
     LocalName localName = 2;
     ModuleName moduleName = 3;
     MemberName memberName = 4;
+    DataName dataName = 5;
+    ConstrName constrName = 6;
   }
 }
 
@@ -201,9 +217,24 @@ message Let {
   NameWithType nameWithType = 3;
 }
 
+message DataConstructor {
+  string name = 1;
+  repeated Param params = 2;
+  TypeScheme returnType = 3;
+  NameWithType nameWithType = 4;
+}
+
+message Data {
+  string name = 1;
+  repeated TypeVariable typeParams = 2;
+  repeated DataConstructor cases = 3;
+  NameWithType nameWithType = 4;
+}
+
 message TopLevelDeclaration {
   oneof sealed_value {
     Let let = 1;
+    Data data = 2;
   }
 }
 
