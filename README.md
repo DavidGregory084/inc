@@ -112,6 +112,21 @@ module Test/Compose {
 }
 ```
 
+### Data Declarations
+
+```scala
+module Test/Data {
+  data Either[A, B] {
+    case Left(a: A)
+    case Right(b: B)
+  }
+   
+  data Fix[F] {
+    case Unfix(unfix: F[Fix[F]])
+  }
+}
+```
+
 ## Continuous Benchmarks
 
 ~~This project has a small benchmark suite which runs against every commit.~~
