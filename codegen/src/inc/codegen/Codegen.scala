@@ -287,10 +287,8 @@ class Codegen(verifyCodegen: Boolean) {
         .map(enclosing => enclosing + "$")
         .getOrElse("") + classEnv.liftedLambdas
 
-      val liftedMethodType = meta.typ.copy(typ = Type.Function(adaptedArgTypes.init, adaptedArgTypes.last))
       val liftedMethodAsmType = AsmType.getMethodType(adaptedArgAsmTypes.last, adaptedArgAsmTypes.init: _*)
       val liftedMethodDescriptor = liftedMethodAsmType.getDescriptor
-      val liftedMethodSig = JavaSignature.forMethod(classEnv, liftedMethodType)
 
       // Get the inc.rts.FunctionN class that should be returned by the INVOKEDYNAMIC callsite
       val lambdaType = Asm.asmType(classEnv, meta.typ.typ)
@@ -307,7 +305,8 @@ class Codegen(verifyCodegen: Boolean) {
         case (param, idx) => param.meta.name -> idx
       }
 
-      val methodWriter = Asm.staticMethod(classEnv, liftedName, liftedMethodAsmType, liftedMethodSig)
+      val methodWriter = Asm.staticMethod(
+        classEnv, liftedName, liftedMethodAsmType, null, ACC_STATIC + ACC_SYNTHETIC)
 
       allParams.foreach { param =>
         methodWriter.visitParameter(param.name, ACC_FINAL)

@@ -280,10 +280,11 @@ object Asm {
     classEnv: ClassEnvironment,
     methodName: String,
     methodType: AsmType,
-    methodSignature: String
+    methodSignature: String,
+    access: Int = ACC_STATIC
   ): GeneratorAdapter = {
     new GeneratorAdapter(
-      ACC_STATIC,
+      access,
       new Method(methodName, methodType.getDescriptor()),
       methodSignature,
       null,
