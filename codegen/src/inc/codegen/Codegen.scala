@@ -412,7 +412,7 @@ class Codegen(verifyCodegen: Boolean) {
 
         val methodTypeArgs = tpArgs.map(Asm.asmType(classEnv, _))
         val methodType = AsmType.getMethodType(methodTypeArgs.last, methodTypeArgs.init: _*)
-        val methodSig = JavaSignature.forMethod(classEnv, meta.typ)
+        val methodSig = JavaSignature.forMethod(classEnv, let.meta.typ)
         val methodWriter = Asm.staticMethod(classEnv, let.name, methodType, methodSig)
 
         params.foreach { param =>

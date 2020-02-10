@@ -34,7 +34,7 @@ object Main extends LazyLogging {
 
       compileModule(dir, context, config).left.foreach { errors =>
         errors.map { e =>
-          highlightError(context, NL + e.getMessage, e.pos)
+          highlightError(context, NL + e.message, e.pos)
         }.foreach(logger.error(_))
 
         if (config.exitOnError)
