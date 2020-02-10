@@ -112,7 +112,7 @@ module Test/Compose {
 }
 ```
 
-### Data Declarations
+### Data declarations
 
 ```scala
 module Test/Data {
