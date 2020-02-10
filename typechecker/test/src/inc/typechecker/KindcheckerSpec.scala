@@ -167,7 +167,7 @@ class KindcheckerSpec extends FlatSpec with Matchers {
     val env = Environment.empty.withKind("List", `* -> *`)
     val actual = checker.kindcheck(data, env).map(_._1)
 
-    val expected = TypeError.singleton(Pos.Empty, s"""${Red("*")} does not unify with ${Red("* -> *")}""")
+    val expected = TypeError.kindUnification(Pos.Empty, `*`, `* -> *`)
 
     actual shouldBe expected
   }

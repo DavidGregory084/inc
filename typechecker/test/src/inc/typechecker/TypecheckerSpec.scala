@@ -104,7 +104,7 @@ class TypecheckerSpec extends FlatSpec with Matchers {
 
     val ctx2 = Printer.SourceContext(80, "If.inc", "")
 
-    Typechecker.typecheck(mod2, noImports, ctx2) shouldBe TypeError.singleton(Pos.Empty, Red("Int") + " does not unify with " + Red("Boolean"))
+    Typechecker.typecheck(mod2, noImports, ctx2) shouldBe TypeError.typeUnification(Pos.Empty, Type.Int, Type.Boolean)
   }
 
   it should "ensure the expressions provided to both branches of an if are compatible" in {
@@ -123,7 +123,7 @@ class TypecheckerSpec extends FlatSpec with Matchers {
       mkLet("integer", mkIf(mkBool(true), mkInt(42), mkDbl(41.0)))
     ))
 
-    Typechecker.typecheck(mod2, noImports, ctx) shouldBe TypeError.singleton(Pos.Empty, Red("Int") + " does not unify with " + Red("Double")),
+    Typechecker.typecheck(mod2, noImports, ctx) shouldBe TypeError.typeUnification(Pos.Empty, Type.Int, Type.Double)
   }
 
   it should "infer the parameter and return type of lambda expressions" in {
@@ -200,6 +200,9 @@ class TypecheckerSpec extends FlatSpec with Matchers {
 
     val ctx = Printer.SourceContext(80, "Occurs.inc", "")
 
-    Typechecker.typecheck(mod, noImports, ctx) shouldBe TypeError.singleton(Pos.Empty, "Attempt to construct infinite type"),
+    Typechecker.typecheck(mod, noImports, ctx).fold(
+      err => err.head shouldBe an[TypeOccursCheck],
+      _ => fail("Typechecking should fail as this code fails the occurs check")
+    )
   }
 }

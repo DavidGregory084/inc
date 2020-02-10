@@ -127,7 +127,7 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
           trace(s"Reference to $name", meta.pos, instTyp)
 
           Right((expr.map(_.withSimpleType(instTyp)), List.empty))
-        }.getOrElse(TypeError.singleton(meta.pos, s"Reference to undefined symbol: $name"))
+        }.getOrElse(TypeError.generic(meta.pos, s"Reference to undefined symbol: $name"))
 
       case If(cond, thenExpr, elseExpr, meta) =>
         for {

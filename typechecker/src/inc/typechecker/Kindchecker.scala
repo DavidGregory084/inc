@@ -163,20 +163,18 @@ class Kindchecker(context: Printer.SourceContext, isTraceEnabled: Boolean) exten
       case k @ KindVariable(_) if kindVar == k =>
         Right(EmptySubst)
       case k if kindVar.occursIn(k) =>
-        TypeError.singleton(pos, "Attempt to construct infinite kind")
+        TypeError.kindOccursCheck(pos, kindVar, kind)
       case _ =>
         Right(Map(kindVar -> kind))
     }
 
   def unify(left: Kind, right: Kind, pos: Pos): Infer[Substitution] = {
-    lazy val ll = Printer.print(left)
-    lazy val rr = Printer.print(right)
-    lazy val llRed = ll.style(Style.Ansi.Fg.Red)
-    lazy val rrRed = rr.style(Style.Ansi.Fg.Red)
-    lazy val llYellow = ll.style(Style.Ansi.Fg.Yellow)
-    lazy val rrYellow = rr.style(Style.Ansi.Fg.Yellow)
 
     if (isTraceEnabled) {
+      val lStr = Printer.print(left)
+      val rStr = Printer.print(right)
+      val llYellow = lStr.style(Style.Ansi.Fg.Yellow)
+      val rrYellow = rStr.style(Style.Ansi.Fg.Yellow)
       val traceMsg = Doc.hardLine + Doc.text("Unifying") & llYellow & Doc.text("with") & rrYellow
       logger.info(traceMsg.render(context.consoleWidth))
     }
@@ -184,8 +182,7 @@ class Kindchecker(context: Printer.SourceContext, isTraceEnabled: Boolean) exten
     def go(left: Kind, right: Kind): Infer[Substitution] = {
       (left, right) match {
         case (Parameterized(lparams, _), Parameterized(rparams, _)) if lparams.length != rparams.length =>
-          val errorMsg = llRed & Doc.text("does not unify with") & rrRed
-          TypeError.singleton(pos, errorMsg.render(context.consoleWidth))
+          TypeError.kindUnification(pos, left, right)
 
         case (Parameterized(largs, lres), Parameterized(rargs, rres)) =>
           val emptyRes: Infer[Substitution] = Right(EmptySubst)
@@ -212,8 +209,7 @@ class Kindchecker(context: Printer.SourceContext, isTraceEnabled: Boolean) exten
           bind(kindVar, kind, pos)
 
         case (_, _) =>
-          val errorMsg = llRed & Doc.text("does not unify with") & rrRed
-          TypeError.singleton(pos, errorMsg.render(context.consoleWidth))
+          TypeError.kindUnification(pos, left, right)
       }
     }
 

@@ -5,7 +5,7 @@ import java.lang.String
 import scala.collection.immutable.List
 import scala.StringContext
 
-case class ConfigError(private val position: Pos, private val message: String) extends Error(position, message)
+case class ConfigError(private val position: Pos, val message: String) extends Error(position)
 
 object ConfigError {
   def invalidClasspathEntry(entry: String): List[ConfigError] =

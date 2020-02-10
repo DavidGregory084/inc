@@ -7,7 +7,6 @@ import cats.syntax.traverse._
 import cats.syntax.parallel._
 import cats.instances.either._
 import cats.instances.list._
-import cats.instances.parallel._
 import inc.common._
 import inc.rts.{ Unit => IncUnit }
 import java.io.{ OutputStream, PrintWriter }

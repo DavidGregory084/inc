@@ -32,7 +32,7 @@ class Solve(context: Printer.SourceContext, isTraceEnabled: Boolean) extends Laz
       case t @ NamedTypeVariable(_, _, _) if tyVar == t =>
         Right(EmptySubst)
       case t if tyVar.occursIn(t) =>
-        TypeError.singleton(pos, "Attempt to construct infinite type")
+        TypeError.typeOccursCheck(pos, tyVar, typ)
       case t if tyVar.kind != t.kind =>
         kindChecker.unify(tyVar.kind, t.kind, pos).map { subst =>
           val updatedTyVar = tyVar.substituteKinds(subst).asInstanceOf[TypeVariable]
@@ -44,14 +44,12 @@ class Solve(context: Printer.SourceContext, isTraceEnabled: Boolean) extends Laz
     }
 
   def unify(left: Type, right: Type, pos: Pos): Infer[Substitution] = {
-    lazy val ll = Printer.print(left)
-    lazy val rr = Printer.print(right)
-    lazy val llRed = ll.style(Style.Ansi.Fg.Red)
-    lazy val rrRed = rr.style(Style.Ansi.Fg.Red)
-    lazy val llYellow = ll.style(Style.Ansi.Fg.Yellow)
-    lazy val rrYellow = rr.style(Style.Ansi.Fg.Yellow)
 
     if (isTraceEnabled) {
+      val lStr = Printer.print(left)
+      val rStr = Printer.print(right)
+      val llYellow = lStr.style(Style.Ansi.Fg.Yellow)
+      val rrYellow = rStr.style(Style.Ansi.Fg.Yellow)
       val traceMsg = Doc.hardLine + Doc.text("Unifying") & llYellow & Doc.text("with") & rrYellow
       logger.info(traceMsg.render(context.consoleWidth))
     }
@@ -59,8 +57,7 @@ class Solve(context: Printer.SourceContext, isTraceEnabled: Boolean) extends Laz
     def go(left: Type, right: Type): Infer[Substitution] = {
       (left, right) match {
         case (TypeApply(_, largs, _, _), TypeApply(_, rargs, _, _)) if largs.length != rargs.length =>
-          val errorMsg = llRed & Doc.text("does not unify with") & rrRed
-          TypeError.singleton(pos, errorMsg.render(context.consoleWidth))
+          TypeError.typeUnification(pos, left, right)
 
         case (TypeApply(ltyp, largs, _, _), TypeApply(rtyp, rargs, _, _)) =>
           unify(ltyp, rtyp, pos).flatMap { outerSubst =>
@@ -92,8 +89,7 @@ class Solve(context: Printer.SourceContext, isTraceEnabled: Boolean) extends Laz
           bind(tyVar, typ, pos)
 
         case (_, _) =>
-          val errorMsg = llRed & Doc.text("does not unify with") & rrRed
-          TypeError.singleton(pos, errorMsg.render(context.consoleWidth))
+          TypeError.typeUnification(pos, left, right)
       }
     }
 
