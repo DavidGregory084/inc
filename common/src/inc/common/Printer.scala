@@ -28,9 +28,15 @@ object Printer {
       val dropBefore = before.count(c => c == '\r' || c == '\n')
       val dropAfter = after.count(c => c == '\r' || c == '\n')
 
-      val highlightedString = before + highlight.start + highlighted + highlight.end + after
+      val highlightedString = {
+        val highlightedLines = highlighted.split("\\r?\\n")
+        val firstLine = highlightedLines.head
+        val remaining = highlightedLines.tail.map(highlight.start + _)
+        val fullyHighlighted = (firstLine +: remaining).mkString(System.lineSeparator)
+        before + highlight.start + fullyHighlighted + highlight.end + after
+      }
 
-      val allLines = highlightedString.split("[\\r\\n]")
+      val allLines = highlightedString.split("\\r?\\n")
 
       val marginWidth = String.valueOf(allLines.length).length + 1
 
@@ -134,6 +140,18 @@ object Printer {
       p.ascribedAs.map(asc => Doc.char(':') & print(asc)).getOrElse(Doc.empty)
   }
 
+  def print[A](p: Pattern[A]): Doc = p match {
+    case IdentPattern(name, _) =>
+      Doc.text(name)
+    case AliasPattern(pattern, alias, _) =>
+      Doc.text(alias) & Doc.char('@') & print(pattern)
+    case ConstrPattern(name, patterns, _) =>
+      Doc.text(name) & Doc.intercalate(
+        Doc.comma + Doc.space,
+        patterns.map(print(_))
+      ).bracketBy(Doc.char('{'), Doc.char('}'))
+  }
+
   def print[A](e: Expr[A]): Doc = e match {
     case LiteralInt(i, _) =>
       Doc.str(i)
@@ -183,6 +201,14 @@ object Printer {
 
     case Ascription(expr, ascribedAs, _) =>
       Doc.char('(') + print(expr) + Doc.char(')') + Doc.text(": ") + print(ascribedAs)
+
+    case Match(matchExpr, cases, _) =>
+      Doc.text("match") & print(matchExpr) & Doc.text("with") & Doc.intercalate(
+        Doc.char(';') + Doc.line,
+        cases.map {
+          case MatchCase(pattern, resultExpr, _) =>
+            Doc.text("case") & print(pattern) & Doc.text("->") & print(resultExpr)
+      }).bracketBy(Doc.char('{'), Doc.char('}'))
   }
 
   def print[A](data: DataConstructor[A]): Doc = data match {

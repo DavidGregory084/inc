@@ -11,7 +11,7 @@ object Typechecker extends Typechecker(false)
 
 class Typechecker(isTraceEnabled: Boolean) extends LazyLogging {
 
-  def trace(context: Printer.SourceContext, name: String, env: Environment) = {
+  def trace(context: Printer.SourceContext, name: String, env: Environment[Meta.Typed]) = {
     if (isTraceEnabled) {
       val header = Doc.hardLine + Doc.text(name + ":") + (Doc.hardLine * 2)
 
@@ -50,7 +50,7 @@ class Typechecker(isTraceEnabled: Boolean) extends LazyLogging {
 
   def typecheck(
     module: Module[Meta.Untyped],
-    importedEnv: Environment,
+    importedEnv: Environment[Meta.Typed],
     context: Printer.SourceContext
   ): Infer[Module[Meta.Typed]] = {
     val solve = new Solve(context, isTraceEnabled)
@@ -72,7 +72,7 @@ class Typechecker(isTraceEnabled: Boolean) extends LazyLogging {
       // Apply the substitution from the constraint solution to the module
       typedMod = mod.substitute(subst)
 
-      _ = trace(context, "Final type environment", typedMod.environment)
+      _ = trace(context, "Final type environment", typedMod.typeEnvironment)
 
     } yield typedMod
   }

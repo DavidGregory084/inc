@@ -58,14 +58,30 @@ sealed abstract class Type extends Product with Serializable {
       Set.empty
   }
 
+  def prefixed(prefix: String): Type = this match {
+    case tyVar @ NamedTypeVariable(_, _, _) =>
+      tyVar
+    case tyVar @ InferredTypeVariable(_, _, _) =>
+      tyVar
+    case tyCon @ TypeConstructor(name, _, _)
+        if Type.builtIns.contains(name) =>
+      tyCon
+    case tyCon @ TypeConstructor(name, _, _) =>
+      tyCon.copy(name = (prefix + "." + name))
+    case ta @ TypeApply(typ, params, _, _) =>
+      ta.copy(
+        typ = typ.prefixed(prefix),
+        params = params.map(_.prefixed(prefix)))
+  }
+
   def substitute(subst: Map[TypeVariable, Type]): Type =
     if (subst.isEmpty)
       this
     else this match {
       case tyVar @ NamedTypeVariable(_, _, _) =>
-        subst.getOrElse(tyVar, tyVar)
+        subst.getOrElse(tyVar.forgetPos, tyVar)
       case tyVar @ InferredTypeVariable(_, _, _) =>
-        subst.getOrElse(tyVar, tyVar)
+        subst.getOrElse(tyVar.forgetPos, tyVar)
       case tyCon @ TypeConstructor(_, _, _) =>
         tyCon
       case ta @ TypeApply(typ, params, _, _) =>
@@ -107,6 +123,7 @@ sealed abstract class Type extends Product with Serializable {
 
 object Type {
   val primitives = Set("Int", "Long", "Float", "Double", "Boolean", "Char")
+  val builtIns = primitives ++ Set("->", "String", "Module", "Unit")
 
   val Int = TypeConstructor("Int", Atomic)
   val Long = TypeConstructor("Long", Atomic)
@@ -161,6 +178,13 @@ sealed abstract class TypeVariable extends Type {
 
   def occursIn(typ: Type) =
     typ.freeTypeVariables.exists(_.name == this.name)
+
+  def forgetPos = this match {
+    case tv @ NamedTypeVariable(_, _, _) =>
+      tv.copy(pos = Pos.Empty)
+    case tv @ InferredTypeVariable(_, _, _) =>
+      tv.copy(pos = Pos.Empty)
+  }
 
   override def toProto: proto.TypeVariable = this match {
     case NamedTypeVariable(n, kind, _) =>

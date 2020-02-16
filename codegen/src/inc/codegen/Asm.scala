@@ -1,6 +1,5 @@
 package inc.codegen
 
-
 import cats.syntax.either._
 import inc.common._
 import inc.rts.{ Unit => IncUnit }
@@ -9,6 +8,7 @@ import java.lang.invoke.{ CallSite, LambdaMetafactory, MethodType, MethodHandle,
 import org.objectweb.asm.{ Attribute, ByteVector, ClassReader, ClassVisitor, ClassWriter, Label, Handle, Type => AsmType }
 import org.objectweb.asm.Opcodes._
 import org.objectweb.asm.commons.{ GeneratorAdapter, Method }
+import org.objectweb.asm.util.CheckClassAdapter
 import scala.{ Array, Byte, Char, Int, Unit }
 import scala.collection.immutable.List
 import scala.Predef.classOf
@@ -111,9 +111,9 @@ object Asm {
     case ConstrName(pkg, mod, _, _) =>
       formatPkg(pkg) + mod
     case LocalName(_) =>
-      internalName(classEnv.enclosingMod)
+      internalName(classEnv.module)
     case NoName =>
-      internalName(classEnv.enclosingMod)
+      internalName(classEnv.module)
   }
 
   def memberName(name: Name): String = name match {
@@ -244,7 +244,7 @@ object Asm {
   }
 
   def staticField[A](classEnv: ClassEnvironment, fieldName: String, fieldType: AsmType, initValue: A = null): Generate[Unit] = {
-    classEnv.enclosingModWriter.visitField(
+    classEnv.moduleWriter.visitField(
       ACC_PUBLIC + ACC_STATIC + ACC_FINAL,
       fieldName,
       fieldType.getDescriptor(),
@@ -262,7 +262,7 @@ object Asm {
     refMod: AsmType,
     refName: String,
   ): Generate[Unit] = {
-    classEnv.enclosingModWriter.visitField(
+    classEnv.moduleWriter.visitField(
       ACC_PUBLIC + ACC_STATIC + ACC_FINAL,
       fieldName,
       fieldType.getDescriptor(),
@@ -270,8 +270,8 @@ object Asm {
       null
     ).visitEnd()
 
-    classEnv.enclosingMethodWriter.getStatic(refMod, refName, fieldType)
-    classEnv.enclosingMethodWriter.putStatic(asmType(classEnv, classEnv.enclosingMod.meta), fieldName, fieldType)
+    classEnv.methodWriter.getStatic(refMod, refName, fieldType)
+    classEnv.methodWriter.putStatic(asmType(classEnv, classEnv.module.meta), fieldName, fieldType)
 
     ().asRight
   }
@@ -288,11 +288,11 @@ object Asm {
       new Method(methodName, methodType.getDescriptor()),
       methodSignature,
       null,
-      classEnv.enclosingModWriter
+      classEnv.moduleWriter
     )
   }
 
-  def staticInitializer(classWriter: ClassWriter): GeneratorAdapter = {
+  def staticInitializer(classWriter: ClassVisitor): GeneratorAdapter = {
     val methodDescriptor = AsmType.getMethodDescriptor(AsmType.VOID_TYPE)
 
     val generatorAdapter = new GeneratorAdapter(
@@ -317,11 +317,13 @@ object Asm {
 
     val methodType = AsmType.getMethodType(dataAsmType, constrParamAsmTypes: _*)
     val methodSignature = JavaSignature.forMethod(classEnv, constr.meta.typ)
-    val methodWriter = Asm.staticMethod(classEnv, constr.name, methodType, methodSignature)
+    val methodWriter = Asm.staticMethod(classEnv, constr.name, methodType, methodSignature, ACC_PUBLIC + ACC_STATIC)
 
     constr.params.foreach { param =>
       methodWriter.visitParameter(param.name, ACC_FINAL)
     }
+
+    methodWriter.visitCode()
 
     methodWriter.newInstance(constrAsmType)
     methodWriter.dup()
@@ -393,6 +395,23 @@ object Asm {
     gen.endMethod()
   }
 
+  def visitLocals(classEnv: ClassEnvironment): Unit = {
+    classEnv.localVars.toList
+      .sortBy {
+        case (_, local) => local.varIndex
+      }.foreach {
+        case (name, LocalVar(idx, desc, sig, start, end)) =>
+          classEnv.methodWriter.visitLocalVariable(
+            name.shortName,
+            desc,
+            sig,
+            start,
+            end,
+            idx
+          )
+      }
+  }
+
   def addDefaultConstructor(classWriter: ClassWriter): Unit = {
     val objectType = AsmType.getType(classOf[Object])
 
@@ -417,12 +436,12 @@ object Asm {
     parent: Data[Meta.Typed],
     constr: DataConstructor[Meta.Typed]
   ): ClassWriter = {
-    val constrClassWriter = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS)
+    val constrClassWriter = new ClassWriter(ClassWriter.COMPUTE_FRAMES)
     val constrSignature = JavaSignature.forDataConstructor(parent)
 
     constrClassWriter.visit(
       V1_8,
-      ACC_FINAL + ACC_SUPER,
+      ACC_PUBLIC + ACC_FINAL + ACC_SUPER,
       internalName(constr),
       constrSignature,
       internalName(parent),
@@ -433,12 +452,12 @@ object Asm {
   }
 
   def dataWriter(data: Data[Meta.Typed]): ClassWriter = {
-    val dataClassWriter = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS)
+    val dataClassWriter = new ClassWriter(ClassWriter.COMPUTE_FRAMES)
     val dataSignature = JavaSignature.forDataDeclaration(data)
 
     dataClassWriter.visit(
       V1_8,
-      ACC_ABSTRACT + ACC_SUPER,
+      ACC_PUBLIC + ACC_ABSTRACT + ACC_SUPER,
       internalName(data),
       dataSignature,
       AsmType.getInternalName(classOf[Object]),
@@ -448,10 +467,12 @@ object Asm {
     dataClassWriter
   }
 
-  def moduleWriter(mod: Module[Meta.Typed]): ClassWriter = {
-    val moduleClassWriter = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS)
+  def moduleWriter(mod: Module[Meta.Typed]): (ClassVisitor, ClassWriter) = {
+    // val moduleClassWriter = new ClassWriter(ClassWriter.COMPUTE_MAXS)
+    val moduleClassWriter = new ClassWriter(ClassWriter.COMPUTE_FRAMES)
+    val checkClassAdapter = new CheckClassAdapter(moduleClassWriter, false)
 
-    moduleClassWriter.visit(
+    checkClassAdapter.visit(
       V1_8,
       ACC_PUBLIC + ACC_SUPER,
       internalName(mod),
@@ -460,7 +481,7 @@ object Asm {
       null
     )
 
-    moduleClassWriter
+    (checkClassAdapter, moduleClassWriter)
   }
 
 }

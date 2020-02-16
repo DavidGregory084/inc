@@ -27,6 +27,9 @@ object Meta {
     def forgetPos: Typed =
       copy(pos = Pos.Empty)
 
+    def forgetType =
+      Meta.Untyped(name, pos)
+
     def substitute(subst: Map[TypeVariable, Type]): Typed =
       if (subst.isEmpty)
         this

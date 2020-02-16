@@ -86,7 +86,7 @@ object Main extends LazyLogging {
 
       importedEnv <- Classpath.readEnvironment(mod.imports, new URLClassLoader(urls))
 
-      resolved <- runPhase[Module[Meta.Untyped]]("resolver", context, config, _.printResolver, Resolver.resolve(mod, importedEnv))
+      resolved <- runPhase[Module[Meta.Untyped]]("resolver", context, config, _.printResolver, Resolver.resolve(mod, importedEnv.forgetMemberTypes))
 
       checked <- runPhase[Module[Meta.Typed]]("typechecker", context, config, _.printTyper, typechecker.typecheck(resolved, importedEnv, context))
 

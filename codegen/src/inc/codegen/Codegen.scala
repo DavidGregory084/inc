@@ -7,6 +7,7 @@ import cats.syntax.traverse._
 import cats.syntax.parallel._
 import cats.instances.either._
 import cats.instances.list._
+import cats.instances.option._
 import inc.common._
 import inc.rts.{ Unit => IncUnit }
 import java.io.{ OutputStream, PrintWriter }
@@ -15,7 +16,7 @@ import org.objectweb.asm.{ ClassReader, ClassWriter, Label, Handle, Type => AsmT
 import org.objectweb.asm.Opcodes._
 import org.objectweb.asm.commons.{ GeneratorAdapter, Method }
 import org.objectweb.asm.util.{ CheckClassAdapter, TraceClassVisitor }
-import scala.{ Array, Boolean, Byte, Unit, Option, Some, None, Either, StringContext }
+import scala.{ Array, Boolean, Byte, Int, Unit, Option, Some, None, Either, StringContext }
 import scala.collection.immutable.List
 import scala.Predef.{ ArrowAssoc, classOf, wrapRefArray }
 
@@ -55,12 +56,142 @@ class Codegen(verifyCodegen: Boolean) {
     // local variables are not calculated in time for CheckClassAdapter by the ClassWriter
     Either.catchOnly[IllegalStateException] {
       val classReader = new ClassReader(classFile.bytes)
-      val classWriter = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS)
+      val classWriter = new ClassWriter(ClassWriter.COMPUTE_FRAMES)
       val checkClass = new CheckClassAdapter(classWriter, true)
       classReader.accept(checkClass, 0)
     }.as(classFile).leftFlatMap { err =>
       CodegenError.singleton(err.getMessage)
     }
+  }
+
+  def newPattern(
+    classEnv: ClassEnvironment,
+    pattern: Pattern[Meta.Typed],
+    skipCaseLabel: Label,
+    enclosingVarIndex: Int,
+    enclosingConstr: Option[Name]
+  ): Generate[ClassEnvironment] = pattern match {
+    case IdentPattern(name, meta) =>
+      val patType = Asm.asmType(classEnv, meta.typ.typ)
+      val varIndex = classEnv.methodWriter.newLocal(patType)
+      val varLabel = new Label
+      val localVar = LocalVar(varIndex, patType.getDescriptor(), null, varLabel, skipCaseLabel)
+      val updatedEnv = classEnv.copy(localVars = classEnv.localVars.updated(meta.name, localVar))
+
+      classEnv.methodWriter.loadLocal(enclosingVarIndex)
+
+      enclosingConstr.map { constrName =>
+        // Load the constructor field
+        val memberAsmType = classEnv
+          .typeEnvironment
+          .members(constrName)
+          .find(_.name.shortName == name)
+          .map { memberMeta =>
+            val Type.Function(memberTpArgs) = memberMeta.typ.typ
+            Asm.asmType(classEnv, memberTpArgs.last)
+          }
+
+        memberAsmType.foreach { memberTp =>
+          val constrType = AsmType.getObjectType(Asm.internalName(constrName))
+          classEnv.methodWriter.checkCast(constrType)
+          classEnv.methodWriter.getField(constrType, name, memberTp)
+        }
+      }
+
+      updatedEnv.methodWriter.storeLocal(varIndex, patType)
+      updatedEnv.methodWriter.visitLabel(varLabel)
+      updatedEnv.asRight
+
+    case AliasPattern(IdentPattern(name, _), _, meta) =>
+      // Don't create a local for an ident pattern if it is being aliased
+      val patType = Asm.asmType(classEnv, meta.typ.typ)
+      val varIndex = classEnv.methodWriter.newLocal(patType)
+      val varLabel = new Label
+      val localVar = LocalVar(varIndex, patType.getDescriptor(), null, varLabel, skipCaseLabel)
+      val updatedEnv = classEnv.copy(localVars = classEnv.localVars.updated(meta.name, localVar))
+
+      classEnv.methodWriter.loadLocal(enclosingVarIndex)
+
+      enclosingConstr.map { constrName =>
+        // Load the constructor field
+        val memberAsmType = classEnv
+          .typeEnvironment
+          .members(constrName)
+          .find(_.name.shortName == name)
+          .map { memberMeta =>
+            val Type.Function(memberTpArgs) = memberMeta.typ.typ
+            Asm.asmType(classEnv, memberTpArgs.last)
+          }
+
+        memberAsmType.foreach { memberTp =>
+          val constrType = AsmType.getObjectType(Asm.internalName(constrName))
+          classEnv.methodWriter.checkCast(constrType)
+          classEnv.methodWriter.getField(constrType, name, memberTp)
+        }
+      }
+
+      updatedEnv.methodWriter.storeLocal(varIndex, patType)
+      updatedEnv.methodWriter.visitLabel(varLabel)
+      updatedEnv.asRight
+
+    case AliasPattern(ConstrPattern(name, patterns, _), _, meta) =>
+      val constrName = classEnv.typeEnvironment.names(name)
+      val constrType = AsmType.getObjectType(Asm.internalName(constrName))
+      val varIndex = classEnv.methodWriter.newLocal(constrType)
+      val varLabel = new Label
+      val localVar = LocalVar(varIndex, constrType.getDescriptor(), null, varLabel, skipCaseLabel)
+      val updatedEnv = classEnv.copy(localVars = classEnv.localVars.updated(meta.name, localVar))
+
+      updatedEnv.methodWriter.loadLocal(enclosingVarIndex)
+      updatedEnv.methodWriter.instanceOf(constrType)
+      updatedEnv.methodWriter.ifZCmp(GeneratorAdapter.EQ, skipCaseLabel)
+
+      // The instanceof succeeded so store the scrutinee in a local
+      updatedEnv.methodWriter.loadLocal(enclosingVarIndex)
+      updatedEnv.methodWriter.storeLocal(varIndex, constrType)
+      updatedEnv.methodWriter.visitLabel(varLabel)
+
+      patterns.foldM(updatedEnv) {
+        case (cEnv, nextPat) =>
+          newPattern(cEnv, nextPat, skipCaseLabel, varIndex, Some(constrName))
+      }
+
+    case AliasPattern(pat, _, meta) =>
+      val patType = Asm.asmType(classEnv, meta.typ.typ)
+      val varIndex = classEnv.methodWriter.newLocal(patType)
+      val varLabel = new Label
+      val localVar = LocalVar(varIndex, patType.getDescriptor(), null, varLabel, skipCaseLabel)
+      val updatedEnv = classEnv.copy(localVars = classEnv.localVars.updated(meta.name, localVar))
+
+      newPattern(updatedEnv, pat, skipCaseLabel, enclosingVarIndex, enclosingConstr).map { patEnv =>
+        patEnv.methodWriter.storeLocal(varIndex, patType)
+        patEnv.methodWriter.visitLabel(varLabel)
+        patEnv
+      }
+
+    case ConstrPattern(name, patterns, _) =>
+      val constrName = classEnv.typeEnvironment.names(name)
+      val constrType = AsmType.getObjectType(Asm.internalName(constrName))
+      classEnv.methodWriter.loadLocal(enclosingVarIndex)
+      classEnv.methodWriter.instanceOf(constrType)
+      classEnv.methodWriter.ifZCmp(GeneratorAdapter.EQ, skipCaseLabel)
+      patterns.foldM(classEnv) {
+        case (cEnv, nextPat) =>
+          newPattern(cEnv, nextPat, skipCaseLabel, enclosingVarIndex, Some(constrName))
+      }
+  }
+
+  def newMatchCase(
+    classEnv: ClassEnvironment,
+    matchCase: MatchCase[Meta.Typed],
+    matchExprIndex: Int,
+    skipCaseLabel: Label
+  ): Generate[ClassEnvironment] = matchCase match {
+    case MatchCase(pattern, resultExpr, _) =>
+      pprint.pprintln(pattern.map(_ => ()))
+      newPattern(classEnv, pattern, skipCaseLabel, matchExprIndex, None).flatMap { cEnv =>
+        newExpr(cEnv, resultExpr)
+      }
   }
 
   def newExpr(
@@ -69,30 +200,30 @@ class Codegen(verifyCodegen: Boolean) {
   ): Generate[ClassEnvironment] = expr match {
     // Generating code for literals expressions means pushing the corresponding constants onto the stack
     case LiteralInt(i, _) =>
-      classEnv.enclosingMethodWriter.push(i)
+      classEnv.methodWriter.push(i)
       classEnv.asRight
     case LiteralLong(l, _) =>
-      classEnv.enclosingMethodWriter.push(l)
+      classEnv.methodWriter.push(l)
       classEnv.asRight
     case LiteralFloat(f, _) =>
-      classEnv.enclosingMethodWriter.push(f)
+      classEnv.methodWriter.push(f)
       classEnv.asRight
     case LiteralDouble(d, _) =>
-      classEnv.enclosingMethodWriter.push(d)
+      classEnv.methodWriter.push(d)
       classEnv.asRight
     case LiteralBoolean(b, _) =>
-      classEnv.enclosingMethodWriter.push(b)
+      classEnv.methodWriter.push(b)
       classEnv.asRight
     case LiteralChar(c, _) =>
-      classEnv.enclosingMethodWriter.push(c.toInt)
+      classEnv.methodWriter.push(c.toInt)
       classEnv.asRight
     case LiteralString(s, _) =>
-      classEnv.enclosingMethodWriter.push(s)
+      classEnv.methodWriter.push(s)
       classEnv.asRight
     case LiteralUnit(_) =>
       // We use the GETSTATIC opcode to push the Unit singleton instance object onto the stack
       val unitType = AsmType.getType(classOf[IncUnit])
-      classEnv.enclosingMethodWriter.getStatic(unitType, "instance", unitType)
+      classEnv.methodWriter.getStatic(unitType, "instance", unitType)
       classEnv.asRight
     case Ascription(ascribed, _, _) =>
       newExpr(classEnv, ascribed)
@@ -107,12 +238,12 @@ class Codegen(verifyCodegen: Boolean) {
             // In order to load a reference to a static method, we need to construct a method reference
             val methodHandle = Asm.methodHandle(classEnv, meta.copy(typ = declaredType))
             // This allows us to push the method onto the stack as if it was a function object
-            classEnv.enclosingMethodWriter.push(methodHandle)
+            classEnv.methodWriter.push(methodHandle)
             classEnv.asRight
           } else {
             // Normal members are simply static fields
             val modTyp = AsmType.getObjectType(Asm.moduleName(classEnv, meta.name))
-            classEnv.enclosingMethodWriter.getStatic(modTyp, name, Asm.asmType(classEnv, meta.typ.typ))
+            classEnv.methodWriter.getStatic(modTyp, name, Asm.asmType(classEnv, meta.typ.typ))
             classEnv.asRight
           }
 
@@ -122,14 +253,21 @@ class Codegen(verifyCodegen: Boolean) {
           // In order to load a reference to a static method, we need to construct a method reference
           val methodHandle = Asm.methodHandle(classEnv, meta.copy(typ = declaredType))
           // This allows us to push the method onto the stack as if it was a function object
-          classEnv.enclosingMethodWriter.push(methodHandle)
+          classEnv.methodWriter.push(methodHandle)
           classEnv.asRight
 
-        case LocalName(_) =>
-          // At the moment `LocalName` refers only to function arguments.
-          // If `let` is added as an expression we will also have to consider local variables here.
-          classEnv.enclosingMethodWriter.loadArg(classEnv.enclosingArgs(meta.name))
-          classEnv.asRight
+        case LocalName(nm) =>
+          val argIndex = classEnv.args.get(meta.name)
+          val localIndex = classEnv.localVars.get(meta.name)
+          localIndex.map { localVar =>
+            classEnv.methodWriter.loadLocal(localVar.varIndex)
+          }.orElse {
+            argIndex.map { idx =>
+              classEnv.methodWriter.loadArg(idx)
+            }
+          }.as(classEnv.asRight).getOrElse {
+            CodegenError.singleton(s"Unable to resolve the name $nm as a local variable or argument")
+          }
 
         case other =>
           // We shouldn't see references to modules or nameless expressions here
@@ -145,20 +283,79 @@ class Codegen(verifyCodegen: Boolean) {
         // Compile the condition
         condEnv <- newExpr(classEnv, condExpr)
         // Jump to the else expression if false
-        _  = classEnv.enclosingMethodWriter.ifZCmp(GeneratorAdapter.EQ, falseLabel)
+        _  = classEnv.methodWriter.ifZCmp(GeneratorAdapter.EQ, falseLabel)
         // Otherwise fall through to the then expression
         thenEnv <- newExpr(condEnv, thenExpr)
         // Then jump over the else expression
-        _ = classEnv.enclosingMethodWriter.goTo(trueLabel)
-        _ = classEnv.enclosingMethodWriter.visitLabel(falseLabel)
+        _ = classEnv.methodWriter.goTo(trueLabel)
+        _ = classEnv.methodWriter.visitLabel(falseLabel)
         elseEnv <- newExpr(thenEnv, elseExpr)
-        _ = classEnv.enclosingMethodWriter.visitLabel(trueLabel)
+        _ = classEnv.methodWriter.visitLabel(trueLabel)
       } yield elseEnv
+
+    case Match(expr, cases, _) =>
+      val matchExprType = Asm.asmType(classEnv, expr.meta.typ.typ)
+      val matchExprIndex = classEnv.methodWriter.newLocal(matchExprType)
+      val startMatchLabel = new Label
+      val endMatchLabel = new Label
+
+      newExpr(classEnv, expr).flatMap { exprEnv =>
+
+        exprEnv.methodWriter.storeLocal(matchExprIndex, matchExprType)
+        exprEnv.methodWriter.visitLabel(startMatchLabel)
+
+        cases.init.foldM(exprEnv) {
+          case (caseEnv, cse) =>
+            val skipCaseLabel = new Label
+            val revertLocalsEnv = caseEnv.copy(localVars = exprEnv.localVars)
+            newMatchCase(revertLocalsEnv, cse, matchExprIndex, skipCaseLabel).map { matchEnv =>
+              // After each case, we add a jump to the end of the match;
+              // if we got to this point then the case condition was true
+              matchEnv.methodWriter.goTo(endMatchLabel)
+              // We also populate the label to skip this case when the condition is false
+              matchEnv.methodWriter.visitLabel(skipCaseLabel)
+              matchEnv
+            }
+        }.flatMap { matchEnv =>
+          val matchErrorLabel = new Label
+          val revertLocalsEnv = matchEnv.copy(localVars = exprEnv.localVars)
+
+          newMatchCase(revertLocalsEnv, cases.last, matchExprIndex, matchErrorLabel).map { lastCaseEnv =>
+            lastCaseEnv.methodWriter.goTo(endMatchLabel)
+
+            // We use the skip label for the final case to jump to code which throws a match error
+            lastCaseEnv.methodWriter.visitLabel(matchErrorLabel)
+            val errorType = AsmType.getObjectType("inc/rts/MatchError")
+            lastCaseEnv.methodWriter.throwException(errorType, "Match error")
+
+            lastCaseEnv.methodWriter.visitLabel(endMatchLabel)
+
+            val matchEnvVar = LocalVar(
+              matchExprIndex,
+              matchExprType.getDescriptor(),
+              null,
+              startMatchLabel,
+              endMatchLabel
+            )
+
+            lastCaseEnv.copy(
+              localVars = lastCaseEnv.localVars.updated(
+                LocalName("match$"+matchExprIndex), matchEnvVar))
+          }
+        }
+      }
+
     case Apply(fn, argExprs, meta) =>
       fn.meta.name match {
         // Applying a member function means calling the corresponding static method
-        case member @ MemberName(_, _, name) =>
-          val Type.Function(fnTpArgs) = classEnv.typeEnvironment.types(member.fullName).typ
+        case MemberName(_, _, _) | ConstrName(_, _, _, _) =>
+          val fnName = fn.meta.name
+          val name = fnName.shortName
+          // We need to look at the generalized type of the function to understand how to
+          // box and unbox arguments and return types.
+          // The type inference algorithm propagates the instantiated type of the function
+          // into the AST at the callsite.
+          val Type.Function(fnTpArgs) = classEnv.typeEnvironment.types(fnName.fullName).typ
 
           // Note that we don't have to generate code to load the `fn` expr in this
           // case as there is no function object to load.
@@ -170,9 +367,9 @@ class Codegen(verifyCodegen: Boolean) {
                 val argType = Asm.asmType(cEnv, arg.meta.typ.typ)
                 // It's important to make sure to deal with boxing or unboxing of arguments
                 if (arg.meta.typ.typ.isPrimitive && !fnTpArgs(idx).isPrimitive) {
-                  cEnv.enclosingMethodWriter.box(argType)
+                  cEnv.methodWriter.box(argType)
                 } else if (!arg.meta.typ.typ.isPrimitive && fnTpArgs(idx).isPrimitive) {
-                  cEnv.enclosingMethodWriter.unbox(argType)
+                  cEnv.methodWriter.unbox(argType)
                 }
                 cEnv
               }
@@ -180,20 +377,20 @@ class Codegen(verifyCodegen: Boolean) {
             // Now we can call the INVOKESTATIC opcode to call the static method
             val methodTypeArgs = fnTpArgs.map(Asm.asmType(classEnv, _))
             val method = new Method(name, methodTypeArgs.last, methodTypeArgs.init.toArray)
-            val modTyp = AsmType.getObjectType(Asm.moduleName(classEnv, member))
-            classEnv.enclosingMethodWriter.invokeStatic(modTyp, method)
+            val modTyp = AsmType.getObjectType(Asm.moduleName(classEnv, fn.meta.name))
+            classEnv.methodWriter.invokeStatic(modTyp, method)
             argEnv.asRight
           }.map { cEnv =>
             val retType = Asm.asmType(cEnv, meta.typ.typ)
             val fnRetType = Asm.asmType(cEnv, fnTpArgs.last)
             // As with the arguments, we need to make sure to deal with boxing and unboxing of returned values
             if (meta.typ.typ.isPrimitive && !fnTpArgs.last.isPrimitive) {
-              cEnv.enclosingMethodWriter.unbox(retType)
+              cEnv.methodWriter.unbox(retType)
             } else if (!meta.typ.typ.isPrimitive && fnTpArgs.last.isPrimitive) {
-              cEnv.enclosingMethodWriter.box(fnRetType)
+              cEnv.methodWriter.box(fnRetType)
             // The VM requires a cast here as generic types are erased to Object
             } else if (!meta.typ.typ.isPrimitive && fnTpArgs.last.isInstanceOf[TypeVariable]) {
-              cEnv.enclosingMethodWriter.checkCast(retType)
+              cEnv.methodWriter.checkCast(retType)
             }
             cEnv
           }
@@ -211,24 +408,24 @@ class Codegen(verifyCodegen: Boolean) {
                   val argType = Asm.asmType(cEnv, arg.meta.typ.typ)
                   // For function objects, all arguments must be boxed
                   // We don't need to cast because all reference types can be passed as java.lang.Object
-                  if (arg.meta.typ.typ.isPrimitive) cEnv.enclosingMethodWriter.box(argType)
+                  if (arg.meta.typ.typ.isPrimitive) cEnv.methodWriter.box(argType)
                   cEnv
                 }
             }.flatMap { argEnv =>
               val fnTyp = Asm.asmType(classEnv, fn.meta.typ.typ)
               val methodTypeArgs = fnTpArgs.map(Asm.boxedAsmType(classEnv, _))
               val method = new Method("apply", methodTypeArgs.last, methodTypeArgs.init.toArray)
-              classEnv.enclosingMethodWriter.invokeInterface(fnTyp, method)
+              classEnv.methodWriter.invokeInterface(fnTyp, method)
               argEnv.asRight
             }.map { cEnv =>
               val retType = Asm.asmType(cEnv, meta.typ.typ)
 
               // Returned values must be unboxed in case subsequent operations are expecting a primitive value
               if (meta.typ.typ.isPrimitive)
-                classEnv.enclosingMethodWriter.unbox(retType)
+                classEnv.methodWriter.unbox(retType)
               // The VM requires a cast here as generic types are erased to Object
               if (!meta.typ.typ.isPrimitive && fnTpArgs.last.isInstanceOf[TypeVariable])
-                classEnv.enclosingMethodWriter.checkCast(retType)
+                classEnv.methodWriter.checkCast(retType)
 
               cEnv
             }
@@ -245,6 +442,9 @@ class Codegen(verifyCodegen: Boolean) {
       //
       // This callsite will be linked at runtime the first time the function is called, using the standard Java
       // boostrap method for lambda functions, java.lang.invoke.LambdaMetafactory#metafactory.
+      //
+      // Note that this means that verifying the code using ASM and even loading the class into a VM might
+      // not find all issues with bytecode as the LambdaMetafactory does its own validation at runtime.
       //
       val Type.Function(tpArgs) = meta.typ.typ
 
@@ -283,7 +483,7 @@ class Codegen(verifyCodegen: Boolean) {
 
       // Append an index to the enclosing declaration name in order to generate the static method.
       // We keep track of the number of lifted lambdas in the class generation environment.
-      val liftedName = classEnv.enclosingDeclName
+      val liftedName = classEnv.declName
         .map(enclosing => enclosing + "$")
         .getOrElse("") + classEnv.liftedLambdas
 
@@ -295,7 +495,7 @@ class Codegen(verifyCodegen: Boolean) {
 
       val lambdaHandle = new Handle(
         H_INVOKESTATIC,
-        Asm.internalName(classEnv.enclosingMod),
+        Asm.internalName(classEnv.module),
         liftedName,
         liftedMethodDescriptor,
         false
@@ -312,11 +512,13 @@ class Codegen(verifyCodegen: Boolean) {
         methodWriter.visitParameter(param.name, ACC_FINAL)
       }
 
+      methodWriter.visitCode()
+
       // We need to increment the number of lifted declarations
       // so that we don't have name collisions in nested expressions
       val lambdaEnv = classEnv.copy(
-        enclosingArgs = lambdaArgs.toMap,
-        enclosingMethodWriter = methodWriter,
+        args = lambdaArgs.toMap,
+        methodWriter = methodWriter,
         liftedLambdas = classEnv.liftedLambdas + 1)
 
       val objType = AsmType.getType(classOf[Object])
@@ -339,7 +541,7 @@ class Codegen(verifyCodegen: Boolean) {
 
         // Finally we call the INVOKEDYNAMIC instruction.
         // See the docs for `java.lang.invoke.LambdaMetafactory` for more details of the arguments list.
-        _ = classEnv.enclosingMethodWriter.invokeDynamic(
+        _ = classEnv.methodWriter.invokeDynamic(
           // Interface method name
           "apply",
           // Lambda callsite descriptor
@@ -362,7 +564,7 @@ class Codegen(verifyCodegen: Boolean) {
   ): Generate[Unit] = {
 
     val classEnv = initialClassEnv.copy(
-      enclosingDeclName = Some(let.name))
+      declName = Some(let.name))
 
     let.binding match {
       case LiteralInt(i, _) =>
@@ -385,26 +587,37 @@ class Codegen(verifyCodegen: Boolean) {
       case Ascription(ascribed, _, _) =>
         newLetDeclaration(classEnv, let.copy(binding = ascribed))
       case ref @ Reference(_, _, meta) =>
-        val modType = Asm.asmType(classEnv, classEnv.enclosingMod.meta)
+        val modType = Asm.asmType(classEnv, classEnv.module.meta)
         val refType = Asm.asmType(classEnv, meta)
         for {
           _ <- Asm.staticField(classEnv, let.name, refType)
           _ <- newExpr(classEnv, ref)
-        } yield classEnv.enclosingMethodWriter.putStatic(modType, let.name, refType)
+          // No need to visit locals here as Reference doesn't contain expressions
+        } yield classEnv.methodWriter.putStatic(modType, let.name, refType)
       case ifExpr @ If(_, _, _, meta) =>
-        val modType = Asm.asmType(classEnv, classEnv.enclosingMod.meta)
+        val modType = Asm.asmType(classEnv, classEnv.module.meta)
         val ifType = Asm.asmType(classEnv, meta)
         for {
           _ <- Asm.staticField(classEnv, let.name, ifType, null)
-          _ <- newExpr(classEnv, ifExpr)
-        } yield classEnv.enclosingMethodWriter.putStatic(modType, let.name, ifType)
+          exprEnv <- newExpr(classEnv, ifExpr)
+          _ = Asm.visitLocals(exprEnv)
+        } yield classEnv.methodWriter.putStatic(modType, let.name, ifType)
       case app @ Apply(_, _, meta) =>
-        val modType = Asm.asmType(classEnv, classEnv.enclosingMod.meta)
+        val modType = Asm.asmType(classEnv, classEnv.module.meta)
         val appType = Asm.asmType(classEnv, meta)
         for {
           _ <- Asm.staticField(classEnv, let.name, appType, null)
-          _ <- newExpr(classEnv, app)
-        } yield classEnv.enclosingMethodWriter.putStatic(modType, let.name, appType)
+          exprEnv <- newExpr(classEnv, app)
+          _ = Asm.visitLocals(exprEnv)
+        } yield classEnv.methodWriter.putStatic(modType, let.name, appType)
+      case mat @ Match(_, _, meta) =>
+        val modType = Asm.asmType(classEnv, classEnv.module.meta)
+        val matType = Asm.asmType(classEnv, meta)
+        for {
+          _ <- Asm.staticField(classEnv, let.name, matType, null)
+          exprEnv <- newExpr(classEnv, mat)
+          _ = Asm.visitLocals(exprEnv)
+        } yield classEnv.methodWriter.putStatic(modType, let.name, matType)
       case Lambda(params, body, meta) =>
         val TypeScheme(_, TypeApply(TypeConstructor("->", _, _), tpArgs, _, _)) = meta.typ
         val argMapping = params.zipWithIndex.map { case (param, idx) => (param.meta.name, idx) }.toMap
@@ -412,17 +625,20 @@ class Codegen(verifyCodegen: Boolean) {
         val methodTypeArgs = tpArgs.map(Asm.asmType(classEnv, _))
         val methodType = AsmType.getMethodType(methodTypeArgs.last, methodTypeArgs.init: _*)
         val methodSig = JavaSignature.forMethod(classEnv, let.meta.typ)
-        val methodWriter = Asm.staticMethod(classEnv, let.name, methodType, methodSig)
+        val methodWriter = Asm.staticMethod(classEnv, let.name, methodType, methodSig, ACC_PUBLIC + ACC_STATIC)
 
         params.foreach { param =>
           methodWriter.visitParameter(param.name, ACC_FINAL)
         }
 
-        val lambdaEnv = classEnv.copy(
-          enclosingArgs = argMapping,
-          enclosingMethodWriter = methodWriter)
+        methodWriter.visitCode()
 
-        newExpr(lambdaEnv, body).as {
+        val lambdaEnv = classEnv.copy(
+          args = argMapping,
+          methodWriter = methodWriter)
+
+        newExpr(lambdaEnv, body).map { exprEnv =>
+          Asm.visitLocals(exprEnv)
           methodWriter.returnValue()
           methodWriter.endMethod()
         }
@@ -436,7 +652,7 @@ class Codegen(verifyCodegen: Boolean) {
     constr: DataConstructor[Meta.Typed]
   ): Generate[ClassFile] = {
     val constrWriter = Asm.constrWriter(parent, constr)
-    val modInternalName = Asm.internalName(classEnv.enclosingMod)
+    val modInternalName = Asm.internalName(classEnv.module)
     val dataInternalName = Asm.internalName(parent)
     val constrInternalName = Asm.internalName(constr)
     val constrClassName = constrInternalName.split("/").last
@@ -444,10 +660,10 @@ class Codegen(verifyCodegen: Boolean) {
     // The Java VM spec says that we must have InnerClasses information for each immediate enclosing class
     // and each immediate member class within a given class file.
     // The references have to be in order such that enclosing classes come first.
-    dataWriter.visitInnerClass(constrInternalName, dataInternalName, constr.name, ACC_STATIC + ACC_FINAL)
+    dataWriter.visitInnerClass(constrInternalName, dataInternalName, constr.name, ACC_PUBLIC + ACC_STATIC + ACC_FINAL)
 
-    constrWriter.visitInnerClass(dataInternalName, modInternalName, parent.name, ACC_STATIC + ACC_ABSTRACT)
-    constrWriter.visitInnerClass(constrInternalName, dataInternalName, constr.name, ACC_STATIC + ACC_FINAL)
+    constrWriter.visitInnerClass(dataInternalName, modInternalName, parent.name, ACC_PUBLIC + ACC_STATIC + ACC_ABSTRACT)
+    constrWriter.visitInnerClass(constrInternalName, dataInternalName, constr.name, ACC_PUBLIC + ACC_STATIC + ACC_FINAL)
 
     // Add a field for each parameter to the constructor
     constr.params.foreach { param =>
@@ -464,19 +680,19 @@ class Codegen(verifyCodegen: Boolean) {
     classEnv: ClassEnvironment,
     data: Data[Meta.Typed]
   ): Generate[List[ClassFile]] = {
-    val modWriter = classEnv.enclosingModWriter
+    val modWriter = classEnv.moduleWriter
     val dataWriter = Asm.dataWriter(data)
     val dataInternalName = Asm.internalName(data)
     val dataClassName = dataInternalName.split("/").last
-    val modInternalName = Asm.internalName(classEnv.enclosingMod)
+    val modInternalName = Asm.internalName(classEnv.module)
 
     Asm.addDefaultConstructor(dataWriter)
 
     // The Java VM spec says that we must have InnerClasses information for each immediate enclosing class
     // and each immediate member class within a given class file.
     // The references have to be in order such that enclosing classes come first.
-    modWriter.visitInnerClass(dataInternalName, modInternalName, data.name, ACC_STATIC + ACC_ABSTRACT)
-    dataWriter.visitInnerClass(dataInternalName, modInternalName, data.name, ACC_STATIC + ACC_ABSTRACT)
+    modWriter.visitInnerClass(dataInternalName, modInternalName, data.name, ACC_PUBLIC + ACC_STATIC + ACC_ABSTRACT)
+    dataWriter.visitInnerClass(dataInternalName, modInternalName, data.name, ACC_PUBLIC + ACC_STATIC + ACC_ABSTRACT)
 
     data.cases.traverse { constr =>
       newDataConstructor(classEnv, data, dataWriter, constr)
@@ -496,14 +712,17 @@ class Codegen(verifyCodegen: Boolean) {
         newLetDeclaration(classEnv, let).as(List.empty)
     }
 
-  def generate(mod: Module[Meta.Typed], importedEnv: Environment): Generate[List[ClassFile]] = {
-    val env = importedEnv ++ mod.environment
+  def generate(mod: Module[Meta.Typed], importedEnv: Environment[Meta.Typed]): Generate[List[ClassFile]] = {
+    val modEnv = mod.typeEnvironment
+    val env = importedEnv ++ modEnv ++ modEnv.prefixed(mod.meta.name.fullName)
 
     val classFiles: Either[List[CodegenError], List[ClassFile]] = {
-      val modWriter = Asm.moduleWriter(mod)
-      val staticInit = Asm.staticInitializer(modWriter)
+      val (modChecker, modWriter) = Asm.moduleWriter(mod)
 
-      modWriter.visitAttribute(Asm.InterfaceAttribute(mod.toProto.toByteArray))
+      val staticInit = Asm.staticInitializer(modWriter)
+      staticInit.visitCode()
+
+      modChecker.visitAttribute(Asm.InterfaceAttribute(mod.toProto.toByteArray))
 
       val classEnv = ClassEnvironment.empty(env, mod, modWriter, staticInit)
 

@@ -16,7 +16,7 @@ trait Generators { self: Matchers =>
       first <- Gen.alphaChar
       rest <- Gen.resize(len, Gen.alphaNumStr)
       nm = (first +: rest).mkString
-      if !List("module", "import", "let", "if", "then", "else").contains(nm)
+      if !List("module", "import", "let", "if", "then", "else", "case", "data", "match", "with").contains(nm)
     } yield nm
 
   // Don't generate negative numbers: the language doesn't have operators yet so no parsing of prefix negation
@@ -131,7 +131,7 @@ trait Generators { self: Matchers =>
       case Type.Char => charGen
       case Type.String => strGen
       case Type.Unit => unitGen
-      case _ => fail("Unknown argument type")
+      case _ => fail(s"Unknown argument type $tp")
     }
 
     if (candidateDecls.isEmpty)
@@ -173,6 +173,104 @@ trait Generators { self: Matchers =>
     }
   }
 
+  def idPatGen(expr: Expr[Meta.Typed], decls: Decls): Gen[MatchCase[Meta.Typed]] = {
+    for {
+      name <- nameGen.suchThat(!collides(decls, _))
+
+      idPatMeta = Meta.Typed(LocalName(name), expr.meta.typ, Pos.Empty)
+
+      idPat = IdentPattern(name, idPatMeta)
+
+      alias <- nameGen.suchThat(alias => !collides(decls, alias) && alias != name)
+
+      aliasPat = AliasPattern(idPat, alias, Meta.Typed(LocalName(alias), expr.meta.typ, Pos.Empty))
+
+      (patNm, pat) <- Gen.oneOf((idPat.name, idPat), (aliasPat.alias, aliasPat))
+
+      resultExpr <- Gen.delay(exprGen(Let(patNm, Reference(List.empty, patNm, pat.meta), pat.meta) :: decls))
+
+    } yield MatchCase(pat, resultExpr, Meta.Typed(NoName, resultExpr.meta.typ, Pos.Empty))
+  }
+
+  def matchIdGen(decls: Decls): Gen[Expr[Meta.Typed]] = {
+    for {
+      expr <- Gen.delay(exprGen(decls))
+
+      patNum <- Gen.choose(1, 3)
+
+      pats <- Gen.listOfN(patNum, idPatGen(expr, decls)).suchThat(_.map(_.meta.typ).distinct.length == 1)
+
+    } yield Match(expr, pats, Meta.Typed(NoName, pats.head.meta.typ, Pos.Empty))
+  }
+
+  def constrPatGen(constr: DataConstructor[Meta.Typed], decls: Decls): Gen[MatchCase[Meta.Typed]] = {
+    for {
+      paramNum <- Gen.choose(1, constr.params.length)
+
+      chosenParams <- Gen.listOfN(paramNum, Gen.oneOf(constr.params)).suchThat(ps => ps.length == ps.distinct.length)
+
+      patterns <- chosenParams.traverse {
+        case Param(name, _, meta) =>
+          nameGen.suchThat(alias => !collides(decls, alias) && alias != name).flatMap { alias =>
+            Gen.oneOf(
+              IdentPattern(name, meta),
+              AliasPattern(IdentPattern(name, meta), alias, meta.copy(name = LocalName(alias))))
+          }
+      }
+
+      constrPat = ConstrPattern(constr.name, patterns, Meta.Typed(NoName, constr.returnType, Pos.Empty))
+
+      patDecls = decls ++ patterns.map {
+        case IdentPattern(name, meta) =>
+          Let(name, Reference(List.empty, name, meta), meta)
+        case AliasPattern(_, alias, meta) =>
+          Let(alias, Reference(List.empty, alias, meta), meta)
+        case _ =>
+          fail("Unexpected pattern")
+      }
+
+      alias <- nameGen.suchThat(!collides(patDecls, _))
+
+      useAlias <- Arbitrary.arbitrary[Boolean]
+
+      aliasMeta = constrPat.meta.copy(name = LocalName(alias))
+
+      newDecls = if (useAlias) patDecls :+ Let(alias, Reference(List.empty, alias, aliasMeta), aliasMeta) else patDecls
+      pat = if (useAlias) AliasPattern(constrPat, alias, aliasMeta) else constrPat
+
+      resultExpr <- Gen.delay(exprGen(newDecls))
+
+    } yield MatchCase(pat, resultExpr, Meta.Typed(NoName, resultExpr.meta.typ, Pos.Empty))
+  }
+
+  def matchConstrGen(decls: Decls): Gen[Expr[Meta.Typed]] = {
+    for {
+      data <- Gen.oneOf(decls).suchThat(_.isInstanceOf[Data[_]])
+
+      Data(_, _, cases, _) = data
+
+      constr @ DataConstructor(name, params, returnTp, constrMeta) <- Gen.oneOf(cases)
+
+      TypeScheme(_, TypeApply(TypeConstructor("->", _, _), tpArgs, _, _)) = constrMeta.typ
+
+      args <- tpArgs.init.traverse(tp => genArg(tp)(decls))
+
+      app = Apply(Reference(List.empty, name, constrMeta), args, Meta.Typed(NoName, TypeScheme(tpArgs.last), Pos.Empty))
+
+      patNum <- Gen.choose(1, 3)
+
+      pats <- Gen.listOfN(patNum, constrPatGen(constr, decls)).suchThat(_.map(_.meta.typ).distinct.length == 1)
+
+    } yield Match(app, pats, Meta.Typed(NoName, pats.head.meta.typ, Pos.Empty))
+  }
+
+  def matchGen(decls: Decls): Gen[Expr[Meta.Typed]] = {
+    Gen.oneOf(
+      matchIdGen(decls),
+      //matchAliasGen(decls),
+      matchConstrGen(decls))
+  }
+
   def exprGen(decls: Decls): Gen[Expr[Meta.Typed]] = {
     val lambdaDecls = decls.collect {
       case lambdaDecl @ Let(_, Lambda(_, _, _), _) => lambdaDecl
@@ -188,7 +286,7 @@ trait Generators { self: Matchers =>
       if (decls.isEmpty)
         noRefExprGens
       else
-        noRefExprGens :+ referenceGen(decls)
+        noRefExprGens :+ referenceGen(decls) :+ matchGen(decls)
 
     Gen.oneOf(exprGens)
       .flatMap(identity)
@@ -207,7 +305,9 @@ trait Generators { self: Matchers =>
 
       numArgs <- Gen.choose(1, 4)
 
-      pNms <- Gen.listOfN(numArgs, nameGen).suchThat(vs =>  vs.distinct.length == vs.length)
+      pNms <- Gen.listOfN(
+        numArgs, nameGen.suchThat(nm => nm != dataName.name && !collides(decls, nm))
+      ).suchThat(vs =>  vs.distinct.length == vs.length)
 
       pTps <- Gen.listOfN(numArgs, Gen.oneOf(
                             TypeScheme(Type.Int),
@@ -218,7 +318,7 @@ trait Generators { self: Matchers =>
                             TypeScheme(Type.Char),
                             TypeScheme(Type.String),
                             TypeScheme(Type.Unit),
-                            dataType))
+                            /*dataType*/))
 
       params = pNms.lazyZip(pTps).map {
         case (nm, tp) =>
@@ -227,7 +327,7 @@ trait Generators { self: Matchers =>
 
       typeScheme = TypeScheme(List.empty, Type.Function(pTps.map(_.typ), dataType.typ))
 
-    } yield DataConstructor(name, params, typeScheme, Meta.Typed(ConstrName(dataName.pkg, dataName.mod, dataName.name, name), typeScheme, Pos.Empty))
+    } yield DataConstructor(name, params, dataType, Meta.Typed(ConstrName(dataName.pkg, dataName.mod, dataName.name, name), typeScheme, Pos.Empty))
 
   def collides(decls: Decls, name: String): Boolean = {
     val names = for {

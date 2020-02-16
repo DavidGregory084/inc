@@ -55,7 +55,7 @@ object Classpath extends LazyLogging {
     }
   }
 
-  def readEnvironment(imports: List[Import], classloader: ClassLoader): Either[List[Error], Environment] = {
+  def readEnvironment(imports: List[Import], classloader: ClassLoader): Either[List[Error], Environment[Meta.Typed]] = {
     val distinctPrefixes = imports.map {
       case ImportModule(pkg, nm, pos) =>
         (pkg, nm, pos)
@@ -79,18 +79,19 @@ object Classpath extends LazyLogging {
       val environments = imports.map {
         case i @ ImportModule(_, _, _) =>
           val mod = modules(i.moduleName)
+          val env = mod.typeEnvironment
           val fqn = if (mod.pkg.isEmpty) mod.name else mod.pkg.mkString("/") + "/" + mod.name
-          val modPrefix = mod.environment.prefixed(mod.name)
-          val fullPrefix = mod.environment.prefixed(fqn)
+          val modPrefix = env.prefixed(mod.name)
+          val fullPrefix = env.prefixed(fqn)
           modPrefix ++ fullPrefix
         case i @ ImportSymbols(_, _, syms, _) =>
           val mod = modules(i.moduleName)
           val fqn = if (mod.pkg.isEmpty) mod.name else mod.pkg.mkString("/") + "/" + mod.name
-          val decls = mod.environment.filter(d => syms.contains(d))
+          val decls = mod.typeEnvironment.filter(d => syms.contains(d))
           decls ++ decls.prefixed(fqn)
       }
 
-      environments.foldLeft(Environment.empty)(_ ++ _)
+      environments.foldLeft(Environment.empty[Meta.Typed])(_ ++ _)
     }
 
     environment

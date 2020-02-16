@@ -113,6 +113,31 @@ message Name {
   }
 }
 
+message IdentPattern {
+  string name = 1;
+  NameWithType nameWithType = 2;
+}
+
+message AliasPattern {
+  Pattern pattern = 1;
+  string alias = 2;
+  NameWithType nameWithType = 3;
+}
+
+message ConstrPattern {
+  string name = 1;
+  repeated Pattern patterns = 2;
+  NameWithType nameWithType = 4;
+}
+
+message Pattern {
+  oneof sealed_value {
+    IdentPattern identPattern = 1;
+    AliasPattern aliasPattern = 2;
+    ConstrPattern constrPattern = 3;
+  }
+}
+
 message NameWithType {
   Name name = 1;
   TypeScheme type = 2;
@@ -193,6 +218,18 @@ message Ascription {
   NameWithType nameWithType = 3;
 }
 
+message MatchCase {
+  Pattern pattern = 1;
+  Expr resultExpr = 2;
+  NameWithType nameWithType = 3;
+}
+
+message Match {
+  Expr matchExpr = 1;
+  repeated MatchCase cases = 2;
+  NameWithType nameWithType = 3;
+}
+
 message Expr {
   oneof sealed_value {
     Reference ref = 1;
@@ -208,6 +245,7 @@ message Expr {
     Lambda lambda = 11;
     Apply apply = 12;
     Ascription ascription = 13;
+    Match match = 14;
   }
 }
 

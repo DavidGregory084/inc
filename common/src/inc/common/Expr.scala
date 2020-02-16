@@ -31,6 +31,11 @@ sealed abstract class Expr[A] extends Product with Serializable {
       fn.capturedVariables ++ args.flatMap(_.capturedVariables)
     case Ascription(expr, _, _) =>
       expr.capturedVariables
+    case Match(matchExpr, cases, _) =>
+      matchExpr.capturedVariables ++ cases.flatMap {
+        case MatchCase(_, resultExpr, _) =>
+          resultExpr.capturedVariables
+      }
   }
 
   def replace(mapping: Map[Reference[A], Reference[A]])(implicit to: A =:= Meta.Typed): Expr[A] = this match {
@@ -61,6 +66,10 @@ sealed abstract class Expr[A] extends Product with Serializable {
         args = args.map(_.replace(mapping)))
     case asc @ Ascription(expr, _, _) =>
       asc.copy(expr = expr.replace(mapping))
+    case mat @ Match(matchExpr, cases, _) =>
+      mat.copy(
+        matchExpr = matchExpr.replace(mapping),
+        cases = cases.map(_.replace(mapping)))
   }
 
   def toProto(implicit eqv: A =:= Meta.Typed): proto.Expr = this match {
@@ -105,6 +114,9 @@ sealed abstract class Expr[A] extends Product with Serializable {
     case Ascription(expr, ascribedAs, meta) =>
       val typedMeta = Some(eqv(meta).toProto)
       proto.Ascription(expr.toProto, Some(ascribedAs.toProto), typedMeta)
+    case Match(matchExpr, cases, meta) =>
+      val typedMeta = Some(eqv(meta).toProto)
+      proto.Match(matchExpr.toProto, cases.map(_.toProto), typedMeta)
   }
 
   def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= Meta.Typed): Expr[A] = {
@@ -159,6 +171,11 @@ object Expr {
         Expr.fromProto(asc.expr),
         TypeScheme.fromProto(asc.getAscribedAs),
         Meta.fromProto(asc.getNameWithType))
+    case mat @ proto.Match(_, _, _) =>
+      Match(
+        Expr.fromProto(mat.matchExpr),
+        mat.cases.toList.map(MatchCase.fromProto),
+        Meta.fromProto(mat.getNameWithType))
     case proto.Expr.Empty =>
       throw new Exception("Empty Expr in protobuf")
   }
@@ -203,6 +220,11 @@ object Expr {
         asc.copy(
           expr = map(asc.expr)(f),
           meta = f(asc.meta))
+      case mat @ Match(_, _, _) =>
+        mat.copy(
+          matchExpr = map(mat.matchExpr)(f),
+          cases = mat.cases.map(_.map(f)),
+          meta = f(mat.meta))
     }
   }
 }
@@ -229,6 +251,40 @@ final case class Apply[A](
 final case class Ascription[A](
   expr: Expr[A],
   ascribedAs: TypeScheme,
+  meta: A
+) extends Expr[A]
+
+final case class MatchCase[A](
+  pattern: Pattern[A],
+  resultExpr: Expr[A],
+  meta: A
+) {
+  def replace(mapping: Map[Reference[A], Reference[A]])(implicit to: A =:= Meta.Typed): MatchCase[A] =
+    copy(resultExpr = resultExpr.replace(mapping))
+  def toProto(implicit eqv: A =:= Meta.Typed): proto.MatchCase =
+    proto.MatchCase(pattern.toProto, resultExpr.toProto, Some(eqv(meta).toProto))
+}
+
+object MatchCase {
+  def fromProto(cse: proto.MatchCase): MatchCase[Meta.Typed] =
+    MatchCase(
+      Pattern.fromProto(cse.pattern),
+      Expr.fromProto(cse.resultExpr),
+      Meta.fromProto(cse.getNameWithType))
+
+  implicit val matchCaseFunctor: Functor[MatchCase] = new Functor[MatchCase] {
+    def map[A, B](ma: MatchCase[A])(f: A => B): MatchCase[B] = {
+      ma.copy(
+        pattern = ma.pattern.map(f),
+        resultExpr = ma.resultExpr.map(f),
+        meta = f(ma.meta))
+    }
+  }
+}
+
+final case class Match[A](
+  matchExpr: Expr[A],
+  cases: List[MatchCase[A]],
   meta: A
 ) extends Expr[A]
 

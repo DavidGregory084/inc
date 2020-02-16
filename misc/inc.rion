@@ -1,0 +1,277 @@
+# This lexer definition file can be used with the tools at https://eeyo.io/iro/
+# to generate syntax highlighting files for VS Code, Atom, Sublime Text etc.
+name                   = inc
+file_extensions []     = inc;
+
+styles [] {
+
+.comment_line : style {
+   color                 = #657b83
+   italic                = true
+   textmate_scope        = comment.line.double-slash
+   pygments_scope        = Comment.Single
+}
+
+.comment_multiline : style {
+   color                 = #657b83
+   italic                = true
+   textmate_scope        = comment.block
+   pygments_scope        = Comment.Multiline
+}
+
+.keyword : style {
+   color                 = #859900
+   textmate_scope        = keyword.other
+   pygments_scope        = Keyword.Reserved
+}
+
+.operator : style {
+   color                 = #859900
+   textmate_scope        = keyword.operator
+   pygments_scope        = Operator
+}
+
+.identifier : style {
+   color                 = #268bd2
+   textmate_scope        = entity.name
+   pygments_scope        = Name
+}
+
+.numeric : style {
+   color                 = #d33682
+   textmate_scope        = constant.numeric
+   pygments_scope        = Number
+}
+
+.boolean : style {
+   color                 = #b58900
+   textmate_scope        = constant.language
+   pygments_scope        = Literal
+}
+
+.punctuation : style {
+   color                 = #bbbbbb
+   textmate_scope        = punctuation
+   pygments_scope        = Punctuation
+}
+
+.string : style {
+   color                 = #2aa198
+   textmate_scope        = string.quoted.double
+   pygments_scope        = String.Double
+}
+
+.char : style {
+   color                 = #cb4b16
+   textmate_scope        = constant.character
+   pygments_scope        = String.Char
+}
+
+.type : style {
+   color                 = #cb4b16
+   textmate_scope        = entity.name.type
+   pygments_scope        = Name.Class
+}
+
+.illegal : style {
+   color                 = white
+   background_color      = red
+   textmate_scope        = invalid
+   pygments_scope        = Generic.Error
+}
+
+}
+
+__Reserved = (module|import|let|if|then|else|data|case|match|with)
+__JavaId = ([A-Za-z_][A-Za-z0-9_]*)
+
+contexts [] {
+
+main : context {
+   : include "comments" ;
+   : include "symbols" ;
+   : include "literals" ;
+
+   : pattern {
+      uid             = uid_keyword
+      regex          \= (\b$${__Reserved}\b)
+      styles []       = .keyword;
+   }
+
+   : pattern {
+     uid               = uid_ident
+     regex            \= (\b$${__JavaId}\b)
+     styles []         = .identifier;
+   }
+
+   : inline_push {
+      uid             = uid_inbraces
+      regex          \= (\{)
+      styles []       = .punctuation;
+      : pop {
+         regex       \= (\})
+         styles []    = .punctuation;
+      }
+      : include "main" ;
+   }
+
+   : inline_push {
+      uid             = uid_inparens
+      regex          \= (\()
+      styles []       = .punctuation;
+      : pop {
+         regex       \= (\))
+         styles []    = .punctuation;
+      }
+      : pattern {
+         regex       \= (,)
+         styles []    = .punctuation;
+      }
+      : include "main";
+   }
+
+   : inline_push {
+      uid              = uid_inbrackets
+      regex           \= (\[)
+      styles []        = .punctuation;
+      : pop {
+         regex         \= (\])
+         styles []      = .punctuation;
+      }
+      : include "type_params";
+   }
+
+   : inline_push {
+      uid              = uid_type_ascription
+      regex           \= (:\s*)
+      styles []        = .punctuation;
+      : pop {
+         regex        \= (\b$${__JavaId}\b)
+         styles []     = .type;
+      }
+      : include "type_params" ;
+   }
+
+   : pattern {
+      regex          \= ([^\s])
+      styles []       = .illegal;
+   }
+}
+
+comments : context {
+   : pattern {
+      regex          \= (//.*)
+      styles []       = .comment_line;
+   }
+
+   : inline_push {
+      regex          \= (/\*)
+      styles []       = .comment_multiline;
+      default_style   = .comment_multiline
+      : pop {
+         regex       \= (\*/)
+         styles []    = .comment_multiline;
+      }
+   }
+}
+
+symbols : context {
+   : pattern {
+      uid             = uid_semi
+      regex          \= (;)
+      styles []       = .punctuation;
+   }
+
+   : pattern {
+      uid             = uid_arrow
+      regex          \= (->)
+      styles []       = .operator;
+   }
+
+   : pattern {
+      uid             = uid_eq
+      regex          \= (=)
+      styles []       = .operator;
+   }
+
+   : pattern {
+      uid             = uid_slash
+      regex          \= (/)
+      styles []       = .punctuation;
+   }
+
+   : pattern {
+      uid             = uid_dot
+      regex          \= (\.)
+      styles []       = .punctuation;
+   }
+
+   : pattern {
+      uid             = uid_comma
+      regex          \= (,)
+      styles []       = .punctuation;
+   }
+}
+
+literals : context {
+   : pattern {
+      uid             = uid_bool
+      regex          \= (\b(true|false)\b)
+      styles []       = .boolean;
+   }
+
+   : pattern {
+      uid             = uid_num
+      regex          \= (\b\d+(\.\d+)?[LDF]?\b)
+      styles []       = .numeric;
+   }
+
+   : inline_push {
+      uid             = uid_string
+      regex          \= (\")
+      styles []       = .string;
+      default_style   = .string
+      : pop {
+         regex       \= (\")
+         styles []    = .string;
+      }
+   }
+
+   : inline_push {
+      uid             = uid_char
+      regex          \= (\')
+      styles []       = .char;
+      default_style   = .char
+      : pop {
+         regex       \= (\')
+         styles []    = .char;
+      }
+   }
+}
+
+type_params : context {
+  : pattern {
+     uid            = uid_type_param
+     regex         \= (\b$${__JavaId}\b)
+     styles []      = .type;
+  }
+
+  : pattern {
+     regex       \= (,)
+     styles []    = .punctuation;
+  }
+
+   : inline_push {
+      uid              = uid_inbrackets
+      regex           \= (\[)
+      styles []        = .punctuation;
+      : pop {
+         regex        \= (\])
+         styles []     = .punctuation;
+      }
+     : include "type_params";
+
+   }
+}
+
+}

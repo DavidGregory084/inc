@@ -3,6 +3,8 @@ package inc.typechecker
 import inc.common._
 import java.lang.String
 import cats.instances.either._
+import cats.instances.list._
+import cats.syntax.foldable._
 import cats.syntax.flatMap._
 import org.typelevel.paiges._
 import scala.{ ::, Boolean, Left, Right, Nil, StringContext }
@@ -58,7 +60,7 @@ class Kindchecker(context: Printer.SourceContext, isTraceEnabled: Boolean) exten
     }
   }
 
-  def gather(typ: Type, env: Environment): List[KindConstraint] = typ match {
+  def gather(typ: Type, env: Environment[Meta.Typed]): List[KindConstraint] = typ match {
     case NamedTypeVariable(nm, kind, pos) =>
       trace(s"Reference to $nm", kind, pos)
       List.empty
@@ -99,7 +101,7 @@ class Kindchecker(context: Printer.SourceContext, isTraceEnabled: Boolean) exten
       tpCsts ++ tparamCsts ++ appCst
   }
 
-  def gather(constr: DataConstructor[Meta.Typed], env: Environment): List[KindConstraint] = constr match {
+  def gather(constr: DataConstructor[Meta.Typed], env: Environment[Meta.Typed]): List[KindConstraint] = constr match {
     case DataConstructor(name, params, _, _) =>
       val constraints = params.foldLeft(List.empty[KindConstraint]) {
         case (cstsSoFar, Param(paramName, _, meta)) =>
@@ -114,7 +116,7 @@ class Kindchecker(context: Printer.SourceContext, isTraceEnabled: Boolean) exten
       constraints
   }
 
-  def gather(data: Data[Meta.Typed], env: Environment): Infer[List[KindConstraint]] = data match {
+  def gather(data: Data[Meta.Typed], env: Environment[Meta.Typed]): Infer[List[KindConstraint]] = data match {
     case Data(name, tparams, cases, meta) =>
       val kind =
         if (tparams.isEmpty) {
@@ -181,20 +183,17 @@ class Kindchecker(context: Printer.SourceContext, isTraceEnabled: Boolean) exten
 
     def go(left: Kind, right: Kind): Infer[Substitution] = {
       (left, right) match {
-        case (Parameterized(lparams, _), Parameterized(rparams, _)) if lparams.length != rparams.length =>
+        case (Parameterized(lParams, _), Parameterized(rParams, _)) if lParams.length != rParams.length =>
           TypeError.kindUnification(pos, left, right)
 
-        case (Parameterized(largs, lres), Parameterized(rargs, rres)) =>
-          val emptyRes: Infer[Substitution] = Right(EmptySubst)
-
-          largs.zip(rargs).foldLeft(emptyRes) {
-            case (substSoFar, (ll, rr)) =>
-              for {
-                subst <- substSoFar
-                newSubst <- unify(ll.substitute(subst), rr.substitute(subst), pos)
-              } yield chainSubstitution(subst, newSubst)
+        case (Parameterized(lArgs, lRes), Parameterized(rArgs, rRes)) =>
+          lArgs.zip(rArgs).foldM(EmptySubst) {
+            case (subst, (lArg, rArg)) =>
+              unify(lArg.substitute(subst), rArg.substitute(subst), pos).map { newSubst =>
+                chainSubstitution(subst, newSubst)
+              }
           }.flatMap { paramSubst =>
-            unify(lres.substitute(paramSubst), rres.substitute(paramSubst), pos).map { resultSubst =>
+            unify(lRes.substitute(paramSubst), rRes.substitute(paramSubst), pos).map { resultSubst =>
               chainSubstitution(paramSubst, resultSubst)
             }
           }
@@ -227,7 +226,7 @@ class Kindchecker(context: Printer.SourceContext, isTraceEnabled: Boolean) exten
     }
   }
 
-  def kindcheck(data: Data[Meta.Typed], env: Environment): Infer[(Data[Meta.Typed], Environment)] = {
+  def kindcheck(data: Data[Meta.Typed], env: Environment[Meta.Typed]): Infer[(Data[Meta.Typed], Environment[Meta.Typed])] = {
     for {
       csts <- gather(data, env)
 

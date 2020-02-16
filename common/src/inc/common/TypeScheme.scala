@@ -1,5 +1,6 @@
 package inc.common
 
+import java.lang.String
 import scala.collection.immutable.{ List, Map, Set, Vector }
 
 case class TypeScheme(bound: List[TypeVariable], typ: Type) {
@@ -22,12 +23,15 @@ case class TypeScheme(bound: List[TypeVariable], typ: Type) {
       bound = bound.map(_.substituteKinds(subst).asInstanceOf[TypeVariable]),
       typ = typ.substituteKinds(subst))
 
+  def prefixed(prefix: String) =
+    copy(typ = typ.prefixed(prefix))
+
   def instantiate: Type =
     if (bound.isEmpty)
       typ
     else {
       val freshVars = bound.map(_ => TypeVariable())
-      val subst = bound.zip(freshVars)
+      val subst = bound.map(_.forgetPos).zip(freshVars)
       typ.substitute(subst.toMap)
     }
 }
@@ -35,7 +39,7 @@ case class TypeScheme(bound: List[TypeVariable], typ: Type) {
 object TypeScheme {
   def apply(typ: Type): TypeScheme = TypeScheme(List.empty, typ)
 
-  def generalize(env: Environment, typ: Type): TypeScheme = {
+  def generalize(env: Environment[_], typ: Type): TypeScheme = {
     val freeInEnv = env.types.values.flatMap(_.typ.freeTypeVariables).toSet
     val bound = typ.freeTypeVariables diff freeInEnv
     val scheme = TypeScheme(bound.toList, typ)

@@ -28,8 +28,50 @@ final case class Module[A](
 
   def fullName = (pkg :+ name).mkString("/")
 
-  def environment(implicit eqv: A =:= Meta.Typed): Environment = {
+  def symbolTable(implicit eqv: A =:= Meta.Untyped): Environment[A] = {
     val to = eqv.liftCo[TopLevelDeclaration]
+    val envFrom = eqv.liftCo[Environment].flip
+    val namedDeclarations = declarations.map(to.apply)
+
+    val names = namedDeclarations.flatMap {
+      case Let(name, _, meta) =>
+        List(name -> meta.name)
+      case Data(name, _, cases, meta) =>
+        (name -> meta.name) :: cases.map {
+          case DataConstructor(caseName, _, _, caseMeta) =>
+            caseName -> caseMeta.name
+        }
+    }
+
+    val members = namedDeclarations.flatMap {
+      case Data(_, _, cases, dataMeta) =>
+        val dataMembers = for {
+          DataConstructor(_, params, _, constrMeta) <- cases
+          dataMember = dataMeta.name -> constrMeta
+        } yield dataMember
+
+        val constrMembers = for {
+          DataConstructor(_, params, _, constrMeta) <- cases
+          Param(_, _, paramMeta) <- params
+          constrMember = constrMeta.name -> paramMeta
+        } yield constrMember
+
+        val allMembers = dataMembers ++ constrMembers
+
+        allMembers.groupMap(_._1)(_._2)
+
+      case _ =>
+        List.empty
+    }
+
+    val env = Environment(names.toMap, Map.empty, members.toMap, Map.empty)
+
+    envFrom(env)
+  }
+
+  def typeEnvironment(implicit eqv: A =:= Meta.Typed): Environment[A] = {
+    val to = eqv.liftCo[TopLevelDeclaration]
+    val envFrom = eqv.liftCo[Environment].flip
 
     val typedDeclarations = declarations.map(to.apply)
 
@@ -53,15 +95,36 @@ final case class Module[A](
         }
     }
 
+    val members = typedDeclarations.flatMap {
+      case Data(_, tparams, cases, dataMeta) =>
+        val dataMembers = for {
+          DataConstructor(_, params, _, constrMeta) <- cases
+          dataMember = dataMeta.name -> constrMeta
+        } yield dataMember
+
+        val constrMembers = for {
+          DataConstructor(_, params, returnTyp, constrMeta) <- cases
+          Param(_, ascribedAs, paramMeta) <- params
+          fnType = TypeScheme(tparams, Type.Function(List(returnTyp.typ), ascribedAs.get.typ))
+          constrMember = constrMeta.name -> paramMeta.copy(typ = fnType)
+        } yield constrMember
+
+        val allMembers = dataMembers ++ constrMembers
+
+        allMembers.groupMap(_._1)(_._2)
+
+      case _ =>
+        List.empty
+    }
+
     val kinds = typedDeclarations.collect {
       case Data(name, _, _, meta) =>
         name -> meta.typ.typ.kind
     }
 
-    val fqn = if (pkg.isEmpty) name else pkg.mkString("/") + "/" + name
-    val env = Environment(names.toMap, types.toMap, kinds.toMap)
+    val env = Environment(names.toMap, types.toMap, members.toMap, kinds.toMap)
 
-    env ++ env.prefixed(fqn)
+    envFrom(env)
   }
 
   def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= Meta.Typed): Module[A] =
