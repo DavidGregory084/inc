@@ -20,6 +20,50 @@ class ExprParser(typeEnv: Map[String, Type]) {
       If(cond, thenExpr, elseExpr, Pos(from, to))
   }
 
+  def constrPattern[_: P]: P[Pattern[Pos]] = P(
+    Index ~
+      (identifier ~ "@").? ~ reference ~ "{" ~/ fieldPattern.rep(sep = comma./) ~ "}" ~
+      Index
+  ).map {
+    case (from, alias, ref, patterns, to) =>
+      ConstrPattern(ref.fullName, alias, patterns.toList, Pos(from, to))
+  }
+
+  def fieldPattern[_: P]: P[FieldPattern[Pos]] = P(
+    Index ~
+      identifier ~ (":" ~/ pattern).? ~
+      Index
+  ).map {
+    case (from, field, pattern, to) =>
+      FieldPattern(field, pattern, Pos(from, to))
+  }
+
+  def idPattern[_: P]: P[Pattern[Pos]] = P(
+    Index ~ identifier ~ Index
+  ).map {
+    case (from, name, to) =>
+      IdentPattern(name, Pos(from, to))
+  }
+
+  def pattern[_: P]: P[Pattern[Pos]] = P( constrPattern | idPattern )
+
+  def matchCase[_: P] = P(
+    Index ~
+      "case" ~/ pattern ~ "->" ~ expression ~ Index
+  ).map {
+    case (from, pat, resultExpr, to) =>
+      MatchCase(pat, resultExpr, Pos(from, to))
+  }
+
+  def matchExpr[_: P] = P(
+    Index ~
+      "match" ~/ expression ~
+      "with" ~ inBraces(matchCase.rep(min = 1, sep = maybeSemi)) ~ Index
+  ).map {
+    case (from, expr, cases, to) =>
+      Match(expr, cases.toList, Pos(from, to))
+  }
+
   def constructorParam[_: P] = P(
     Index ~ identifier ~ ":" ~ typeExpr ~ Index
   ).map {
@@ -83,7 +127,7 @@ class ExprParser(typeEnv: Map[String, Type]) {
   }
 
   // NoCut allows us to backtrack out of a nullary lambda into a unit literal, and from an if statement into an identifier starting with "if"
-  def primaryExpr[_:P] = P( (NoCut(lambda) | NoCut(ifExpr) | literal | reference | inParens(expression)) ~ application.rep ).map {
+  def primaryExpr[_:P] = P( (NoCut(lambda) | NoCut(ifExpr) | matchExpr | literal | reference | inParens(expression)) ~ application.rep ).map {
     case (expr, applications) =>
       applications.foldLeft(expr) { case (expr, app) => app(expr) }
   }
@@ -108,7 +152,11 @@ object Parser {
       "let",
       "if",
       "then",
-      "else"
+      "else",
+      "case",
+      "data",
+      "match",
+      "with"
     ) ~~ nonZeroWs
   )
 
@@ -248,7 +296,7 @@ object Parser {
           val kind = Parameterized(tparams.map(_.kind), Atomic)
           val tyCon = TypeConstructor(name, kind, Pos(from, endTyCon))
           val tyApp = TypeApply(tyCon, tparams, Atomic, Pos(from, endTyApp))
-          val typ = TypeScheme(tparams.toList, tyApp)
+          val typ = TypeScheme(tparams, tyApp)
           val typeEnv = mapping.toMap.updated(name, tyCon)
           inBraces(dataConstructor(typ, typeEnv).rep(sep = maybeSemi./)).map { cases =>
             (from, name, tparams, cases)

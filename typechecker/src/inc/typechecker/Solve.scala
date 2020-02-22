@@ -37,10 +37,10 @@ class Solve(context: Printer.SourceContext, isTraceEnabled: Boolean) extends Laz
         kindChecker.unify(tyVar.kind, t.kind, pos).map { subst =>
           val updatedTyVar = tyVar.substituteKinds(subst).asInstanceOf[TypeVariable]
           val updatedTyp = t.substituteKinds(subst)
-          Map(updatedTyVar -> updatedTyp)
+          Map(updatedTyVar.forgetPos -> updatedTyp)
         }
       case _ =>
-        Right(Map(tyVar -> typ))
+        Right(Map(tyVar.forgetPos -> typ))
     }
 
   def unify(left: Type, right: Type, pos: Pos): Infer[Substitution] = {
@@ -56,8 +56,8 @@ class Solve(context: Printer.SourceContext, isTraceEnabled: Boolean) extends Laz
 
     def go(left: Type, right: Type): Infer[Substitution] = {
       (left, right) match {
-        case (TypeApply(_, largs, _, _), TypeApply(_, rargs, _, _)) if largs.length != rargs.length =>
-          TypeError.typeUnification(pos, left, right)
+        // case (TypeApply(_, largs, _, _), TypeApply(_, rargs, _, _)) if largs.length != rargs.length =>
+        //   TypeError.typeUnification(pos, left, right)
 
         case (TypeApply(ltyp, largs, _, _), TypeApply(rtyp, rargs, _, _)) =>
           unify(ltyp, rtyp, pos).flatMap { outerSubst =>

@@ -46,7 +46,7 @@ class TypecheckerSpec extends FlatSpec with Matchers {
   def mkCheckedRef(r: String, typ: TypeScheme) = Reference(List.empty, r, Meta.Typed(NoName, typ, Pos.Empty))
 
 
-  val noImports = Environment.empty
+  val noImports = Environment.empty[Meta.Typed]
 
   "Typechecker" should "typecheck let bound literals successfully" in {
     val mod = mkModule("Int", List(mkLet("int", mkInt(42))))

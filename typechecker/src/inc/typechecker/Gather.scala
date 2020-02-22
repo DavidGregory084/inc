@@ -3,12 +3,14 @@ package inc.typechecker
 import inc.common._
 
 import cats.data.Chain
-import cats.syntax.either._
+import cats.instances.either._
+import cats.instances.list._
+import cats.syntax.foldable._
 import cats.syntax.functor._
 import org.typelevel.paiges._
 import java.lang.String
-import scala.{ Boolean, Some, None, Either, Right, StringContext }
-import scala.collection.immutable.{ List, Map }
+import scala.{ Boolean, Some, None, Right, StringContext }
+import scala.collection.immutable.List
 import scala.Predef.ArrowAssoc
 import com.typesafe.scalalogging.LazyLogging
 
@@ -52,7 +54,7 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
     }
   }
 
-  def trace(context: Printer.SourceContext, name: String, env: Environment) = {
+  def trace(context: Printer.SourceContext, name: String, env: Environment[Meta.Typed]) = {
     if (isTraceEnabled) {
       val header = Doc.hardLine + Doc.text(name + ":") + (Doc.hardLine * 2)
 
@@ -86,8 +88,72 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
     withTypeScheme(expr, TypeScheme(typ))
 
   def gather(
+    pattern: Pattern[Meta.Untyped],
+    env: Environment[Meta.Typed]
+  ): Infer[(Pattern[Meta.Typed], Environment[Meta.Typed], List[Constraint])] = pattern match {
+    case IdentPattern(name, meta) =>
+      val tv = TypeVariable()
+      trace(s"Identifier pattern $name", meta.pos, tv)
+      Right((IdentPattern(name, meta.withSimpleType(tv)), env.withType(name, TypeScheme(tv)), List.empty))
+
+    case ConstrPattern(name, alias, patterns, meta) =>
+      val constrName @ ConstrName(_, _, _, _) = env.names(name)
+      val Type.Function(constrTpArgs) = env.types(constrName.shortName).instantiate
+      val dataType = constrTpArgs.last
+      val members = env.members(constrName)
+
+      val initialResult = (Chain.empty[FieldPattern[Meta.Typed]], env, List.empty[Constraint])
+
+      val typedPatterns = patterns.foldM(initialResult) {
+        case ((typedSoFar, envSoFar, cstsSoFar), FieldPattern(field, None, fieldMeta)) =>
+          val fieldType = for {
+            member <- members.find(_.name == fieldMeta.name)
+            Type.Function(memberTpArgs) = member.typ.instantiate
+          } yield memberTpArgs.last
+
+          val typedFieldPat = FieldPattern(field, None, fieldMeta.withSimpleType(fieldType.get))
+
+          Right((typedSoFar :+ typedFieldPat, envSoFar.withType(field, TypeScheme(fieldType.get)), cstsSoFar))
+
+        case ((typedSoFar, envSoFar, cstsSoFar), FieldPattern(field, Some(nextPat), fieldMeta)) =>
+           gather(nextPat, envSoFar).map {
+             case (typedPat, patEnv, patCst) =>
+               val fieldType = for {
+                 member <- members.find(_.name == fieldMeta.name)
+                 Type.Function(memberTpArgs) = member.typ.instantiate
+               } yield memberTpArgs.last
+
+               val fieldTypeCst = List(Equal(typedPat.meta.typ.typ, fieldType.get, meta.pos))
+
+               val typedFieldPat = FieldPattern(field, Some(typedPat), fieldMeta.withSimpleType(fieldType.get))
+
+               (typedSoFar :+ typedFieldPat, envSoFar ++ patEnv, cstsSoFar ++ patCst ++ fieldTypeCst)
+          }
+      }
+
+      typedPatterns.map {
+        case (patterns, patEnv, patCsts) =>
+          trace(s"Constructor pattern ${alias.getOrElse(name)}", meta.pos, dataType)
+          val constrEnv = alias.map { a => patEnv.withType(a, TypeScheme(dataType)) }.getOrElse(patEnv)
+          (ConstrPattern(name, alias, patterns.toList, meta.withSimpleType(dataType)), constrEnv, patCsts)
+      }
+  }
+
+  def gather(
+    matchCase: MatchCase[Meta.Untyped],
+    env: Environment[Meta.Typed]
+  ): Infer[(MatchCase[Meta.Typed], List[Constraint])] = matchCase match {
+    case MatchCase(pattern, resultExpr, meta) =>
+      for {
+        (p, patEnv, pCsts) <- gather(pattern, env)
+        (r, rCsts) <- gather(resultExpr, patEnv)
+        checked = MatchCase(p, r, meta.withType(r.meta.typ))
+      } yield (checked, pCsts ++ rCsts)
+  }
+
+  def gather(
     expr: Expr[Meta.Untyped],
-    env: Environment
+    env: Environment[Meta.Typed]
   ): Infer[(Expr[Meta.Typed], List[Constraint])] =
     expr match {
       case int @ LiteralInt(_, _) =>
@@ -232,14 +298,12 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
 
           _ = trace("Function to apply", f.meta.pos, fnCst)
 
-          initialResult = Either.right[List[TypeError], (Chain[Expr[Meta.Typed]], List[Constraint])]((Chain.empty, List.empty))
+          initialResult = (Chain.empty[Expr[Meta.Typed]], List.empty[Constraint])
 
           // Gather constraints from the arg expressions
-          (as, argCsts) <- args.zipWithIndex.foldLeft(initialResult) {
-            case (resSoFar, (nextArg, idx)) =>
+          (as, argCsts) <- args.zipWithIndex.foldM(initialResult) {
+            case ((typedSoFar, cstsSoFar), (nextArg, idx)) =>
               for {
-                (typedSoFar, cstsSoFar) <- resSoFar
-
                 (typedArg, argCst) <- gather(nextArg, env)
 
                 _ = trace(s"Argument ${idx + 1}", typedArg.meta.pos, argCst)
@@ -264,12 +328,42 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
           expr = Apply(f, argsList, meta.withType(TypeScheme(tv)))
 
         } yield (expr, fnCst ++ argCsts ++ declEqualsAppCst)
+
+      case Match(matchExpr, cases, meta) =>
+        val tv = TypeVariable()
+
+        trace("Match expression", meta.pos, tv)
+
+        for  {
+          (e, exprCsts) <- gather(matchExpr, env)
+
+          _ = trace("Match target expression", meta.pos, exprCsts)
+
+          initialResult = (Chain.empty[MatchCase[Meta.Typed]], List.empty[Constraint])
+
+          (cs, caseCsts) <- cases.zipWithIndex.foldM(initialResult) {
+            case ((typedSoFar, cstsSoFar), (nextCase, idx)) =>
+              for {
+                (typedCase, caseCst) <- gather(nextCase, env)
+
+                _ = trace(s"Case ${idx + 1}", typedCase.meta.pos, caseCst)
+
+              } yield (typedSoFar :+ typedCase, cstsSoFar ++ caseCst)
+          }
+
+          matchExprCasesCst = cs.toList.map(c => Equal(e.meta.typ.typ, c.pattern.meta.typ.typ, c.pattern.meta.pos))
+
+          sameResultTypeCst = cs.toList.map(c => Equal(tv, c.meta.typ.typ, c.meta.pos))
+
+          checkedMatch = Match(e, cs.toList, meta.withType(TypeScheme(tv)))
+
+        } yield (checkedMatch, exprCsts ++ caseCsts ++ matchExprCasesCst ++ sameResultTypeCst)
     }
 
   def gather(
     decl: TopLevelDeclaration[Meta.Untyped],
-    env: Environment
-  ): Infer[(TopLevelDeclaration[Meta.Typed], Environment, List[Constraint])] =
+    env: Environment[Meta.Typed]
+  ): Infer[(TopLevelDeclaration[Meta.Typed], Environment[Meta.Typed], List[Constraint])] =
     decl match {
       case let @ Let(name, expr, meta) =>
         for {
@@ -305,40 +399,68 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
 
   def gather(
     module: Module[Meta.Untyped],
-    importedEnv: Environment
+    importedEnv: Environment[Meta.Typed]
   ): Infer[(Module[Meta.Typed], List[Constraint])] =
     module match {
       case Module(_, _, _, decls, meta) =>
-
         val initialTypes = decls.flatMap {
           case Let(name, _, _) =>
             List(name -> TypeScheme(List.empty, TypeVariable()))
-          case Data(dataName, tparams, cases, _) =>
+          case Data(_, tparams, cases, _) =>
             cases.map {
               case DataConstructor(caseName, params, returnTyp, _) =>
                 val paramTypes = params.map(_.ascribedAs.get.typ)
-                val dataTyp = TypeConstructor(dataName, returnTyp.typ.kind)
-                val typeScheme = TypeScheme(tparams, Type.Function(paramTypes, dataTyp))
+                val typeScheme = TypeScheme(tparams, Type.Function(paramTypes, returnTyp.typ))
                 caseName -> typeScheme
             }
-        }
+        }.toMap
+
+        val initialMembers = decls.flatMap {
+          case Data(_, tparams, cases, dataMeta) =>
+            val dataMembers = for {
+              DataConstructor(caseName, params, _, caseMeta) <- cases
+              dataMember = dataMeta.name -> caseMeta.withType(initialTypes(caseName))
+            } yield dataMember
+
+            val constrMembers = for {
+              DataConstructor(_, params, returnTyp, constrMeta) <- cases
+              Param(_, ascribedAs, paramMeta) <- params
+              fnType = TypeScheme(tparams, Type.Function(List(returnTyp.typ), ascribedAs.get.typ))
+              constrMember = constrMeta.name -> paramMeta.withType(fnType)
+            } yield constrMember
+
+            val emptyConstrs = for {
+              DataConstructor(name, params, _, constrMeta) <- cases
+              if params.isEmpty
+            } yield constrMeta.name -> List.empty[Meta.Typed]
+
+            val allMembers = dataMembers ++ constrMembers
+
+            allMembers.groupMap(_._1)(_._2) ++ emptyConstrs
+
+          case _ =>
+            List.empty
+        }.toMap
 
         val initialKinds = decls.collect {
           case data @ Data(name, _, _, _) =>
             name -> data.kind
-        }
+        }.toMap
 
-        val initialEnv = importedEnv ++ Environment(Map.empty, initialTypes.toMap, initialKinds.toMap)
+        val initialEnv = importedEnv ++ Environment(
+          names = module.symbolTable.names,
+          types = initialTypes,
+          members = initialMembers,
+          kinds = initialKinds
+        )
 
         trace(context, "Initial environment", initialEnv)
 
-        val emptyRes: Infer[(Chain[TopLevelDeclaration[Meta.Typed]], Environment, List[Constraint])] =
-          Right((Chain.empty, initialEnv, List.empty))
+        val emptyRes = (Chain.empty[TopLevelDeclaration[Meta.Typed]], initialEnv, List.empty[Constraint])
 
-        val constraintsFromDecls = decls.foldLeft(emptyRes) {
-          case (resSoFar, nextDecl) =>
+        val constraintsFromDecls = decls.foldM(emptyRes) {
+          case ((checkedSoFar, envSoFar, constraintsSoFar), nextDecl) =>
             for {
-              (checkedSoFar, envSoFar, constraintsSoFar) <- resSoFar
               (checkedDecl, updatedEnv, constraints) <- gather(nextDecl, envSoFar)
               envWithDecl = updatedEnv.withType(checkedDecl.name, checkedDecl.meta.typ)
             } yield (checkedSoFar :+ checkedDecl, envWithDecl, constraintsSoFar ++ constraints)
