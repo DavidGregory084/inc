@@ -20,62 +20,37 @@ object Resolver {
   def withName(expr: Expr[Pos], name: Name, env: SymbolTable) =
     Right((expr.map(pos => Meta.Untyped(name, pos)), env))
 
-  def resolve(pattern: Pattern[Pos], enclosingName: Option[ConstrName], env: SymbolTable): Resolve[(Pattern[Meta.Untyped], SymbolTable)] = pattern match {
+  def resolve(pattern: Pattern[Pos], env: SymbolTable): Resolve[(Pattern[Meta.Untyped], SymbolTable)] = pattern match {
     case IdentPattern(name, pos) =>
-      if (env.names.contains(name))
-        ResolverError.singleton(pos, s"Symbol $name is already defined")
-      else {
+        // Allow shadowing in patterns
         val localName = LocalName(name)
+        Right((IdentPattern(name, Meta.Untyped(localName, pos)), env.withName(name, localName)))
 
-        val resolvedId = enclosingName.flatMap { constrName =>
-          env.members.get(constrName).map { members =>
-            (constrName, members)
-          }
-        }.map {
-          case (constrName, members) =>
-            if (members.exists(_.name == localName))
-              Right((IdentPattern(name, Meta.Untyped(localName, pos)), env.withName(name, localName)))
-            else
-              ResolverError.singleton(pos, s"Constructor ${constrName.name} has no member ${name}")
-        }
-
-        resolvedId.getOrElse {
-          Right((IdentPattern(name, Meta.Untyped(localName, pos)), env.withName(name, localName)))
-        }
-      }
-
-    case AliasPattern(idPat @ IdentPattern(_, idPos), alias, pos) =>
-      if (env.names.contains(alias))
-        ResolverError.singleton(pos, s"Symbol $alias is already defined")
-      else {
-        // There's no need to check idPat as it's being aliased away
-        val localName = LocalName(alias)
-        val resolvedId = idPat.copy(meta = Meta.Untyped(NoName, idPos))
-        Right((AliasPattern(resolvedId, alias, Meta.Untyped(localName, pos)), env.withName(alias, localName)))
-      }
-
-    case AliasPattern(pattern, alias, pos) =>
-      if (env.names.contains(alias))
-        ResolverError.singleton(pos, s"Symbol $alias is already defined")
-      else resolve(pattern, enclosingName, env).map {
-        case (pat, patEnv) =>
-          val localName = LocalName(alias)
-          (AliasPattern(pat, alias, Meta.Untyped(localName, pos)), patEnv.withName(alias, localName))
-      }
-
-    case ConstrPattern(name, patterns, pos) =>
+    case ConstrPattern(name, alias, patterns, pos) =>
       env.names.get(name).collectFirst {
         case constrNm @ ConstrName(_, _, _, _) =>
-          val emptyPatterns = Chain.empty[Pattern[Meta.Untyped]]
+          val emptyPatterns = Chain.empty[FieldPattern[Meta.Untyped]]
+          val members = env.members(constrNm)
           patterns.foldM((emptyPatterns, env)) {
-            case ((patsSoFar, envSoFar), nextPat) =>
-              resolve(nextPat, Some(constrNm), envSoFar).map {
+            case ((patsSoFar, envSoFar), FieldPattern(field, None, pos)) =>
+              val fieldName = LocalName(field)
+              if (!members.exists(_.name == fieldName))
+                ResolverError.singleton(pos, s"Constructor ${constrNm.name} has no member ${name}")
+              else
+                Right((patsSoFar :+ FieldPattern(field, Option.empty[Pattern[Meta.Untyped]], Meta.Untyped(fieldName, pos)), envSoFar.withName(field, fieldName)))
+            case ((patsSoFar, envSoFar), FieldPattern(field, Some(nextPat), pos)) =>
+              val fieldName = LocalName(field)
+              if (!members.exists(_.name == fieldName))
+                ResolverError.singleton(pos, s"Constructor ${constrNm.name} has no member ${name}")
+              else resolve(nextPat, envSoFar).map {
                 case (resolvedPat, patEnv) =>
-                  (patsSoFar :+ resolvedPat, patEnv)
+                  (patsSoFar :+ FieldPattern(field, Some(resolvedPat), Meta.Untyped(fieldName, pos)), patEnv)
               }
           }.map {
             case (resolvedPats, patEnv) =>
-            (ConstrPattern(name, resolvedPats.toList, Meta.Untyped(NoName, pos)), patEnv)
+              val aliasName = alias.map(LocalName.apply).getOrElse(NoName)
+              val aliasEnv = alias.map(patEnv.withName(_, aliasName)).getOrElse(patEnv)
+              (ConstrPattern(name, alias, resolvedPats.toList, Meta.Untyped(aliasName, pos)), aliasEnv)
           }
       }.getOrElse(ResolverError.singleton(pos, s"Reference to unknown constructor: $name"))
   }
@@ -83,7 +58,7 @@ object Resolver {
   def resolve(matchCase: MatchCase[Pos], env: SymbolTable): Resolve[MatchCase[Meta.Untyped]] = matchCase match {
     case MatchCase(pattern, result, pos) =>
       for {
-        (pat, patEnv) <- resolve(pattern, None, env)
+        (pat, patEnv) <- resolve(pattern, env)
         (res, _) <- resolve(result, patEnv)
       } yield MatchCase(pat, res, Meta.Untyped(NoName, pos))
   }
@@ -264,9 +239,15 @@ object Resolver {
             constrMember = constrName -> Meta.Untyped(paramName, pos)
           } yield constrMember
 
+          val emptyConstrs = for {
+            DataConstructor(name, params, _, _) <- cases
+            constrName = ConstrName(module.pkg, module.name, dataNm, name)
+            if params.isEmpty
+          } yield constrName -> List.empty[Meta.Untyped]
+
           val allMembers = dataMembers ++ constrMembers
 
-          val memberMap = allMembers.groupMap(_._1)(_._2)
+          val memberMap = allMembers.groupMap(_._1)(_._2) ++ emptyConstrs
 
           env.copy(members = env.members ++ memberMap)
         }

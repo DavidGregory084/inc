@@ -33,8 +33,9 @@ sealed abstract class Expr[A] extends Product with Serializable {
       expr.capturedVariables
     case Match(matchExpr, cases, _) =>
       matchExpr.capturedVariables ++ cases.flatMap {
-        case MatchCase(_, resultExpr, _) =>
+        case MatchCase(pattern, resultExpr, _) =>
           resultExpr.capturedVariables
+            .filterNot(v => pattern.boundVariables.contains(v.meta.name))
       }
   }
 
@@ -286,7 +287,20 @@ final case class Match[A](
   matchExpr: Expr[A],
   cases: List[MatchCase[A]],
   meta: A
-) extends Expr[A]
+) extends Expr[A] {
+  def isExhaustive(env: Environment[Meta.Typed])(implicit eqv: A =:= Meta.Typed): Boolean = {
+    env.members.get(matchExpr.meta.name).map { dataMembers =>
+      dataMembers.forall { dataMember =>
+        cases.exists {
+          case MatchCase(ConstrPattern(name, _, _, _), _, _) =>
+            dataMember.name.shortName == name
+          case _ =>
+            false
+        }
+      }
+    }.getOrElse(false)
+  }
+}
 
 final case class LiteralInt[A](i: Int, meta: A) extends Expr[A]
 final case class LiteralLong[A](l: Long, meta: A) extends Expr[A]

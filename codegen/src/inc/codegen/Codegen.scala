@@ -68,116 +68,85 @@ class Codegen(verifyCodegen: Boolean) {
     classEnv: ClassEnvironment,
     pattern: Pattern[Meta.Typed],
     skipCaseLabel: Label,
-    enclosingVarIndex: Int,
-    enclosingConstr: Option[Name]
+    enclosingVarIndex: Int
   ): Generate[ClassEnvironment] = pattern match {
-    case IdentPattern(name, meta) =>
-      val patType = Asm.asmType(classEnv, meta.typ.typ)
-      val varIndex = classEnv.methodWriter.newLocal(patType)
-      val varLabel = new Label
-      val localVar = LocalVar(varIndex, patType.getDescriptor(), null, varLabel, skipCaseLabel)
-      val updatedEnv = classEnv.copy(localVars = classEnv.localVars.updated(meta.name, localVar))
-
-      classEnv.methodWriter.loadLocal(enclosingVarIndex)
-
-      enclosingConstr.map { constrName =>
-        // Load the constructor field
-        val memberAsmType = classEnv
-          .typeEnvironment
-          .members(constrName)
-          .find(_.name.shortName == name)
-          .map { memberMeta =>
-            val Type.Function(memberTpArgs) = memberMeta.typ.typ
-            Asm.asmType(classEnv, memberTpArgs.last)
-          }
-
-        memberAsmType.foreach { memberTp =>
-          val constrType = AsmType.getObjectType(Asm.internalName(constrName))
-          classEnv.methodWriter.checkCast(constrType)
-          classEnv.methodWriter.getField(constrType, name, memberTp)
-        }
-      }
-
-      updatedEnv.methodWriter.storeLocal(varIndex, patType)
-      updatedEnv.methodWriter.visitLabel(varLabel)
+    case IdentPattern(_, meta) =>
+      // Store the scrutinee in a new local named after our ident pattern
+      val identLabel = new Label
+      val identType = Asm.asmType(classEnv, meta.typ.typ)
+      val identIndex = classEnv.methodWriter.newLocal(identType)
+      val identVar = LocalVar(identIndex, identType.getDescriptor(), null, identLabel, skipCaseLabel)
+      val updatedEnv = classEnv.copy(localVars = classEnv.localVars.updated(meta.name, identVar))
+      updatedEnv.methodWriter.loadLocal(enclosingVarIndex)
+      updatedEnv.methodWriter.storeLocal(identIndex, identType)
+      updatedEnv.methodWriter.visitLabel(identLabel)
       updatedEnv.asRight
 
-    case AliasPattern(IdentPattern(name, _), _, meta) =>
-      // Don't create a local for an ident pattern if it is being aliased
-      val patType = Asm.asmType(classEnv, meta.typ.typ)
-      val varIndex = classEnv.methodWriter.newLocal(patType)
-      val varLabel = new Label
-      val localVar = LocalVar(varIndex, patType.getDescriptor(), null, varLabel, skipCaseLabel)
-      val updatedEnv = classEnv.copy(localVars = classEnv.localVars.updated(meta.name, localVar))
+    case ConstrPattern(name, alias, patterns, meta) =>
+      val constrName = classEnv.typeEnvironment.names(name)
+      val constrType = AsmType.getObjectType(Asm.internalName(constrName))
 
-      classEnv.methodWriter.loadLocal(enclosingVarIndex)
+      val aliasEnv = alias.map { _ =>
+        // Create a new local named after the constructor pattern alias
+        val aliasLabel = new Label
+        val aliasIndex = classEnv.methodWriter.newLocal(constrType)
+        val aliasVar = LocalVar(aliasIndex, constrType.getDescriptor(), null, aliasLabel, skipCaseLabel)
+        val updatedEnv = classEnv.copy(localVars = classEnv.localVars.updated(meta.name, aliasVar))
 
-      enclosingConstr.map { constrName =>
-        // Load the constructor field
-        val memberAsmType = classEnv
-          .typeEnvironment
-          .members(constrName)
-          .find(_.name.shortName == name)
-          .map { memberMeta =>
-            val Type.Function(memberTpArgs) = memberMeta.typ.typ
-            Asm.asmType(classEnv, memberTpArgs.last)
+        // Do the instanceof check
+        updatedEnv.methodWriter.loadLocal(enclosingVarIndex)
+        updatedEnv.methodWriter.instanceOf(constrType)
+        updatedEnv.methodWriter.ifZCmp(GeneratorAdapter.EQ, skipCaseLabel)
+
+        // The instanceof succeeded so store in the alias variable
+        updatedEnv.methodWriter.loadLocal(enclosingVarIndex)
+        updatedEnv.methodWriter.storeLocal(aliasIndex, constrType)
+        updatedEnv.methodWriter.visitLabel(aliasLabel)
+
+        updatedEnv
+
+      }.getOrElse {
+        // Do the instanceof check
+        classEnv.methodWriter.loadLocal(enclosingVarIndex)
+        classEnv.methodWriter.instanceOf(constrType)
+        classEnv.methodWriter.ifZCmp(GeneratorAdapter.EQ, skipCaseLabel)
+
+        classEnv
+      }
+
+      patterns.foldM(aliasEnv) {
+        case (cEnv, FieldPattern(field, innerPattern, _)) =>
+          val constrMembers = cEnv.typeEnvironment.members(constrName)
+          val constrMember = constrMembers.find(_.name.shortName == field)
+
+          constrMember.map { member =>
+            val Type.Function(memberTpArgs) = member.typ.typ
+            val memberType = Asm.asmType(cEnv, memberTpArgs.last)
+
+            // Load the constructor field
+            val constrType = AsmType.getObjectType(Asm.internalName(constrName))
+            cEnv.methodWriter.loadLocal(enclosingVarIndex)
+            cEnv.methodWriter.checkCast(constrType)
+            cEnv.methodWriter.getField(constrType, field, memberType)
+
+            // Store the field value in a new local
+            val memberLabel = new Label
+            val memberIndex = cEnv.methodWriter.newLocal(memberType)
+            val memberVar = LocalVar(memberIndex, memberType.getDescriptor(), null, memberLabel, skipCaseLabel)
+            val updatedEnv = cEnv.copy(localVars = cEnv.localVars.updated(member.name, memberVar))
+            updatedEnv.methodWriter.storeLocal(memberIndex, memberType)
+            updatedEnv.methodWriter.visitLabel(memberLabel)
+
+            innerPattern.map { innerPat =>
+              // There is a nested pattern that uses the field
+              newPattern(updatedEnv, innerPat, skipCaseLabel, memberIndex)
+            }.getOrElse {
+              updatedEnv.asRight
+            }
+
+          }.getOrElse {
+            CodegenError.singleton(s"Unable to find constructor member $field in the code generation environment")
           }
-
-        memberAsmType.foreach { memberTp =>
-          val constrType = AsmType.getObjectType(Asm.internalName(constrName))
-          classEnv.methodWriter.checkCast(constrType)
-          classEnv.methodWriter.getField(constrType, name, memberTp)
-        }
-      }
-
-      updatedEnv.methodWriter.storeLocal(varIndex, patType)
-      updatedEnv.methodWriter.visitLabel(varLabel)
-      updatedEnv.asRight
-
-    case AliasPattern(ConstrPattern(name, patterns, _), _, meta) =>
-      val constrName = classEnv.typeEnvironment.names(name)
-      val constrType = AsmType.getObjectType(Asm.internalName(constrName))
-      val varIndex = classEnv.methodWriter.newLocal(constrType)
-      val varLabel = new Label
-      val localVar = LocalVar(varIndex, constrType.getDescriptor(), null, varLabel, skipCaseLabel)
-      val updatedEnv = classEnv.copy(localVars = classEnv.localVars.updated(meta.name, localVar))
-
-      updatedEnv.methodWriter.loadLocal(enclosingVarIndex)
-      updatedEnv.methodWriter.instanceOf(constrType)
-      updatedEnv.methodWriter.ifZCmp(GeneratorAdapter.EQ, skipCaseLabel)
-
-      // The instanceof succeeded so store the scrutinee in a local
-      updatedEnv.methodWriter.loadLocal(enclosingVarIndex)
-      updatedEnv.methodWriter.storeLocal(varIndex, constrType)
-      updatedEnv.methodWriter.visitLabel(varLabel)
-
-      patterns.foldM(updatedEnv) {
-        case (cEnv, nextPat) =>
-          newPattern(cEnv, nextPat, skipCaseLabel, varIndex, Some(constrName))
-      }
-
-    case AliasPattern(pat, _, meta) =>
-      val patType = Asm.asmType(classEnv, meta.typ.typ)
-      val varIndex = classEnv.methodWriter.newLocal(patType)
-      val varLabel = new Label
-      val localVar = LocalVar(varIndex, patType.getDescriptor(), null, varLabel, skipCaseLabel)
-      val updatedEnv = classEnv.copy(localVars = classEnv.localVars.updated(meta.name, localVar))
-
-      newPattern(updatedEnv, pat, skipCaseLabel, enclosingVarIndex, enclosingConstr).map { patEnv =>
-        patEnv.methodWriter.storeLocal(varIndex, patType)
-        patEnv.methodWriter.visitLabel(varLabel)
-        patEnv
-      }
-
-    case ConstrPattern(name, patterns, _) =>
-      val constrName = classEnv.typeEnvironment.names(name)
-      val constrType = AsmType.getObjectType(Asm.internalName(constrName))
-      classEnv.methodWriter.loadLocal(enclosingVarIndex)
-      classEnv.methodWriter.instanceOf(constrType)
-      classEnv.methodWriter.ifZCmp(GeneratorAdapter.EQ, skipCaseLabel)
-      patterns.foldM(classEnv) {
-        case (cEnv, nextPat) =>
-          newPattern(cEnv, nextPat, skipCaseLabel, enclosingVarIndex, Some(constrName))
       }
   }
 
@@ -188,8 +157,7 @@ class Codegen(verifyCodegen: Boolean) {
     skipCaseLabel: Label
   ): Generate[ClassEnvironment] = matchCase match {
     case MatchCase(pattern, resultExpr, _) =>
-      pprint.pprintln(pattern.map(_ => ()))
-      newPattern(classEnv, pattern, skipCaseLabel, matchExprIndex, None).flatMap { cEnv =>
+      newPattern(classEnv, pattern, skipCaseLabel, matchExprIndex).flatMap { cEnv =>
         newExpr(cEnv, resultExpr)
       }
   }
@@ -293,7 +261,7 @@ class Codegen(verifyCodegen: Boolean) {
         _ = classEnv.methodWriter.visitLabel(trueLabel)
       } yield elseEnv
 
-    case Match(expr, cases, _) =>
+    case mat @ Match(expr, cases, _) =>
       val matchExprType = Asm.asmType(classEnv, expr.meta.typ.typ)
       val matchExprIndex = classEnv.methodWriter.newLocal(matchExprType)
       val startMatchLabel = new Label
@@ -317,16 +285,20 @@ class Codegen(verifyCodegen: Boolean) {
               matchEnv
             }
         }.flatMap { matchEnv =>
-          val matchErrorLabel = new Label
+          val matchCanFail = mat.cases.exists(!_.pattern.isIrrefutable)
+          val matchErrorLabel = if (matchCanFail) new Label else endMatchLabel
           val revertLocalsEnv = matchEnv.copy(localVars = exprEnv.localVars)
 
           newMatchCase(revertLocalsEnv, cases.last, matchExprIndex, matchErrorLabel).map { lastCaseEnv =>
             lastCaseEnv.methodWriter.goTo(endMatchLabel)
 
-            // We use the skip label for the final case to jump to code which throws a match error
-            lastCaseEnv.methodWriter.visitLabel(matchErrorLabel)
-            val errorType = AsmType.getObjectType("inc/rts/MatchError")
-            lastCaseEnv.methodWriter.throwException(errorType, "Match error")
+            if (matchCanFail) {
+              // If our match is not exhaustive, or it contains no irrefutable case,
+              // we use the skip label for the final case to jump to code which throws a match error
+              lastCaseEnv.methodWriter.visitLabel(matchErrorLabel)
+              val errorType = AsmType.getObjectType("inc/rts/MatchError")
+              lastCaseEnv.methodWriter.throwException(errorType, "Match error")
+            }
 
             lastCaseEnv.methodWriter.visitLabel(endMatchLabel)
 
@@ -389,7 +361,7 @@ class Codegen(verifyCodegen: Boolean) {
             } else if (!meta.typ.typ.isPrimitive && fnTpArgs.last.isPrimitive) {
               cEnv.methodWriter.box(fnRetType)
             // The VM requires a cast here as generic types are erased to Object
-            } else if (!meta.typ.typ.isPrimitive && fnTpArgs.last.isInstanceOf[TypeVariable]) {
+            } else if (!meta.typ.typ.isPrimitive) {
               cEnv.methodWriter.checkCast(retType)
             }
             cEnv
@@ -412,9 +384,10 @@ class Codegen(verifyCodegen: Boolean) {
                   cEnv
                 }
             }.flatMap { argEnv =>
-              val fnTyp = Asm.asmType(classEnv, fn.meta.typ.typ)
-              val methodTypeArgs = fnTpArgs.map(Asm.boxedAsmType(classEnv, _))
+              // We're calling the interface method so the type signature is generic
+              val methodTypeArgs = fnTpArgs.map(_ => AsmType.getType(classOf[Object]))
               val method = new Method("apply", methodTypeArgs.last, methodTypeArgs.init.toArray)
+              val fnTyp = Asm.asmType(classEnv, fn.meta.typ.typ)
               classEnv.methodWriter.invokeInterface(fnTyp, method)
               argEnv.asRight
             }.map { cEnv =>
@@ -424,7 +397,7 @@ class Codegen(verifyCodegen: Boolean) {
               if (meta.typ.typ.isPrimitive)
                 classEnv.methodWriter.unbox(retType)
               // The VM requires a cast here as generic types are erased to Object
-              if (!meta.typ.typ.isPrimitive && fnTpArgs.last.isInstanceOf[TypeVariable])
+              if (!meta.typ.typ.isPrimitive)
                 classEnv.methodWriter.checkCast(retType)
 
               cEnv
@@ -477,8 +450,8 @@ class Codegen(verifyCodegen: Boolean) {
           val oldVar = v.copy(meta = v.meta.forgetPos)
           val newName = "captured$" + idx.toString
           val newMeta = v.meta.copy(name = LocalName(newName))
-          val newArgReference = Reference(List.empty, newName, newMeta)
-          oldVar -> newArgReference
+          val newVar = Reference(List.empty, newName, newMeta)
+          oldVar -> newVar
       }.toMap
 
       // Append an index to the enclosing declaration name in order to generate the static method.
@@ -519,7 +492,12 @@ class Codegen(verifyCodegen: Boolean) {
       val lambdaEnv = classEnv.copy(
         args = lambdaArgs.toMap,
         methodWriter = methodWriter,
-        liftedLambdas = classEnv.liftedLambdas + 1)
+        liftedLambdas = classEnv.liftedLambdas + 1,
+        // Filter out the captured variables - they are args now
+        localVars = classEnv.localVars.filterNot {
+          case (nm, _) =>
+            capturedVars.map(_.name).contains(nm)
+        })
 
       val objType = AsmType.getType(classOf[Object])
 

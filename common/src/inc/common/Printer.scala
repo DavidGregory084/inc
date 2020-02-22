@@ -140,16 +140,20 @@ object Printer {
       p.ascribedAs.map(asc => Doc.char(':') & print(asc)).getOrElse(Doc.empty)
   }
 
+  def print[A](p: FieldPattern[A]): Doc = p match {
+    case FieldPattern(field, pattern, _) =>
+      Doc.text(field) + pattern.map(p => Doc.char(':') & print(p)).getOrElse(Doc.empty)
+  }
+
   def print[A](p: Pattern[A]): Doc = p match {
     case IdentPattern(name, _) =>
       Doc.text(name)
-    case AliasPattern(pattern, alias, _) =>
-      Doc.text(alias) & Doc.char('@') & print(pattern)
-    case ConstrPattern(name, patterns, _) =>
-      Doc.text(name) & Doc.intercalate(
-        Doc.comma + Doc.space,
-        patterns.map(print(_))
-      ).bracketBy(Doc.char('{'), Doc.char('}'))
+    case ConstrPattern(name, alias, patterns, _) =>
+      alias.map(a => Doc.text(a) & Doc.char('@') + Doc.space).getOrElse(Doc.empty) +
+        Doc.text(name) & Doc.intercalate(
+          Doc.comma + Doc.space,
+          patterns.map(print(_))
+        ).bracketBy(Doc.char('{'), Doc.char('}'))
   }
 
   def print[A](e: Expr[A]): Doc = e match {

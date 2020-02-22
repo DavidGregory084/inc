@@ -118,23 +118,23 @@ message IdentPattern {
   NameWithType nameWithType = 2;
 }
 
-message AliasPattern {
-  Pattern pattern = 1;
-  string alias = 2;
+message FieldPattern {
+  string field = 1;
+  Pattern pattern = 2;
   NameWithType nameWithType = 3;
 }
 
 message ConstrPattern {
   string name = 1;
-  repeated Pattern patterns = 2;
+  string alias = 2;
+  repeated FieldPattern patterns = 3;
   NameWithType nameWithType = 4;
 }
 
 message Pattern {
   oneof sealed_value {
     IdentPattern identPattern = 1;
-    AliasPattern aliasPattern = 2;
-    ConstrPattern constrPattern = 3;
+    ConstrPattern constrPattern = 2;
   }
 }
 

@@ -9,7 +9,7 @@ import cats.syntax.foldable._
 import cats.syntax.functor._
 import org.typelevel.paiges._
 import java.lang.String
-import scala.{ Boolean, Option, Some, None, Right, StringContext }
+import scala.{ Boolean, Some, None, Right, StringContext }
 import scala.collection.immutable.List
 import scala.Predef.ArrowAssoc
 import com.typesafe.scalalogging.LazyLogging
@@ -89,54 +89,53 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
 
   def gather(
     pattern: Pattern[Meta.Untyped],
-    enclosingConstr: Option[Meta.Typed],
     env: Environment[Meta.Typed]
   ): Infer[(Pattern[Meta.Typed], Environment[Meta.Typed], List[Constraint])] = pattern match {
     case IdentPattern(name, meta) =>
       val tv = TypeVariable()
+      trace(s"Identifier pattern $name", meta.pos, tv)
+      Right((IdentPattern(name, meta.withSimpleType(tv)), env.withType(name, TypeScheme(tv)), List.empty))
 
-      val memberAppCst = for {
-        constr <- enclosingConstr
-        members <- env.members.get(constr.name)
-        member <- members.find(_.name.shortName == name)
-        memberTp = member.typ.instantiate
-        dataTp = constr.typ.typ
-        appTp = Type.Function(List(dataTp), tv)
-      } yield List(Equal(appTp, memberTp, meta.pos))
-
-      val constraints = memberAppCst.getOrElse(List.empty)
-
-      trace(s"Identifier pattern $name", meta.pos, constraints)
-
-      Right((IdentPattern(name, meta.withSimpleType(tv)), env.withType(name, TypeScheme(tv)), constraints))
-
-    case AliasPattern(pattern, alias, meta) =>
-      gather(pattern, enclosingConstr, env).map {
-        case (pat, patEnv, csts) =>
-          trace(s"Alias pattern $alias", meta.pos, pat.meta.typ)
-
-          (AliasPattern(pat, alias, meta.withType(pat.meta.typ)), patEnv.withType(alias, pat.meta.typ), csts)
-      }
-
-    case ConstrPattern(name, patterns, meta) =>
+    case ConstrPattern(name, alias, patterns, meta) =>
       val constrName @ ConstrName(_, _, _, _) = env.names(name)
       val Type.Function(constrTpArgs) = env.types(constrName.shortName).instantiate
       val dataType = constrTpArgs.last
-      val enclosingConstr = Meta.Typed(constrName, TypeScheme(dataType), meta.pos)
+      val members = env.members(constrName)
 
-      val initialResult = (Chain.empty[Pattern[Meta.Typed]], env, List.empty[Constraint])
+      val initialResult = (Chain.empty[FieldPattern[Meta.Typed]], env, List.empty[Constraint])
 
       val typedPatterns = patterns.foldM(initialResult) {
-        case ((typedSoFar, envSoFar, cstsSoFar), nextPat) =>
-          for {
-            (typedPat, patEnv, patCst) <- gather(nextPat, Some(enclosingConstr), envSoFar)
-          } yield (typedSoFar :+ typedPat, envSoFar ++ patEnv, cstsSoFar ++ patCst)
+        case ((typedSoFar, envSoFar, cstsSoFar), FieldPattern(field, None, fieldMeta)) =>
+          val fieldType = for {
+            member <- members.find(_.name == fieldMeta.name)
+            Type.Function(memberTpArgs) = member.typ.instantiate
+          } yield memberTpArgs.last
+
+          val typedFieldPat = FieldPattern(field, None, fieldMeta.withSimpleType(fieldType.get))
+
+          Right((typedSoFar :+ typedFieldPat, envSoFar.withType(field, TypeScheme(fieldType.get)), cstsSoFar))
+
+        case ((typedSoFar, envSoFar, cstsSoFar), FieldPattern(field, Some(nextPat), fieldMeta)) =>
+           gather(nextPat, envSoFar).map {
+             case (typedPat, patEnv, patCst) =>
+               val fieldType = for {
+                 member <- members.find(_.name == fieldMeta.name)
+                 Type.Function(memberTpArgs) = member.typ.instantiate
+               } yield memberTpArgs.last
+
+               val fieldTypeCst = List(Equal(typedPat.meta.typ.typ, fieldType.get, meta.pos))
+
+               val typedFieldPat = FieldPattern(field, Some(typedPat), fieldMeta.withSimpleType(fieldType.get))
+
+               (typedSoFar :+ typedFieldPat, envSoFar ++ patEnv, cstsSoFar ++ patCst ++ fieldTypeCst)
+          }
       }
 
       typedPatterns.map {
         case (patterns, patEnv, patCsts) =>
-          trace(s"Constructor pattern $name", meta.pos, dataType)
-          (ConstrPattern(name, patterns.toList, meta.withSimpleType(dataType)), patEnv, patCsts)
+          trace(s"Constructor pattern ${alias.getOrElse(name)}", meta.pos, dataType)
+          val constrEnv = alias.map { a => patEnv.withType(a, TypeScheme(dataType)) }.getOrElse(patEnv)
+          (ConstrPattern(name, alias, patterns.toList, meta.withSimpleType(dataType)), constrEnv, patCsts)
       }
   }
 
@@ -146,7 +145,7 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
   ): Infer[(MatchCase[Meta.Typed], List[Constraint])] = matchCase match {
     case MatchCase(pattern, resultExpr, meta) =>
       for {
-        (p, patEnv, pCsts) <- gather(pattern, None, env)
+        (p, patEnv, pCsts) <- gather(pattern, env)
         (r, rCsts) <- gather(resultExpr, patEnv)
         checked = MatchCase(p, r, meta.withType(r.meta.typ))
       } yield (checked, pCsts ++ rCsts)
@@ -430,9 +429,14 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
               constrMember = constrMeta.name -> paramMeta.withType(fnType)
             } yield constrMember
 
+            val emptyConstrs = for {
+              DataConstructor(name, params, _, constrMeta) <- cases
+              if params.isEmpty
+            } yield constrMeta.name -> List.empty[Meta.Typed]
+
             val allMembers = dataMembers ++ constrMembers
 
-            allMembers.groupMap(_._1)(_._2)
+            allMembers.groupMap(_._1)(_._2) ++ emptyConstrs
 
           case _ =>
             List.empty

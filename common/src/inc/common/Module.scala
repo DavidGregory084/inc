@@ -56,9 +56,14 @@ final case class Module[A](
           constrMember = constrMeta.name -> paramMeta
         } yield constrMember
 
+        val emptyConstrs = for {
+          DataConstructor(name, params, _, constrMeta) <- cases
+          if params.isEmpty
+        } yield constrMeta.name -> List.empty[Meta.Untyped]
+
         val allMembers = dataMembers ++ constrMembers
 
-        allMembers.groupMap(_._1)(_._2)
+        allMembers.groupMap(_._1)(_._2) ++ emptyConstrs
 
       case _ =>
         List.empty
@@ -109,9 +114,14 @@ final case class Module[A](
           constrMember = constrMeta.name -> paramMeta.copy(typ = fnType)
         } yield constrMember
 
+        val emptyConstrs = for {
+          DataConstructor(name, params, _, constrMeta) <- cases
+          if params.isEmpty
+        } yield constrMeta.name -> List.empty[Meta.Typed]
+
         val allMembers = dataMembers ++ constrMembers
 
-        allMembers.groupMap(_._1)(_._2)
+        allMembers.groupMap(_._1)(_._2) ++ emptyConstrs
 
       case _ =>
         List.empty

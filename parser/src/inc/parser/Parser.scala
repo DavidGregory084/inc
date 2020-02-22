@@ -22,20 +22,20 @@ class ExprParser(typeEnv: Map[String, Type]) {
 
   def constrPattern[_: P]: P[Pattern[Pos]] = P(
     Index ~
-      reference ~ "{" ~/ pattern.rep(sep = comma./) ~ "}" ~
+      (identifier ~ "@").? ~ reference ~ "{" ~/ fieldPattern.rep(sep = comma./) ~ "}" ~
       Index
   ).map {
-    case (from, ref, patterns, to) =>
-      ConstrPattern(ref.fullName, patterns.toList, Pos(from, to))
+    case (from, alias, ref, patterns, to) =>
+      ConstrPattern(ref.fullName, alias, patterns.toList, Pos(from, to))
   }
 
-  def aliasPattern[_: P]: P[Pattern[Pos]] = P(
+  def fieldPattern[_: P]: P[FieldPattern[Pos]] = P(
     Index ~
-      identifier ~ "@" ~/ pattern ~
+      identifier ~ (":" ~/ pattern).? ~
       Index
   ).map {
-    case (from, alias, pat, to) =>
-      AliasPattern(pat, alias, Pos(from, to))
+    case (from, field, pattern, to) =>
+      FieldPattern(field, pattern, Pos(from, to))
   }
 
   def idPattern[_: P]: P[Pattern[Pos]] = P(
@@ -45,7 +45,7 @@ class ExprParser(typeEnv: Map[String, Type]) {
       IdentPattern(name, Pos(from, to))
   }
 
-  def pattern[_: P]: P[Pattern[Pos]] = P( constrPattern | aliasPattern | idPattern )
+  def pattern[_: P]: P[Pattern[Pos]] = P( constrPattern | idPattern )
 
   def matchCase[_: P] = P(
     Index ~

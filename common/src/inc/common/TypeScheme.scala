@@ -30,7 +30,7 @@ case class TypeScheme(bound: List[TypeVariable], typ: Type) {
     if (bound.isEmpty)
       typ
     else {
-      val freshVars = bound.map(_ => TypeVariable())
+      val freshVars = bound.map(b => TypeVariable(b.kind))
       val subst = bound.map(_.forgetPos).zip(freshVars)
       typ.substitute(subst.toMap)
     }
