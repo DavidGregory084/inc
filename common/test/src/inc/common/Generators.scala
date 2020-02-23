@@ -140,7 +140,7 @@ trait Generators { self: Matchers =>
             // Constructors can be shadowed by lambda params
             env.names(m.name.shortName).isInstanceOf[ConstrName]
           }
-          TypeScheme(_, TypeApply(TypeConstructor("->", _, _), tpArgs, _, _)) = constrMeta.typ
+          TypeScheme(_, Type.Function(tpArgs)) = constrMeta.typ
           args <- tpArgs.init.traverse(tp => genArg(tp)(env))
         } yield Apply(Reference(List.empty, constrMeta.name.shortName, constrMeta), args, Meta.Typed(NoName, TypeScheme(tpArgs.last), Pos.Empty))
       case _ =>
@@ -163,7 +163,7 @@ trait Generators { self: Matchers =>
 
       lambdaMeta = Meta.Typed(lam, env.types(lam.shortName), Pos.Empty)
 
-      TypeScheme(_, TypeApply(TypeConstructor("->", _, _), tpArgs, _, _)) = lambdaMeta.typ
+      TypeScheme(_, Type.Function(tpArgs)) = lambdaMeta.typ
 
       args <- tpArgs.init.traverse(tp => genArg(tp)(env))
 
@@ -241,7 +241,7 @@ trait Generators { self: Matchers =>
 
       (constrAlias, constrPatName) = if (useAlias) (Some(alias), LocalName(alias)) else (None, NoName)
 
-      TypeScheme(bound, TypeApply(TypeConstructor("->", _, _), tpArgs, _, _)) = constr.typ
+      TypeScheme(bound, Type.Function(tpArgs)) = constr.typ
 
       constrType = TypeScheme(bound, tpArgs.last)
 
@@ -264,7 +264,7 @@ trait Generators { self: Matchers =>
 
       constrMeta <- Gen.oneOf(env.members(data))
 
-      TypeScheme(_, TypeApply(TypeConstructor("->", _, _), tpArgs, _, _)) = constrMeta.typ
+      TypeScheme(_, Type.Function(tpArgs)) = constrMeta.typ
 
       args <- tpArgs.init.traverse(tp => genArg(tp)(env))
 

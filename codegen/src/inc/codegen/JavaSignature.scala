@@ -122,7 +122,7 @@ object JavaSignature {
     case TypeApply(tv @ InferredTypeVariable(_, _, _), _, _, _) =>
       visitor.visitTypeVariable(tv.name)
 
-    case TypeApply(TypeConstructor("->", _, _), params, _, _) =>
+    case Type.Function(params) =>
       val fnType = AsmType.getType(Asm.functionClass(params.length - 1))
 
       visitor.visitClassType(fnType.getInternalName())
@@ -193,7 +193,7 @@ object JavaSignature {
     case TypeApply(tv @ InferredTypeVariable(_, _, _), _, _, _) =>
       visitor.visitTypeVariable(tv.name)
 
-    case TypeApply(TypeConstructor("->", _, _), params, _, _) =>
+    case Type.Function(params) =>
       val fnType = AsmType.getType(Asm.functionClass(params.length - 1))
 
       visitor.visitClassType(fnType.getInternalName())

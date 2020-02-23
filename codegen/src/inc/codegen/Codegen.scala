@@ -597,7 +597,7 @@ class Codegen(verifyCodegen: Boolean) {
           _ = Asm.visitLocals(exprEnv)
         } yield classEnv.methodWriter.putStatic(modType, let.name, matType)
       case Lambda(params, body, meta) =>
-        val TypeScheme(_, TypeApply(TypeConstructor("->", _, _), tpArgs, _, _)) = meta.typ
+        val TypeScheme(_, Type.Function(tpArgs)) = meta.typ
         val argMapping = params.zipWithIndex.map { case (param, idx) => (param.meta.name, idx) }.toMap
 
         val methodTypeArgs = tpArgs.map(Asm.asmType(classEnv, _))

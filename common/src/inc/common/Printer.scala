@@ -76,9 +76,9 @@ object Printer {
       Doc.text(nm)
     case TypeApply(typ, params, _, _) if params.isEmpty =>
       print(typ)
-    case TypeApply(TypeConstructor("->", _, _), params, _, _) =>
+    case Type.Function(params) =>
       val withParens = params.headOption match {
-        case Some(ta @ TypeApply(TypeConstructor("->", _, _), _, _, _)) =>
+        case Some(ta @ Type.Function(_)) =>
           print(ta).tightBracketBy(Doc.char('('), Doc.char(')'))
         case Some(other) =>
           print(other)

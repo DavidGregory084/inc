@@ -190,7 +190,7 @@ object Asm {
         AsmType.getType(classOf[String])
       case TypeConstructor("Unit", _, _) =>
         AsmType.getType(classOf[IncUnit])
-      case TypeApply(TypeConstructor("->", _, _), params, _, _) =>
+      case Type.Function(params) =>
         AsmType.getType(functionClass(params.length - 1))
       case TypeApply(typ, _, _, _) =>
         boxedAsmType(classEnv, typ)
@@ -222,7 +222,7 @@ object Asm {
         AsmType.getType(classOf[String])
       case TypeConstructor("Unit", _, _) =>
         AsmType.getType(classOf[IncUnit])
-      case TypeApply(TypeConstructor("->", _, _), params, _, _) =>
+      case Type.Function(params) =>
         AsmType.getType(functionClass(params.length - 1))
       case TypeApply(typ, _, _, _) =>
         asmType(classEnv, typ)

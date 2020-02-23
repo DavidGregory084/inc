@@ -136,7 +136,7 @@ object Type {
   val Unit = TypeConstructor("Unit", Atomic)
 
   def isFunction(typ: Type) = typ match {
-    case TypeApply(TypeConstructor("->", _, _), _, _, _) =>
+    case Type.Function(_) =>
       true
     case _ =>
       false
