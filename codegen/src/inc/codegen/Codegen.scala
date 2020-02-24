@@ -202,11 +202,26 @@ class Codegen(verifyCodegen: Boolean) {
         case MemberName(_, _, name) =>
           if (Type.isFunction(meta.typ.typ)) {
             // Member functions are encoded as static methods
+            val Type.Function(tpArgs) = meta.typ.typ
+            val lambdaType = Asm.asmType(classEnv, meta.typ.typ)
+            val boxedAsmTypes = tpArgs.map(Asm.boxedAsmType(classEnv, _))
+            val objType = AsmType.getType(classOf[Object])
             val declaredType = classEnv.typeEnvironment.types(ref.fullName)
             // In order to load a reference to a static method, we need to construct a method reference
             val methodHandle = Asm.methodHandle(classEnv, meta.copy(typ = declaredType))
-            // This allows us to push the method onto the stack as if it was a function object
-            classEnv.methodWriter.push(methodHandle)
+            // This allows us to call the invokedynamic opcode to construct a function object
+            classEnv.methodWriter.invokeDynamic(
+              // Interface method name
+              "apply",
+              // Lambda callsite descriptor
+              AsmType.getMethodDescriptor(lambdaType),
+              // Bootstrap method handle
+              Asm.BootstrapMethodHandle,
+              // Bootstrap method arguments
+              AsmType.getMethodType(objType, tpArgs.init.as(objType): _*),           // samMethodType
+              methodHandle,                                                     // implMethod
+              AsmType.getMethodType(boxedAsmTypes.last, boxedAsmTypes.init: _*) // instantiatedMethodType
+            )
             classEnv.asRight
           } else {
             // Normal members are simply static fields
@@ -217,11 +232,26 @@ class Codegen(verifyCodegen: Boolean) {
 
         case ConstrName(_, _, _, _) =>
           // Constructor functions are encoded as static methods
+          val Type.Function(tpArgs) = meta.typ.typ
+          val lambdaType = Asm.asmType(classEnv, meta.typ.typ)
+          val boxedAsmTypes = tpArgs.map(Asm.boxedAsmType(classEnv, _))
+          val objType = AsmType.getType(classOf[Object])
           val declaredType = classEnv.typeEnvironment.types(ref.fullName)
           // In order to load a reference to a static method, we need to construct a method reference
           val methodHandle = Asm.methodHandle(classEnv, meta.copy(typ = declaredType))
-          // This allows us to push the method onto the stack as if it was a function object
-          classEnv.methodWriter.push(methodHandle)
+          // This allows us to call the invokedynamic opcode to construct a function object
+          classEnv.methodWriter.invokeDynamic(
+            // Interface method name
+            "apply",
+            // Lambda callsite descriptor
+            AsmType.getMethodDescriptor(lambdaType),
+            // Bootstrap method handle
+            Asm.BootstrapMethodHandle,
+            // Bootstrap method arguments
+            AsmType.getMethodType(objType, tpArgs.init.as(objType): _*),           // samMethodType
+            methodHandle,                                                     // implMethod
+            AsmType.getMethodType(boxedAsmTypes.last, boxedAsmTypes.init: _*) // instantiatedMethodType
+          )
           classEnv.asRight
 
         case LocalName(nm) =>

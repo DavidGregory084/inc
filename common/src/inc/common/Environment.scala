@@ -9,8 +9,8 @@ import scala.Predef.ArrowAssoc
 case class Environment[A](
   names: Map[String, Name] = Map.empty,
   types: Map[String, TypeScheme] = Map.empty,
+  kinds: Map[String, Kind] = Map.empty,
   members: Map[Name, List[A]] = Map.empty[Name, List[A]],
-  kinds: Map[String, Kind] = Map.empty
 ) {
   def withName(name: String, fullName: Name) =
     copy(names = names.updated(name, fullName))
@@ -36,6 +36,7 @@ case class Environment[A](
     Environment(
       names.map { case (nm, fullName) => (prefix + "." + nm) -> fullName },
       types.map { case (nm, typ) => (prefix + "." + nm) -> typ.prefixed(prefix) },
+      kinds.map { case (nm, kind) => (prefix + "." + nm) -> kind },
       members.map { case (nm, mbrs) =>
         nm -> mbrs.map { m =>
           val typedMeta = eqv(m)
@@ -43,7 +44,6 @@ case class Environment[A](
             typ = typedMeta.typ.prefixed(prefix))
         }
       },
-      kinds.map { case (nm, kind) => (prefix + "." + nm) -> kind }
     )
   }
 
@@ -51,8 +51,8 @@ case class Environment[A](
     Environment(
       names ++ env.names,
       types ++ env.types,
+      kinds ++ env.kinds,
       members ++ env.members,
-      kinds ++ env.kinds
     )
   }
 
@@ -60,14 +60,14 @@ case class Environment[A](
     Environment(
       names.view.filterKeys(pred).toMap,
       types.view.filterKeys(pred).toMap,
-      members,
       kinds.view.filterKeys(pred).toMap,
+      members,
     )
   }
 
   def forgetMemberTypes(implicit eqv: A =:= Meta.Typed): Environment[Meta.Untyped] = {
     val untypedMembers = members.view.mapValues { _.map(_.forgetType) }.toMap
-    Environment(names, types, untypedMembers, kinds)
+    Environment(names, types, kinds, untypedMembers)
   }
 }
 

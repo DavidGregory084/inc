@@ -227,6 +227,11 @@ class Kindchecker(context: Printer.SourceContext, isTraceEnabled: Boolean) exten
   }
 
   def kindcheck(data: Data[Meta.Typed], env: Environment[Meta.Typed]): Infer[(Data[Meta.Typed], Environment[Meta.Typed])] = {
+
+    if (isTraceEnabled) {
+      trace("Initial kind environment", env.kinds)
+    }
+
     for {
       csts <- gather(data, env)
 

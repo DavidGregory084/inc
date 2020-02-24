@@ -69,7 +69,7 @@ final case class Module[A](
         List.empty
     }
 
-    val env = Environment(names.toMap, Map.empty, members.toMap, Map.empty)
+    val env = Environment(names.toMap, Map.empty, Map.empty, members.toMap)
 
     envFrom(env)
   }
@@ -132,7 +132,7 @@ final case class Module[A](
         name -> meta.typ.typ.kind
     }
 
-    val env = Environment(names.toMap, types.toMap, members.toMap, kinds.toMap)
+    val env = Environment(names.toMap, types.toMap, kinds.toMap, members.toMap)
 
     envFrom(env)
   }
