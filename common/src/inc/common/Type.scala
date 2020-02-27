@@ -135,6 +135,8 @@ object Type {
   val Module = TypeConstructor("Module", Atomic)
   val Unit = TypeConstructor("Unit", Atomic)
 
+  val builtInTypes = Set(Int, Long, Float, Double, Boolean, Char, String, Module, Unit)
+
   def isFunction(typ: Type) = typ match {
     case Type.Function(_) =>
       true

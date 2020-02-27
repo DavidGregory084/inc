@@ -5,12 +5,13 @@ import inc.common._
 import cats.data.Chain
 import cats.instances.either._
 import cats.instances.list._
+import cats.syntax.either._
 import cats.syntax.foldable._
 import cats.syntax.functor._
 import org.typelevel.paiges._
 import java.lang.String
 import scala.{ Boolean, Some, None, Right, StringContext }
-import scala.collection.immutable.List
+import scala.collection.immutable.{ List, Map }
 import scala.Predef.ArrowAssoc
 import com.typesafe.scalalogging.LazyLogging
 
@@ -390,75 +391,74 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
             (checkedLet, env, constraints)
         }
       case data @ Data(_, _, _, _) =>
-        val checkedData = data.withAscribedTypes
-        kindchecker.kindcheck(checkedData, env).map {
-          case (kindCheckedData, updatedEnv) =>
-            (kindCheckedData, updatedEnv, List.empty)
-        }
+        (data.withAscribedTypes, env, List.empty).asRight
     }
+
+  def initialPass(
+    module: Module[Meta.Untyped],
+    decls: List[TopLevelDeclaration[Meta.Untyped]],
+    importedEnv: Environment[Meta.Typed]
+  ): Infer[(Environment[Meta.Typed], Map[KindVariable, Kind])] = {
+
+    val initialEnv = importedEnv.withNames(module.symbolTable.names)
+
+    decls.foldM((initialEnv, Map.empty[KindVariable, Kind])) {
+
+      case ((env, subst), Let(name, _, _)) =>
+        (env.withType(name, TypeScheme(List.empty, TypeVariable())), subst).asRight
+
+      case ((env, subst), data @ Data(_, tparams, cases, dataMeta)) =>
+        val dataTypes = cases.map {
+          case DataConstructor(caseName, params, returnTyp, _) =>
+            val paramTypes = params.map(_.ascribedAs.get.typ)
+            val typeScheme = TypeScheme(tparams, Type.Function(paramTypes, returnTyp.typ))
+            caseName -> typeScheme
+        }.toMap
+
+        val dataMembers = for {
+          DataConstructor(caseName, params, _, caseMeta) <- cases
+          dataMember = dataMeta.name -> caseMeta.withType(dataTypes(caseName))
+        } yield dataMember
+
+        val constrMembers = for {
+          DataConstructor(_, params, returnTyp, constrMeta) <- cases
+          Param(_, ascribedAs, paramMeta) <- params
+          fnType = TypeScheme(tparams, Type.Function(List(returnTyp.typ), ascribedAs.get.typ))
+          constrMember = constrMeta.name -> paramMeta.withType(fnType)
+        } yield constrMember
+
+        val emptyConstrs = for {
+          DataConstructor(name, params, _, constrMeta) <- cases
+          if params.isEmpty
+        } yield constrMeta.name -> List.empty[Meta.Typed]
+
+        val allMembers = dataMembers ++ constrMembers
+
+        val groupedMembers = allMembers.groupMap(_._1)(_._2) ++ emptyConstrs
+
+        val updatedEnv = env
+          .withTypes(dataTypes)
+          .copy(members = env.members ++ groupedMembers)
+
+        kindchecker.kindcheck(data.withAscribedTypes, updatedEnv).map {
+          case (kindedEnv, updatedSubst) =>
+            (kindedEnv, subst ++ updatedSubst)
+        }
+
+    }
+  }
 
   def gather(
     module: Module[Meta.Untyped],
     importedEnv: Environment[Meta.Typed]
-  ): Infer[(Module[Meta.Typed], List[Constraint])] =
-    module match {
-      case Module(_, _, _, decls, meta) =>
-        val initialTypes = decls.flatMap {
-          case Let(name, _, _) =>
-            List(name -> TypeScheme(List.empty, TypeVariable()))
-          case Data(_, tparams, cases, _) =>
-            cases.map {
-              case DataConstructor(caseName, params, returnTyp, _) =>
-                val paramTypes = params.map(_.ascribedAs.get.typ)
-                val typeScheme = TypeScheme(tparams, Type.Function(paramTypes, returnTyp.typ))
-                caseName -> typeScheme
-            }
-        }.toMap
-
-        val initialMembers = decls.flatMap {
-          case Data(_, tparams, cases, dataMeta) =>
-            val dataMembers = for {
-              DataConstructor(caseName, params, _, caseMeta) <- cases
-              dataMember = dataMeta.name -> caseMeta.withType(initialTypes(caseName))
-            } yield dataMember
-
-            val constrMembers = for {
-              DataConstructor(_, params, returnTyp, constrMeta) <- cases
-              Param(_, ascribedAs, paramMeta) <- params
-              fnType = TypeScheme(tparams, Type.Function(List(returnTyp.typ), ascribedAs.get.typ))
-              constrMember = constrMeta.name -> paramMeta.withType(fnType)
-            } yield constrMember
-
-            val emptyConstrs = for {
-              DataConstructor(name, params, _, constrMeta) <- cases
-              if params.isEmpty
-            } yield constrMeta.name -> List.empty[Meta.Typed]
-
-            val allMembers = dataMembers ++ constrMembers
-
-            allMembers.groupMap(_._1)(_._2) ++ emptyConstrs
-
-          case _ =>
-            List.empty
-        }.toMap
-
-        val initialKinds = decls.collect {
-          case data @ Data(name, _, _, _) =>
-            name -> data.kind
-        }.toMap
-
-        val initialEnv = importedEnv ++ Environment(
-          names = module.symbolTable.names,
-          types = initialTypes,
-          members = initialMembers,
-          kinds = initialKinds
-        )
-
+  ): Infer[(Module[Meta.Typed], List[Constraint])] = {
+    initialPass(module, module.declarations, importedEnv).flatMap {
+      case (initialEnv, kindSubst) =>
         trace(context, "Initial environment", initialEnv)
 
         val emptyRes = (Chain.empty[TopLevelDeclaration[Meta.Typed]], initialEnv, List.empty[Constraint])
 
-        val constraintsFromDecls = decls.foldM(emptyRes) {
+        val constraintsFromDecls = module.declarations.foldM(emptyRes) {
           case ((checkedSoFar, envSoFar, constraintsSoFar), nextDecl) =>
             for {
               (checkedDecl, updatedEnv, constraints) <- gather(nextDecl, envSoFar)
@@ -471,12 +471,16 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
 
             trace("Constraints", constraints)
 
-            val mod = module.copy(
-              declarations = checked.toList,
-              meta = meta.withSimpleType(Type.Module)
-            )
+            val constraintsWithKinds =
+              constraints.map(_.substituteKinds(kindSubst).defaultKinds)
 
-            (mod, constraints)
+            val modWithKinds = module.copy(
+              declarations = checked.toList,
+              meta = module.meta.withSimpleType(Type.Module)
+            ).substituteKinds(kindSubst).defaultKinds
+
+            (modWithKinds, constraintsWithKinds)
         }
     }
+  }
 }

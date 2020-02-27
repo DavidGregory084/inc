@@ -49,11 +49,11 @@ trait ScalaSettingsModule extends TpolecatModule with PublishSettingsModule {
     super.scalacOptions() ++ Seq(
       "-Yno-imports",
       "-Yrangepos",
-      "-opt:l:method",
-      "-opt:l:inline",
+      // "-opt:l:method",
+      // "-opt:l:inline",
       // Inlining Float.parseFloat and Double.parseDouble causes
       // IllegalAccessError to jdk.internal.math.FloatingDecimal on JDK11
-      "-opt-inline-from:**:!java.lang.Double:!java.lang.Float"
+      // "-opt-inline-from:**:!java.lang.Double:!java.lang.Float"
     )
   }
 
@@ -85,7 +85,7 @@ object common extends ScalaSettingsModule {
     super.ivyDeps() ++ Agg(
       ivy"com.lihaoyi::pprint:0.5.9",
       ivy"com.lihaoyi::sourcecode:0.2.1",
-      ivy"org.typelevel::cats-core:2.1.0",
+      ivy"org.typelevel::cats-core:2.1.1",
       ivy"org.typelevel::paiges-core:0.3.0",
       ivy"com.typesafe.scala-logging::scala-logging:3.9.2"
     )

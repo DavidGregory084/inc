@@ -25,6 +25,16 @@ case class TypeOccursCheck(position: Pos, tyVar: TypeVariable, typ: Type)(implic
   }
 }
 
+case class TypeApplicationError(position: Pos, left: Type, right: Type)(implicit file: sourcecode.File, line: sourcecode.Line) extends TypeError(position) {
+  val message: String = {
+    val leftStr = Printer.print(left).render(80)
+    val rightStr = Printer.print(right).render(80)
+
+    val msg = s"${Red(leftStr)} does not unify with ${Red(rightStr)}: ${leftStr} has arity ${left.kind.arity}; ${rightStr} has arity ${right.kind.arity}"
+
+    Error.formatMessage(file, line, msg)
+  }
+}
 
 case class KindUnificationError(position: Pos, left: Kind, right: Kind)(implicit file: sourcecode.File, line: sourcecode.Line) extends TypeError(position) {
   val message: String = {
@@ -52,6 +62,8 @@ object TypeError {
     Left(List(TypeUnificationError(pos, left, right)))
   def typeOccursCheck(pos: Pos, tyVar: TypeVariable, typ: Type)(implicit file: sourcecode.File, line: sourcecode.Line): Either[List[TypeError], Nothing] =
     Left(List(TypeOccursCheck(pos, tyVar, typ)))
+  def typeApplication(pos: Pos, left: Type, right: Type)(implicit file: sourcecode.File, line: sourcecode.Line): Either[List[TypeError], Nothing] =
+    Left(List(TypeApplicationError(pos, left, right)))
   def kindUnification(pos: Pos, left: Kind, right: Kind)(implicit file: sourcecode.File, line: sourcecode.Line): Either[List[TypeError], Nothing] =
     Left(List(KindUnificationError(pos, left, right)))
   def kindOccursCheck(pos: Pos, kindVar: KindVariable, kind: Kind)(implicit file: sourcecode.File, line: sourcecode.Line): Either[List[TypeError], Nothing] =

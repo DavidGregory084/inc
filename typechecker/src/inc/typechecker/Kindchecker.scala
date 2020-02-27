@@ -69,9 +69,8 @@ class Kindchecker(context: Printer.SourceContext, isTraceEnabled: Boolean) exten
       List.empty
 
     case TypeConstructor(nm, kind, pos) =>
-      trace(s"Reference to $nm", kind, pos)
-
       val envKind = env.kinds.getOrElse(nm, kind)
+      trace(s"Reference to $nm", envKind, pos)
 
       if (kind != envKind)
         List(EqualKind(kind, envKind, pos))
@@ -226,7 +225,7 @@ class Kindchecker(context: Printer.SourceContext, isTraceEnabled: Boolean) exten
     }
   }
 
-  def kindcheck(data: Data[Meta.Typed], env: Environment[Meta.Typed]): Infer[(Data[Meta.Typed], Environment[Meta.Typed])] = {
+  def kindcheck(data: Data[Meta.Typed], env: Environment[Meta.Typed]): Infer[(Environment[Meta.Typed], Substitution)] = {
 
     if (isTraceEnabled) {
       trace("Initial kind environment", env.kinds)
@@ -253,6 +252,6 @@ class Kindchecker(context: Printer.SourceContext, isTraceEnabled: Boolean) exten
         trace("Final kind environment", updatedEnv)
       }
 
-    } yield (checkedData, env.withKinds(updatedEnv))
+    } yield (env.withKinds(updatedEnv), subst)
   }
 }

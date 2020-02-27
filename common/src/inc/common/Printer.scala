@@ -22,18 +22,16 @@ object Printer {
       val header = blue.start + context.fileName + blue.end
 
       val before = context.source.substring(0, pos.from)
-      val highlighted = context.source.substring(pos.from, pos.to)
+      val toHighlight = context.source.substring(pos.from, pos.to)
       val after = context.source.substring(pos.to, context.source.length)
 
-      val dropBefore = before.count(c => c == '\r' || c == '\n')
-      val dropAfter = after.count(c => c == '\r' || c == '\n')
+      val dropBefore = before.split("\\r?\\n").length - 1
+      val dropAfter = after.split("\\r?\\n").length - 1
 
       val highlightedString = {
-        val highlightedLines = highlighted.split("\\r?\\n")
-        val firstLine = highlightedLines.head
-        val remaining = highlightedLines.tail.map(highlight.start + _)
-        val fullyHighlighted = (firstLine +: remaining).mkString(System.lineSeparator)
-        before + highlight.start + fullyHighlighted + highlight.end + after
+        val linesToHighlight = toHighlight.split("\\r?\\n")
+        val linesWithHighlight = linesToHighlight.map(highlight.start + _ + highlight.end)
+        before + linesWithHighlight.mkString(System.lineSeparator) + after
       }
 
       val allLines = highlightedString.split("\\r?\\n")

@@ -72,5 +72,9 @@ case class Environment[A](
 }
 
 object Environment {
-  def empty[A] = Environment[A]()
+  def empty[A] = Environment[A](
+    kinds = Type.builtInTypes
+      .map(tp => tp.name -> tp.kind)
+      .toMap
+  )
 }

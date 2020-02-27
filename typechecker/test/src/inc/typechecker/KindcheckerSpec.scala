@@ -42,7 +42,7 @@ class KindcheckerSpec extends FlatSpec with Matchers {
 
     val ctx = Printer.SourceContext(80, "Bool.inc", Printer.print(data).render(80))
     val checker = new Kindchecker(ctx, false)
-    val actual = checker.kindcheck(data, Environment.empty[Meta.Typed]).map(_._1)
+    val subst = checker.kindcheck(data, Environment.empty[Meta.Typed]).map(_._2)
 
     val expectedData = mkData("Bool", List.empty, Some(`*`)) { data =>
       List(
@@ -50,6 +50,8 @@ class KindcheckerSpec extends FlatSpec with Matchers {
         mkConstr("False", List.empty, data)
       )
     }
+
+    val actual = subst.map { s => data.substituteKinds(s).defaultKinds }
 
     val expected = Right(expectedData.defaultKinds)
 
@@ -72,7 +74,7 @@ class KindcheckerSpec extends FlatSpec with Matchers {
 
     val ctx = Printer.SourceContext(80, "List.inc", Printer.print(data).render(80))
     val checker = new Kindchecker(ctx, false)
-    val actual = checker.kindcheck(data, Environment.empty[Meta.Typed]).map(_._1)
+    val subst = checker.kindcheck(data, Environment.empty[Meta.Typed]).map(_._2)
 
     val expectedTyVar = TypeVariable.named("A", kind = `*`)
     val expectedListTy = TypeApply(TypeConstructor("List", `* -> *`), List(expectedTyVar), `*`)
@@ -84,6 +86,7 @@ class KindcheckerSpec extends FlatSpec with Matchers {
         mkConstr("Nil", List.empty, data))
     }
 
+    val actual = subst.map { s => data.substituteKinds(s).defaultKinds }
     val expected = Right(expectedData.defaultKinds)
 
     actual shouldBe expected
@@ -100,7 +103,7 @@ class KindcheckerSpec extends FlatSpec with Matchers {
 
     val ctx = Printer.SourceContext(80, "Fix.inc", Printer.print(data).render(80))
     val checker = new Kindchecker(ctx, false)
-    val actual = checker.kindcheck(data, Environment.empty[Meta.Typed]).map(_._1)
+    val subst = checker.kindcheck(data, Environment.empty[Meta.Typed]).map(_._2)
 
     val expectedTyVar = TypeVariable.named("F", kind = `* -> *`)
     val expectedFixTy = TypeApply(TypeConstructor("Fix", `(* -> *) -> *`), List(expectedTyVar), `*`)
@@ -110,6 +113,7 @@ class KindcheckerSpec extends FlatSpec with Matchers {
       List(mkConstr("Fix", List(mkParam("unfix", expectedUnfixTy)), data))
     }
 
+    val actual = subst.map { s => data.substituteKinds(s).defaultKinds }
     val expected = Right(expectedData.defaultKinds)
 
     actual shouldBe expected
@@ -131,7 +135,7 @@ class KindcheckerSpec extends FlatSpec with Matchers {
     val ctx = Printer.SourceContext(80, "NonEmptyList.inc", Printer.print(data).render(80))
     val checker = new Kindchecker(ctx, false)
     val env = Environment.empty[Meta.Typed].withKind("List", `* -> *`)
-    val actual = checker.kindcheck(data, env).map(_._1)
+    val subst = checker.kindcheck(data, env).map(_._2)
 
     val expectedTyVar = TypeVariable.named("A", kind = `*`)
     val expectedListTy = TypeApply(TypeConstructor("List", `* -> *`), List(expectedTyVar), `*`)
@@ -144,6 +148,7 @@ class KindcheckerSpec extends FlatSpec with Matchers {
       )
     }
 
+    val actual = subst.map { s => data.substituteKinds(s).defaultKinds }
     val expected = Right(expectedData.defaultKinds)
 
     actual shouldBe expected
@@ -165,8 +170,9 @@ class KindcheckerSpec extends FlatSpec with Matchers {
     val ctx = Printer.SourceContext(80, "NonEmptyList.inc", Printer.print(data).render(80))
     val checker = new Kindchecker(ctx, false)
     val env = Environment.empty[Meta.Typed].withKind("List", `* -> *`)
-    val actual = checker.kindcheck(data, env).map(_._1)
+    val subst = checker.kindcheck(data, env).map(_._2)
 
+    val actual = subst.map { s => data.substituteKinds(s).defaultKinds }
     val expected = TypeError.kindUnification(Pos.Empty, `*`, `* -> *`)
 
     actual shouldBe expected

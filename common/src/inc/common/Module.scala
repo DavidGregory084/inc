@@ -69,7 +69,9 @@ final case class Module[A](
         List.empty
     }
 
-    val env = Environment(names.toMap, Map.empty, Map.empty, members.toMap)
+    val env = Environment.empty
+      .withNames(names)
+      .copy(members = members.toMap)
 
     envFrom(env)
   }
@@ -132,7 +134,11 @@ final case class Module[A](
         name -> meta.typ.typ.kind
     }
 
-    val env = Environment(names.toMap, types.toMap, kinds.toMap, members.toMap)
+    val env = Environment.empty
+      .withNames(names)
+      .withTypes(types)
+      .withKinds(kinds)
+      .copy(members = members.toMap)
 
     envFrom(env)
   }
@@ -144,6 +150,19 @@ final case class Module[A](
       val from = to.flip
       this.map(a => from(to(a).substitute(subst)))
     }
+
+  def substituteKinds(subst: Map[KindVariable, Kind])(implicit to: A =:= Meta.Typed): Module[A] =
+    if (subst.isEmpty)
+      this
+    else {
+      val from = to.flip
+      this.map(a => from(to(a).substituteKinds(subst)))
+    }
+
+  def defaultKinds(implicit to: A =:= Meta.Typed): Module[A] = {
+    val from = to.flip
+    this.map(a => from(to(a).defaultKinds))
+  }
 }
 
 object Module {

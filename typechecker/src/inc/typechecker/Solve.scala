@@ -3,6 +3,7 @@ package inc.typechecker
 import inc.common._
 
 import cats.instances.either._
+import cats.syntax.either._
 import cats.syntax.flatMap._
 import com.typesafe.scalalogging.LazyLogging
 import org.typelevel.paiges._
@@ -38,6 +39,11 @@ class Solve(context: Printer.SourceContext, isTraceEnabled: Boolean) extends Laz
           val updatedTyVar = tyVar.substituteKinds(subst).asInstanceOf[TypeVariable]
           val updatedTyp = t.substituteKinds(subst)
           Map(updatedTyVar.forgetPos -> updatedTyp)
+        }.leftMap {
+          case KindUnificationError(pos, _, _) :: rest =>
+            TypeApplicationError(pos, tyVar, t) :: rest
+          case other =>
+            other
         }
       case _ =>
         Right(Map(tyVar.forgetPos -> typ))
