@@ -5,6 +5,7 @@ import scala.collection.immutable.Map
 
 sealed abstract class Constraint extends Product with Serializable {
   def pos: Pos
+;
   def substitute(subst: Map[TypeVariable, Type]): Constraint =
     if (subst.isEmpty)
       this

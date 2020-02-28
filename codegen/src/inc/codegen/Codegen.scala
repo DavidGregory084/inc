@@ -466,9 +466,10 @@ class Codegen(verifyCodegen: Boolean) {
       val boxedAsmTypes = tpArgs.map(Asm.boxedAsmType(classEnv, _))
 
       val prependedParams = capturedVarsIndexed.map {
-        case (arg, idx) =>
+        case (v, idx) =>
           val newName = "captured$" + idx.toString
-          Param(newName, None, arg.meta.copy(name = LocalName(newName)))
+          val newMeta = v.meta.copy(name = LocalName(newName))
+          Param(newName, None, newMeta)
       }
 
       val allParams = prependedParams ++ params
@@ -477,7 +478,7 @@ class Codegen(verifyCodegen: Boolean) {
       // with the new arguments that we have prepended to the function's arguments list
       val capturedVarSubstitution = capturedVarsIndexed.map {
         case (v, idx) =>
-          val oldVar = v.copy(meta = v.meta.forgetPos)
+          val oldVar = v.meta.name
           val newName = "captured$" + idx.toString
           val newMeta = v.meta.copy(name = LocalName(newName))
           val newVar = Reference(List.empty, newName, newMeta)

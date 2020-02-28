@@ -10,7 +10,7 @@ import scala.Predef.wrapRefArray
 sealed abstract class Expr[A] extends Product with Serializable {
   def meta: A
 
-  def capturedVariables(implicit eqv: A =:= Meta.Typed): Set[Reference[Meta.Typed]] = this match {
+  def capturedVariables(implicit eqv: A =:= Meta.Typed): Set[Reference[A]] = this match {
     case LiteralInt(_, _) => Set.empty
     case LiteralLong(_, _) => Set.empty
     case LiteralFloat(_, _) => Set.empty
@@ -19,27 +19,32 @@ sealed abstract class Expr[A] extends Product with Serializable {
     case LiteralString(_, _) => Set.empty
     case LiteralChar(_, _) => Set.empty
     case LiteralUnit(_) => Set.empty
-    case Reference(mod, nm, meta) =>
-      Set(Reference(mod, nm, eqv(meta)))
+    case ref @ Reference(_, _, _) =>
+      Set(ref)
     case If(cond, thenExpr, elseExpr, _) =>
-      cond.capturedVariables ++ thenExpr.capturedVariables ++ elseExpr.capturedVariables
+      cond.capturedVariables ++
+        thenExpr.capturedVariables ++
+        elseExpr.capturedVariables
     case Lambda(params, body, _) =>
-      val lambdaParams = params.map(p => Reference(List.empty, p.name, eqv(p.meta).forgetPos))
-      val capturedInBody = body.capturedVariables.map(v => v.copy(meta = v.meta.forgetPos))
-      capturedInBody -- lambdaParams
+      val lambdaParams = params.map(_.meta.name)
+      body.capturedVariables.filterNot { captured =>
+        lambdaParams.contains(captured.meta.name)
+      }
     case Apply(fn, args, _) =>
-      fn.capturedVariables ++ args.flatMap(_.capturedVariables)
+      fn.capturedVariables ++
+        args.flatMap(_.capturedVariables)
     case Ascription(expr, _, _) =>
       expr.capturedVariables
     case Match(matchExpr, cases, _) =>
       matchExpr.capturedVariables ++ cases.flatMap {
         case MatchCase(pattern, resultExpr, _) =>
-          resultExpr.capturedVariables
-            .filterNot(v => pattern.boundVariables.contains(v.meta.name))
+          resultExpr.capturedVariables.filterNot { captured =>
+            pattern.boundVariables.contains(captured.meta.name)
+          }
       }
   }
 
-  def replace(mapping: Map[Reference[A], Reference[A]])(implicit to: A =:= Meta.Typed): Expr[A] = this match {
+  def replace(mapping: Map[Name, Reference[A]])(implicit to: A =:= Meta.Typed): Expr[A] = this match {
     case int @ LiteralInt(_, _) => int
     case long @ LiteralLong(_, _) => long
     case flt @ LiteralFloat(_, _) => flt
@@ -49,9 +54,8 @@ sealed abstract class Expr[A] extends Product with Serializable {
     case chr @ LiteralChar(_, _) => chr
     case unit @ LiteralUnit(_) => unit
     case ref @ Reference(_, _, _) =>
-      val from = to.flip
       mapping.getOrElse(
-        ref.copy(meta = from(to(meta).forgetPos)),
+        meta.name,
         ref
       )
     case ifExpr @ If(cond, thenExpr, elseExpr, _) =>
@@ -125,7 +129,159 @@ sealed abstract class Expr[A] extends Product with Serializable {
       this
     else {
       val from = to.flip
-      this.map(a => from(to(a).substitute(subst)))
+      val typedMeta = from(meta.substitute(subst))
+      this match {
+        case lit @ LiteralInt(_, _) =>
+          lit.copy(meta = typedMeta)
+        case lit @ LiteralLong(_, _) =>
+          lit.copy(meta = typedMeta)
+        case lit @ LiteralFloat(_, _) =>
+          lit.copy(meta = typedMeta)
+        case lit @ LiteralDouble(_, _) =>
+          lit.copy(meta = typedMeta)
+        case lit @ LiteralBoolean(_, _) =>
+          lit.copy(meta = typedMeta)
+        case lit @ LiteralString(_, _) =>
+          lit.copy(meta = typedMeta)
+        case lit @ LiteralChar(_, _) =>
+          lit.copy(meta = typedMeta)
+        case lit @ LiteralUnit(_) =>
+          lit.copy(meta = typedMeta)
+        case ref @ Reference(_, _, _) =>
+          ref.copy(meta = typedMeta)
+        case If(cond, thenExpr, elseExpr, _) =>
+          If(
+            cond.substitute(subst),
+            thenExpr.substitute(subst),
+            elseExpr.substitute(subst),
+            typedMeta)
+        case Lambda(params, body, _) =>
+          Lambda(
+            params.map(_.substitute(subst)),
+            body.substitute(subst),
+            typedMeta)
+        case Apply(fn, args, _) =>
+          Apply(
+            fn.substitute(subst),
+            args.map(_.substitute(subst)),
+            typedMeta)
+        case Ascription(expr, ascribedAs, _) =>
+          Ascription(
+            expr.substitute(subst),
+            ascribedAs.substitute(subst),
+            typedMeta)
+        case Match(matchExpr, cases, _) =>
+          Match(
+            matchExpr.substitute(subst),
+            cases.map(_.map(meta => from(meta.substitute(subst)))),
+            typedMeta)
+      }
+    }
+  }
+
+  def defaultKinds(implicit to: A =:= Meta.Typed): Expr[A] = {
+    val from = to.flip
+    val typedMeta = from(meta.defaultKinds)
+    this match {
+      case lit @ LiteralInt(_, _) =>
+        lit.copy(meta = typedMeta)
+      case lit @ LiteralLong(_, _) =>
+        lit.copy(meta = typedMeta)
+      case lit @ LiteralFloat(_, _) =>
+        lit.copy(meta = typedMeta)
+      case lit @ LiteralDouble(_, _) =>
+        lit.copy(meta = typedMeta)
+      case lit @ LiteralBoolean(_, _) =>
+        lit.copy(meta = typedMeta)
+      case lit @ LiteralString(_, _) =>
+        lit.copy(meta = typedMeta)
+      case lit @ LiteralChar(_, _) =>
+        lit.copy(meta = typedMeta)
+      case lit @ LiteralUnit(_) =>
+        lit.copy(meta = typedMeta)
+      case ref @ Reference(_, _, _) =>
+        ref.copy(meta = typedMeta)
+      case If(cond, thenExpr, elseExpr, _) =>
+        If(
+          cond.defaultKinds,
+          thenExpr.defaultKinds,
+          elseExpr.defaultKinds,
+          typedMeta)
+      case Lambda(params, body, _) =>
+        Lambda(
+          params.map(_.defaultKinds),
+          body.defaultKinds,
+          typedMeta)
+      case Apply(fn, args, _) =>
+        Apply(
+          fn.defaultKinds,
+          args.map(_.defaultKinds),
+          typedMeta)
+      case Ascription(expr, ascribedAs, _) =>
+        Ascription(
+          expr.defaultKinds,
+          ascribedAs.defaultKinds,
+          typedMeta)
+      case Match(matchExpr, cases, _) =>
+        Match(
+          matchExpr.defaultKinds,
+          cases.map(_.map(meta => from(meta.defaultKinds))),
+          typedMeta)
+    }
+  }
+
+  def substituteKinds(subst: Map[KindVariable, Kind])(implicit to: A =:= Meta.Typed): Expr[A] = {
+    if (subst.isEmpty)
+      this
+    else {
+      val from = to.flip
+      val typedMeta = from(to(meta).substituteKinds(subst))
+      this match {
+        case lit @ LiteralInt(_, _) =>
+          lit.copy(meta = typedMeta)
+        case lit @ LiteralLong(_, _) =>
+          lit.copy(meta = typedMeta)
+        case lit @ LiteralFloat(_, _) =>
+          lit.copy(meta = typedMeta)
+        case lit @ LiteralDouble(_, _) =>
+          lit.copy(meta = typedMeta)
+        case lit @ LiteralBoolean(_, _) =>
+          lit.copy(meta = typedMeta)
+        case lit @ LiteralString(_, _) =>
+          lit.copy(meta = typedMeta)
+        case lit @ LiteralChar(_, _) =>
+          lit.copy(meta = typedMeta)
+        case lit @ LiteralUnit(_) =>
+          lit.copy(meta = typedMeta)
+        case ref @ Reference(_, _, _) =>
+          ref.copy(meta = typedMeta)
+        case If(cond, thenExpr, elseExpr, _) =>
+          If(
+            cond.substituteKinds(subst),
+            thenExpr.substituteKinds(subst),
+            elseExpr.substituteKinds(subst),
+            typedMeta)
+        case Lambda(params, body, _) =>
+          Lambda(
+            params.map(_.substituteKinds(subst)),
+            body.substituteKinds(subst),
+            typedMeta)
+        case Apply(fn, args, _) =>
+          Apply(
+            fn.substituteKinds(subst),
+            args.map(_.substituteKinds(subst)),
+            typedMeta)
+        case Ascription(expr, ascribedAs, _) =>
+          Ascription(
+            expr.substituteKinds(subst),
+            ascribedAs.substituteKinds(subst),
+            typedMeta)
+        case Match(matchExpr, cases, _) =>
+          Match(
+            matchExpr.substituteKinds(subst),
+            cases.map(_.map(meta => from(meta.substituteKinds(subst)))),
+            typedMeta)
+      }
     }
   }
 }
@@ -260,7 +416,7 @@ final case class MatchCase[A](
   resultExpr: Expr[A],
   meta: A
 ) {
-  def replace(mapping: Map[Reference[A], Reference[A]])(implicit to: A =:= Meta.Typed): MatchCase[A] =
+  def replace(mapping: Map[Name, Reference[A]])(implicit to: A =:= Meta.Typed): MatchCase[A] =
     copy(resultExpr = resultExpr.replace(mapping))
   def toProto(implicit eqv: A =:= Meta.Typed): proto.MatchCase =
     proto.MatchCase(pattern.toProto, resultExpr.toProto, Some(eqv(meta).toProto))

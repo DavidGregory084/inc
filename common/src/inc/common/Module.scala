@@ -143,25 +143,36 @@ final case class Module[A](
     envFrom(env)
   }
 
-  def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= Meta.Typed): Module[A] =
+  def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= Meta.Typed): Module[A] = {
     if (subst.isEmpty)
       this
     else {
       val from = to.flip
-      this.map(a => from(to(a).substitute(subst)))
+      val typedMeta = from(meta.substitute(subst))
+      copy(
+        declarations = declarations.map(_.substitute(subst)),
+        meta = typedMeta)
     }
+  }
 
-  def substituteKinds(subst: Map[KindVariable, Kind])(implicit to: A =:= Meta.Typed): Module[A] =
+  def substituteKinds(subst: Map[KindVariable, Kind])(implicit to: A =:= Meta.Typed): Module[A] = {
     if (subst.isEmpty)
       this
     else {
       val from = to.flip
-      this.map(a => from(to(a).substituteKinds(subst)))
+      val typedMeta = from(meta.substituteKinds(subst))
+      copy(
+        declarations = declarations.map(_.substituteKinds(subst)),
+        meta = typedMeta)
     }
+  }
 
   def defaultKinds(implicit to: A =:= Meta.Typed): Module[A] = {
     val from = to.flip
-    this.map(a => from(to(a).defaultKinds))
+    val typedMeta = from(meta.defaultKinds)
+    copy(
+      declarations = declarations.map(_.defaultKinds),
+      meta = typedMeta)
   }
 }
 

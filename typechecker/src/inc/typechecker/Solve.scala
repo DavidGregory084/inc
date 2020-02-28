@@ -50,7 +50,6 @@ class Solve(context: Printer.SourceContext, isTraceEnabled: Boolean) extends Laz
     }
 
   def unify(left: Type, right: Type, pos: Pos): Infer[Substitution] = {
-
     if (isTraceEnabled) {
       val lStr = Printer.print(left)
       val rStr = Printer.print(right)
@@ -62,8 +61,8 @@ class Solve(context: Printer.SourceContext, isTraceEnabled: Boolean) extends Laz
 
     def go(left: Type, right: Type): Infer[Substitution] = {
       (left, right) match {
-        // case (TypeApply(_, largs, _, _), TypeApply(_, rargs, _, _)) if largs.length != rargs.length =>
-        //   TypeError.typeUnification(pos, left, right)
+        case (Type.Function(largs), Type.Function(rargs)) if largs.length != rargs.length =>
+          TypeError.typeUnification(pos, left, right)
 
         case (TypeApply(ltyp, largs, _, _), TypeApply(rtyp, rargs, _, _)) =>
           unify(ltyp, rtyp, pos).flatMap { outerSubst =>

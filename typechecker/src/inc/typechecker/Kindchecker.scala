@@ -170,7 +170,6 @@ class Kindchecker(context: Printer.SourceContext, isTraceEnabled: Boolean) exten
     }
 
   def unify(left: Kind, right: Kind, pos: Pos): Infer[Substitution] = {
-
     if (isTraceEnabled) {
       val lStr = Printer.print(left)
       val rStr = Printer.print(right)
@@ -242,7 +241,7 @@ class Kindchecker(context: Printer.SourceContext, isTraceEnabled: Boolean) exten
         logger.info(substMsg.render(context.consoleWidth))
       }
 
-      checkedData = data.substituteKinds(subst).defaultKinds
+      checkedData @ Data(_, _, _, _) = data.substituteKinds(subst).defaultKinds
 
       updatedEnv = checkedData.typeParams
         .map(tv => tv.name -> tv.kind)

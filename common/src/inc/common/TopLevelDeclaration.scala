@@ -32,8 +32,48 @@ sealed abstract class TopLevelDeclaration[A] extends Product with Serializable {
       this
     else {
       val from = to.flip
-      this.map(a => from(to(a).substitute(subst)))
+      val typedMeta = from(meta.substitute(subst))
+      this match {
+        case data @ Data(_, _, _, _) =>
+          data
+        case let @ Let(_, binding, _) =>
+          let.copy(
+            binding = binding.substitute(subst),
+            meta = from(typedMeta.substitute(subst)))
+      }
     }
+
+  def substituteKinds(subst: Map[KindVariable, Kind])(implicit to: A =:= Meta.Typed): TopLevelDeclaration[A] = {
+    val from = to.flip
+    val typedMeta = from(meta.substituteKinds(subst))
+    this match {
+      case data @ Data(_, typeParams, cases, _) =>
+        data.copy(
+          typeParams = typeParams.map(_.substituteKinds(subst).asInstanceOf[TypeVariable]),
+          cases = cases.map(_.substituteKinds(subst)),
+          meta = from(typedMeta.substituteKinds(subst)))
+      case let @ Let(_, binding, _) =>
+        let.copy(
+          binding = binding.substituteKinds(subst),
+          meta = from(typedMeta.substituteKinds(subst)))
+    }
+  }
+
+  def defaultKinds(implicit to: A =:= Meta.Typed): TopLevelDeclaration[A] = {
+    val from = to.flip
+    val typedMeta = from(meta.defaultKinds)
+    this match {
+      case data @ Data(_, typeParams, cases, _) =>
+        data.copy(
+          typeParams = typeParams.map(_.defaultKinds.asInstanceOf[TypeVariable]),
+          cases = cases.map(_.defaultKinds),
+          meta = from(typedMeta.defaultKinds))
+      case let @ Let(_, binding, _) =>
+        let.copy(
+          binding = binding.defaultKinds,
+          meta = from(typedMeta.defaultKinds))
+    }
+  }
 }
 
 object TopLevelDeclaration {
@@ -147,24 +187,6 @@ final case class Data[A](
     copy(
       cases = checkedCases,
       meta = meta.withType(typeScheme))
-  }
-
-  def defaultKinds(implicit to: A =:= Meta.Typed): Data[A] = {
-    val from = to.flip
-    val namePosType = to(meta)
-    copy(
-      typeParams = typeParams.map(_.defaultKinds.asInstanceOf[TypeVariable]),
-      cases = cases.map(_.defaultKinds),
-      meta = from(namePosType.defaultKinds))
-  }
-
-  def substituteKinds(subst: Map[KindVariable, Kind])(implicit to: A =:= Meta.Typed): Data[A] = {
-    val from = to.flip
-    val namePosType = to(meta)
-    copy(
-      typeParams = typeParams.map(_.substituteKinds(subst).asInstanceOf[TypeVariable]),
-      cases = cases.map(_.substituteKinds(subst)),
-      meta = from(namePosType.substituteKinds(subst)))
   }
 }
 

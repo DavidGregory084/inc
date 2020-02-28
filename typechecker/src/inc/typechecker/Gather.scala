@@ -469,10 +469,10 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
         constraintsFromDecls.map {
           case (checked, _, constraints) =>
 
-            trace("Constraints", constraints)
-
             val constraintsWithKinds =
               constraints.map(_.substituteKinds(kindSubst).defaultKinds)
+
+            trace("Constraints", constraintsWithKinds)
 
             val modWithKinds = module.copy(
               declarations = checked.toList,

@@ -83,4 +83,3 @@ object KindVariable {
   val nextId = new AtomicInteger(1)
   def apply(): KindVariable = KindVariable(nextId.getAndIncrement)
 }
-
