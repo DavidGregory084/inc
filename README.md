@@ -127,6 +127,28 @@ module Test/Data {
 }
 ```
 
+### Pattern matching
+
+```scala
+module Test/Data {
+  data Option[A] {
+    case Some(a: A)
+    case None()
+  }
+
+  data List[A] {
+    case Cons(head: A, tail: List[A])
+    case Nil()
+  }
+  
+  let last = list -> match list with {
+    case Cons { head, tail: Nil {} } -> Some(head)
+    case Cons { tail } -> last(tail)
+    case Nil {} -> None()
+  }
+}
+```
+
 ## Continuous Benchmarks
 
 ~~This project has a small benchmark suite which runs against every commit.~~
