@@ -1,4 +1,4 @@
-module Test/Data {
+module Test/Data/Bool {
   data Bool {
     case True()
     case False()

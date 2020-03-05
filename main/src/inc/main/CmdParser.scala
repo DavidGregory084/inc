@@ -2,7 +2,7 @@ package inc.main
 
 import java.lang.String
 import java.nio.file.{ Files, Paths }
-import scala.{ StringContext, Unit }
+import scala.{ Boolean, StringContext, Unit }
 import scala.util.control.NonFatal
 
 object CmdParser extends scopt.OptionParser[Configuration]("inc") {
@@ -62,6 +62,10 @@ object CmdParser extends scopt.OptionParser[Configuration]("inc") {
   opt[Unit]("verify-codegen")
     .text("Run a verifier on the code produced in codegen")
     .action((_, config) => config.copy(verifyCodegen = true))
+
+  opt[Boolean]("exit-on-error")
+    .text("Exit the Java VM with exit code 1 if an error occurs")
+    .action((exitOnError, config) => config.copy(exitOnError = exitOnError))
 
   arg[String]("<file>")
     .text("The source file to compile")

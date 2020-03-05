@@ -1,11 +1,17 @@
 import mill._
 import mill.scalalib._
 import mill.scalalib.publish._
-import mill.contrib.scalapblib._
 
 import ammonite.ops._
+import mill.api.{ Ctx, Result }
+import mill.define.Worker
+import mill.scalalib.api.CompilationResult
+import java.net.{ URI, URL, URLClassLoader }
 
-import $ivy.`com.lihaoyi::mill-contrib-buildinfo:0.5.2`
+import $ivy.`com.lihaoyi::mill-contrib-scalapblib:0.6.1`
+import mill.contrib.scalapblib._
+
+import $ivy.`com.lihaoyi::mill-contrib-buildinfo:0.6.1`
 import mill.contrib.BuildInfo
 
 import $ivy.`io.github.davidgregory084::mill-tpolecat:0.1.2`
@@ -306,4 +312,89 @@ object main extends ScalaSettingsModule with BuildInfo {
     override def moduleDeps =
       super.moduleDeps :+ common.test
   }
+}
+
+trait IncWorker {
+  def compile(files: Seq[PathRef], args: String*)(implicit ctx: Ctx): Result[Unit]
+}
+
+class IncWorkerImpl(classpath: Seq[PathRef]) extends IncWorker {
+  def compile(files: Seq[PathRef], args: String*)(implicit ctx: Ctx): Result[Unit] = {
+    val classpathUrls = classpath.map(_.path.toIO.toURI().toURL()).toArray[URL]
+    val classLoader = new URLClassLoader(classpathUrls, null)
+    val clazz = classLoader.loadClass("inc.main.Main")
+    val mainMethod = clazz.getMethod("main", classOf[Array[String]])
+    files.map { f =>
+      Result.create(mainMethod.invoke(null, (args :+ f.path.toIO.getAbsolutePath()).toArray[String]))
+    }.collectFirst {
+      case r @ Result.Exception(_, _) => r
+      case r @ Result.Aborted => Result.Aborted
+      case r @ Result.Skipped => Result.Skipped
+      case r @ Result.Failure(res, _) => Result.Failure(res, None)
+    }.getOrElse(Result.Success())
+  }
+}
+
+trait IncModule extends ScalaModule {
+  override def moduleDeps =
+    super.moduleDeps :+ main
+
+  override def scalaVersion = main.scalaVersion()
+
+  override def allSourceFiles = T.sources {
+    for {
+      sources <- allSources()
+      if os.exists(sources.path)
+      path <- if (os.isDir(sources.path)) os.walk(sources.path) else Seq(sources.path)
+      if os.isFile(path) && !path.last.startsWith(".") && path.ext.toLowerCase == "inc"
+    } yield PathRef(path)
+  }
+
+  def incWorker: Worker[IncWorker] = T.worker {
+    new IncWorkerImpl(compileClasspath().toSeq)
+  }
+
+  override def compile: T[CompilationResult] = T.task {
+    val ctx = T.ctx()
+    val dest = ctx.dest
+    val classes = dest / "classes"
+    os.makeDir.all(classes)
+
+    val classpathString = compileClasspath()
+      .map(_.path.toIO.toURI().toURL())
+      .mkString(java.io.File.separator)
+
+    val compileResults = incWorker().compile(
+      allSourceFiles(),
+      "--classpath", classpathString,
+      "--destination", classes.toString,
+      "--exit-on-error", "false"
+    )
+
+    val analysisFile = dest / "inc.analysis.dummy"
+    os.write(target = analysisFile, data = "", createFolders = true)
+
+    compileResults match {
+      case Result.Aborted =>
+        Result.Aborted
+      case Result.Skipped =>
+        Result.Skipped
+      case exception @ Result.Exception(_, _) =>
+        exception
+      case Result.Success(_) =>
+        Result.Success(CompilationResult(analysisFile, PathRef(classes)))
+      case Result.Failure(reason, value) =>
+        Result.Failure(reason, Some(CompilationResult(analysisFile, PathRef(classes))))
+    }
+  }
+
+  trait Test extends Tests {
+    def ivyDeps = Agg(ivy"com.novocode:junit-interface:0.11")
+    def testFrameworks = Seq("com.novocode.junit.JUnitFramework")
+  }
+}
+
+object bench extends IncModule {
+  override def allSources = T.sources { millSourcePath }
+  object test extends super.Test
 }

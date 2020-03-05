@@ -1,5 +1,5 @@
 module Test/Const {
-    let const = (a, b) -> a
+    let constant = (a, b) -> a
     let str = a -> "a"
-    let app = const(str(const(32, 43)), "a")
+    let app = constant(str(constant(32, 43)), "b")
 }

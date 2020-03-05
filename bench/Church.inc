@@ -11,4 +11,5 @@ module Test/Church {
     let exp = m -> n -> n(m)
     let tru = a -> b -> a
     let fals = a -> b -> b
+    let ifthenelse = p -> a -> b -> p(a)(b)
 }
