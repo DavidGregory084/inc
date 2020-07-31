@@ -7,7 +7,7 @@ import java.lang.{ Class, Object, String }
 import java.lang.invoke.{ CallSite, LambdaMetafactory, MethodType, MethodHandle, MethodHandles }
 import org.objectweb.asm.{ Attribute, ByteVector, ClassReader, ClassVisitor, ClassWriter, Label, Handle, Type => AsmType }
 import org.objectweb.asm.Opcodes._
-import org.objectweb.asm.commons.{ GeneratorAdapter, Method }
+import org.objectweb.asm.commons.Method
 import org.objectweb.asm.util.CheckClassAdapter
 import scala.{ Array, Byte, Char, Int, Unit }
 import scala.collection.immutable.List

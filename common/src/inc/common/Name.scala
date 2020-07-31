@@ -41,12 +41,12 @@ sealed abstract class Name extends Product with Serializable {
 
 object Name {
   def fromProto(name: proto.Name): Name = name match {
-    case proto.NoName() => NoName
-    case proto.LocalName(nm) => LocalName(nm)
-    case proto.ModuleName(pkg, mod) => ModuleName(pkg.toList, mod)
-    case proto.MemberName(pkg, mod, nm) => MemberName(pkg.toList, mod, nm)
-    case proto.DataName(pkg, mod, nm) => DataName(pkg.toList, mod, nm)
-    case proto.ConstrName(pkg, mod, data, nm) => ConstrName(pkg.toList, mod, data, nm)
+    case proto.NoName(_) => NoName
+    case proto.LocalName(nm, _) => LocalName(nm)
+    case proto.ModuleName(pkg, mod, _) => ModuleName(pkg.toList, mod)
+    case proto.MemberName(pkg, mod, nm, _) => MemberName(pkg.toList, mod, nm)
+    case proto.DataName(pkg, mod, nm, _) => DataName(pkg.toList, mod, nm)
+    case proto.ConstrName(pkg, mod, data, nm, _) => ConstrName(pkg.toList, mod, data, nm)
     case proto.Name.Empty => throw new Exception("Empty Name in protobuf")
   }
 }

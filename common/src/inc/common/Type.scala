@@ -161,11 +161,11 @@ object Type {
   }
 
   def fromProto(typ: proto.Type): Type = typ match {
-    case tyVar @ proto.TypeVariable(_) =>
+    case tyVar @ proto.TypeVariable(_, _) =>
       TypeVariable.fromProto(tyVar)
-    case proto.TypeConstructor(name, kind) =>
+    case proto.TypeConstructor(name, kind, _) =>
       TypeConstructor(name, Kind.fromProto(kind))
-    case proto.TypeApply(typ, params, kind) =>
+    case proto.TypeApply(typ, params, kind, _) =>
       TypeApply(
         Type.fromProto(typ),
         params.map(Type.fromProto).toList,
@@ -213,9 +213,9 @@ object TypeVariable {
   def apply(kind: Kind = Atomic, pos: Pos = Pos.Empty): TypeVariable =
     InferredTypeVariable(nextId.getAndIncrement, kind, pos)
   def fromProto(tyVar: proto.TypeVariable) = tyVar.tyVar match {
-    case proto.TypeVariable.TyVar.Named(proto.NamedTypeVariable(name, kind)) =>
+    case proto.TypeVariable.TyVar.Named(proto.NamedTypeVariable(name, kind, _)) =>
       NamedTypeVariable(name, Kind.fromProto(kind), Pos.Empty)
-    case proto.TypeVariable.TyVar.Inferred(proto.InferredTypeVariable(id, kind)) =>
+    case proto.TypeVariable.TyVar.Inferred(proto.InferredTypeVariable(id, kind, _)) =>
       InferredTypeVariable(id, Kind.fromProto(kind), Pos.Empty)
     case proto.TypeVariable.TyVar.Empty =>
       throw new Exception("Empty TypeVariable in protobuf")

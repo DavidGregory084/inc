@@ -1,9 +1,9 @@
 package inc.typechecker
 
 import inc.common._
-import org.scalatest._
+import munit.FunSuite
 
-class KindcheckerSpec extends FlatSpec with Matchers {
+class KindcheckerSpec extends FunSuite {
   val `*` = Atomic
   val `* -> *` = Parameterized(List(`*`), `*`)
   val `(* -> *) -> *` = Parameterized(List(`* -> *`), `*`)
@@ -32,7 +32,7 @@ class KindcheckerSpec extends FlatSpec with Matchers {
     data.copy(cases = cases)
   }
 
-  "Kindchecker" should "infer * for a simple data type" in {
+  test("Kindchecker should infer * for a simple data type") {
     val data = mkData("Bool", List.empty) { data =>
       List(
         mkConstr("True", List.empty, data),
@@ -55,10 +55,10 @@ class KindcheckerSpec extends FlatSpec with Matchers {
 
     val expected = Right(expectedData.defaultKinds)
 
-    actual shouldBe expected
+    assertEquals(actual, expected)
   }
 
-  it should "infer * -> * for a List-like data type" in {
+  test("Kindchecker should infer * -> * for a List-like data type") {
     val tyVar = TypeVariable.named("A")
     val listTy = TypeApply(TypeConstructor("List", KindVariable()), List(tyVar), KindVariable())
 
@@ -89,10 +89,10 @@ class KindcheckerSpec extends FlatSpec with Matchers {
     val actual = subst.map { s => data.substituteKinds(s).defaultKinds }
     val expected = Right(expectedData.defaultKinds)
 
-    actual shouldBe expected
+    assertEquals(actual, expected)
   }
 
-  it should "infer (* -> *) -> * for a Fix-like data type" in {
+  test("Kindchecker should infer (* -> *) -> * for a Fix-like data type") {
     val tyVar = TypeVariable.named("F")
     val fixTy = TypeApply(TypeConstructor("Fix", KindVariable()), List(tyVar), KindVariable())
     val unfixTy = TypeApply(tyVar, List(fixTy), `*`)
@@ -116,10 +116,10 @@ class KindcheckerSpec extends FlatSpec with Matchers {
     val actual = subst.map { s => data.substituteKinds(s).defaultKinds }
     val expected = Right(expectedData.defaultKinds)
 
-    actual shouldBe expected
+    assertEquals(actual, expected)
   }
 
-  it should "enable use of data types from other modules" in {
+  test("Kindchecker should enable use of data types from other modules") {
     val tyVar = TypeVariable.named("A")
     val listTy = TypeApply(TypeConstructor("List", KindVariable()), List(tyVar), KindVariable())
 
@@ -151,10 +151,10 @@ class KindcheckerSpec extends FlatSpec with Matchers {
     val actual = subst.map { s => data.substituteKinds(s).defaultKinds }
     val expected = Right(expectedData.defaultKinds)
 
-    actual shouldBe expected
+    assertEquals(actual, expected)
   }
 
-  it should "return an error when data types from other modules are applied incorrectly" in {
+  test("Kindchecker should return an error when data types from other modules are applied incorrectly") {
     val tyVar = TypeVariable.named("A")
     val listTy = TypeConstructor("List", KindVariable())
 
@@ -175,6 +175,6 @@ class KindcheckerSpec extends FlatSpec with Matchers {
     val actual = subst.map { s => data.substituteKinds(s).defaultKinds }
     val expected = TypeError.kindUnification(Pos.Empty, `*`, `* -> *`)
 
-    actual shouldBe expected
+    assertEquals(actual, expected)
   }
 }

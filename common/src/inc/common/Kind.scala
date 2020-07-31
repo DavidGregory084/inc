@@ -60,11 +60,11 @@ object Kind {
     Parameterized(List.fill(arity)(KindVariable()), Atomic)
 
   def fromProto(kind: proto.Kind): Kind = kind match {
-    case proto.Atomic() =>
+    case proto.Atomic(_) =>
       Atomic
-    case proto.Parameterized(params, result) =>
+    case proto.Parameterized(params, result, _) =>
       Parameterized(params.map(Kind.fromProto).toList, Kind.fromProto(result))
-    case proto.KindVariable(_) =>
+    case proto.KindVariable(_, _) =>
       throw new Exception("Unexpected kind variable in protobuf")
     case proto.Kind.Empty =>
       throw new Exception("Empty Kind in protobuf")

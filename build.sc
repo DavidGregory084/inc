@@ -8,13 +8,13 @@ import mill.define.Worker
 import mill.scalalib.api.CompilationResult
 import java.net.{ URI, URL, URLClassLoader }
 
-import $ivy.`com.lihaoyi::mill-contrib-scalapblib:0.6.1`
+import $ivy.`com.lihaoyi::mill-contrib-scalapblib:0.8.0`
 import mill.contrib.scalapblib._
 
-import $ivy.`com.lihaoyi::mill-contrib-buildinfo:0.6.1`
+import $ivy.`com.lihaoyi::mill-contrib-buildinfo:0.8.0`
 import mill.contrib.BuildInfo
 
-import $ivy.`io.github.davidgregory084::mill-tpolecat:0.1.2`
+import $ivy.`io.github.davidgregory084::mill-tpolecat:0.1.4`
 import io.github.davidgregory084.TpolecatModule
 
 import $ivy.`org.postgresql:postgresql:42.2.6`
@@ -44,11 +44,14 @@ trait PublishSettingsModule extends PublishModule {
 }
 
 trait ScalaSettingsModule extends TpolecatModule with PublishSettingsModule {
-  def scalaVersion = "2.13.1"
+  def scalaVersion = "2.13.3"
+  def catsVersion = T { "2.1.1" }
+  def munitVersion = T { "0.7.10" }
+  def pprintVersion = T { "0.6.0" }
 
   def scalacPluginIvyDeps = Agg(
     ivy"com.olegpy::better-monadic-for:0.3.1",
-    ivy"org.scalameta:semanticdb-scalac_${scalaVersion()}:4.2.5"
+    ivy"org.scalameta:semanticdb-scalac_${scalaVersion()}:4.3.20"
   )
 
   def scalacOptions = T {
@@ -65,13 +68,14 @@ trait ScalaSettingsModule extends TpolecatModule with PublishSettingsModule {
 
   trait Test extends Tests {
     def ivyDeps = Agg(
-      ivy"io.chrisdavenport::cats-scalacheck:0.2.0",
-      ivy"com.lihaoyi::pprint:0.5.9",
-      ivy"com.github.pathikrit::better-files:3.8.0",
-      ivy"org.scalatest::scalatest:3.0.8",
+      ivy"org.scalameta::munit::${munitVersion()}",
+      ivy"org.scalameta::munit-scalacheck::${munitVersion()}",
+      ivy"io.chrisdavenport::cats-scalacheck:0.3.0",
+      ivy"com.lihaoyi::pprint:${pprintVersion()}",
+      ivy"com.github.pathikrit::better-files:3.9.1",
       ivy"org.scalacheck::scalacheck:1.14.3"
     )
-    def testFrameworks = Seq("org.scalatest.tools.Framework")
+    def testFrameworks = Seq("munit.Framework")
     def scalacOptions = T { super.scalacOptions().filterNot(Set("-Yno-imports")) }
   }
 }
@@ -79,9 +83,10 @@ trait ScalaSettingsModule extends TpolecatModule with PublishSettingsModule {
 object decompiled extends JavaModule
 
 object proto extends ScalaPBModule with ScalaSettingsModule {
-  def scalaPBVersion = "0.9.6"
+  def scalaPBVersion = "0.10.7"
   def scalaPBFlatPackage = true
   def scalaPBGrpc = false
+  def scalaPBLenses = false
   def scalacOptions = T { super.scalacOptions().filterNot(Set("-Yno-imports")) }
 }
 
@@ -89,10 +94,10 @@ object common extends ScalaSettingsModule {
   def moduleDeps = Seq(proto)
   def ivyDeps = T {
     super.ivyDeps() ++ Agg(
-      ivy"com.lihaoyi::pprint:0.5.9",
+      ivy"com.lihaoyi::pprint:${pprintVersion()}",
       ivy"com.lihaoyi::sourcecode:0.2.1",
-      ivy"org.typelevel::cats-core:2.1.1",
-      ivy"org.typelevel::paiges-core:0.3.0",
+      ivy"org.typelevel::cats-core:${catsVersion()}",
+      ivy"org.typelevel::paiges-core:0.3.1",
       ivy"com.typesafe.scala-logging::scala-logging:3.9.2"
     )
   }
@@ -103,7 +108,7 @@ object rts extends JavaModule with PublishSettingsModule
 
 object parser extends ScalaSettingsModule {
   def moduleDeps = Seq(common)
-  def ivyDeps = Agg(ivy"com.lihaoyi::fastparse:2.2.4")
+  def ivyDeps = Agg(ivy"com.lihaoyi::fastparse:2.3.0")
   object test extends super.Test
 }
 
@@ -119,7 +124,7 @@ object typechecker extends ScalaSettingsModule {
 
 object codegen extends ScalaSettingsModule {
   def moduleDeps = Seq(common, rts)
-  def asmVersion = T { "7.3.1" }
+  def asmVersion = T { "8.0.1" }
   def ivyDeps = Agg(
     ivy"org.ow2.asm:asm:${asmVersion()}",
     ivy"org.ow2.asm:asm-commons:${asmVersion()}",
@@ -136,14 +141,14 @@ object main extends ScalaSettingsModule with BuildInfo {
 
   def moduleDeps = Seq(common, rts, parser, resolver, typechecker, codegen)
 
-  def jlineVersion = T { "3.13.3" }
+  def jlineVersion = T { "3.16.0" }
 
   def ivyDeps = Agg(
     ivy"org.jline:jline-terminal:${jlineVersion()}",
     ivy"org.jline:jline-terminal-jansi:${jlineVersion()}",
-    ivy"org.apache.logging.log4j:log4j-slf4j-impl:2.13.0",
+    ivy"org.apache.logging.log4j:log4j-slf4j-impl:2.13.3",
     ivy"com.github.scopt::scopt:3.7.1",
-    ivy"com.lihaoyi::pprint:0.5.9",
+    ivy"com.lihaoyi::pprint:${pprintVersion()}",
     // PPrint definitely requires scala-reflect
     ivy"org.scala-lang:scala-reflect:${scalaVersion()}"
   )

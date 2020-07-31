@@ -78,12 +78,12 @@ sealed abstract class TopLevelDeclaration[A] extends Product with Serializable {
 
 object TopLevelDeclaration {
   def fromProto(decl: proto.TopLevelDeclaration): TopLevelDeclaration[Meta.Typed] = decl match {
-    case let @ proto.Let(name, binding, _) =>
+    case let @ proto.Let(name, binding, _, _) =>
       Let(
         name,
         Expr.fromProto(binding),
         Meta.fromProto(let.getNameWithType))
-    case data @ proto.Data(name, tparams, cases, _) =>
+    case data @ proto.Data(name, tparams, cases, _, _) =>
       Data(
         name,
         tparams.map(TypeVariable.fromProto).toList,
@@ -144,7 +144,7 @@ final case class DataConstructor[A](
 
 object DataConstructor {
   def fromProto(data: proto.DataConstructor): DataConstructor[Meta.Typed] = data match {
-    case data @ proto.DataConstructor(name, params, _, _) =>
+    case data @ proto.DataConstructor(name, params, _, _, _) =>
       DataConstructor(
         name,
         params.map(Param.fromProto).toList,
