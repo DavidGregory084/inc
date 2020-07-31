@@ -94,7 +94,7 @@ class CodegenSpec extends ScalaCheckSuite with Generators {
 
     result.fold(
       errs => fail(s"""Code generation failed with errors ${errs.mkString(", ")}"""),
-      _    => ()
+      identity
     )
   }
 
