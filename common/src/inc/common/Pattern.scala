@@ -53,7 +53,7 @@ object FieldPattern {
     }
   }
   def fromProto(pat: proto.FieldPattern): FieldPattern[Meta.Typed] = pat match {
-    case fld @ proto.FieldPattern(field, pattern, _) =>
+    case fld @ proto.FieldPattern(field, pattern, _, _) =>
       pattern match {
         case proto.Pattern.Empty =>
           FieldPattern(field, None, Meta.fromProto(fld.getNameWithType))
@@ -67,9 +67,9 @@ case class ConstrPattern[A](name: String, alias: Option[String], patterns: List[
 
 object Pattern {
   def fromProto(pat: proto.Pattern): Pattern[Meta.Typed] = pat match {
-    case id @ proto.IdentPattern(name, _) =>
+    case id @ proto.IdentPattern(name, _, _) =>
       IdentPattern(name, Meta.fromProto(id.getNameWithType))
-    case constr @ proto.ConstrPattern(name, alias, patterns, _) =>
+    case constr @ proto.ConstrPattern(name, alias, patterns, _, _) =>
       ConstrPattern(
         name,
         Option(alias).filterNot(_.isEmpty),

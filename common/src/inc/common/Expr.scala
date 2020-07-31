@@ -287,48 +287,48 @@ sealed abstract class Expr[A] extends Product with Serializable {
 }
 object Expr {
   def fromProto(expr: proto.Expr): Expr[Meta.Typed] = expr match {
-    case int @ proto.LiteralInt(i, _) =>
+    case int @ proto.LiteralInt(i, _, _) =>
       LiteralInt(i, Meta.fromProto(int.getNameWithType))
-    case long @ proto.LiteralLong(l, _) =>
+    case long @ proto.LiteralLong(l, _, _) =>
       LiteralLong(l, Meta.fromProto(long.getNameWithType))
-    case flt @ proto.LiteralFloat(f, _) =>
+    case flt @ proto.LiteralFloat(f, _, _) =>
       LiteralFloat(f, Meta.fromProto(flt.getNameWithType))
-    case dbl @ proto.LiteralDouble(d, _) =>
+    case dbl @ proto.LiteralDouble(d, _, _) =>
       LiteralDouble(d, Meta.fromProto(dbl.getNameWithType))
-    case bool @ proto.LiteralBoolean(b, _) =>
+    case bool @ proto.LiteralBoolean(b, _, _) =>
       LiteralBoolean(b, Meta.fromProto(bool.getNameWithType))
-    case str @ proto.LiteralString(s, _) =>
+    case str @ proto.LiteralString(s, _, _) =>
       LiteralString(s, Meta.fromProto(str.getNameWithType))
-    case char @ proto.LiteralChar(c, _) =>
+    case char @ proto.LiteralChar(c, _, _) =>
       LiteralChar(c.charAt(0), Meta.fromProto(char.getNameWithType))
-    case unit @ proto.LiteralUnit(_) =>
+    case unit @ proto.LiteralUnit(_, _) =>
       LiteralUnit(Meta.fromProto(unit.getNameWithType))
-    case ref @ proto.Reference(nm, _) =>
+    case ref @ proto.Reference(nm, _, _) =>
       val mod = nm.split("/").toList
       val name = mod.last
       Reference(mod.dropRight(1), name, Meta.fromProto(ref.getNameWithType))
-    case ifExpr @ proto.If(cond, thenExpr, elseExpr, _) =>
+    case ifExpr @ proto.If(cond, thenExpr, elseExpr, _, _) =>
       If(
         Expr.fromProto(cond),
         Expr.fromProto(thenExpr),
         Expr.fromProto(elseExpr),
         Meta.fromProto(ifExpr.getNameWithType))
-    case lambda @ proto.Lambda(params, body, _) =>
+    case lambda @ proto.Lambda(params, body, _, _) =>
       Lambda(
         params.map(Param.fromProto).toList,
         Expr.fromProto(body),
         Meta.fromProto(lambda.getNameWithType))
-    case app @ proto.Apply(fn, args, _) =>
+    case app @ proto.Apply(fn, args, _, _) =>
       Apply(
         Expr.fromProto(fn),
         args.toList.map(Expr.fromProto),
         Meta.fromProto(app.getNameWithType))
-    case asc @ proto.Ascription(_, _, _) =>
+    case asc @ proto.Ascription(_, _, _, _) =>
       Ascription(
         Expr.fromProto(asc.expr),
         TypeScheme.fromProto(asc.getAscribedAs),
         Meta.fromProto(asc.getNameWithType))
-    case mat @ proto.Match(_, _, _) =>
+    case mat @ proto.Match(_, _, _, _) =>
       Match(
         Expr.fromProto(mat.matchExpr),
         mat.cases.toList.map(MatchCase.fromProto),

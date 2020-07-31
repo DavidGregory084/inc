@@ -2,11 +2,11 @@ package inc.common
 
 import cats.data.StateT
 import cats.implicits._
-import org.scalatest._
+import munit.Assertions
 import org.scalacheck._
 import org.scalacheck.cats.implicits._
 
-trait Generators { self: Matchers =>
+trait Generators { self: Assertions =>
   type Env = Environment[Meta.Typed]
   type Decls = List[TopLevelDeclaration[Meta.Typed]]
 
@@ -344,8 +344,8 @@ trait Generators { self: Matchers =>
 
   def collides(env: Env, name: String): Boolean = {
     env.names.values
-      .map(_.shortName).toList
-      .contains(name)
+      .map(_.shortName.toUpperCase).toList
+      .contains(name.toUpperCase)
   }
 
   def dataGen(modName: ModuleName, env: Env) =
@@ -361,7 +361,7 @@ trait Generators { self: Matchers =>
       constrs <- Gen.listOfN(numConstrs, constructorGen(dataName, typeScheme, env)).suchThat { cs =>
         // Don't generate duplicate names
         val constrNames = cs.map(_.name)
-        val noDuplicates = constrNames.distinct.length == cs.length
+        val noDuplicates = constrNames.map(_.toUpperCase).distinct.length == cs.length
         // Don't generate recursive data types without a non-recursive case
         val hasBaseCase = cs.exists(_.params.forall(_.meta.typ != typeScheme))
         noDuplicates && hasBaseCase

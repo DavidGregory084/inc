@@ -1,9 +1,9 @@
 package inc.resolver
 
 import inc.common._
-import org.scalatest._
+import munit.FunSuite
 
-class ResolverSpec extends FlatSpec with Matchers {
+class ResolverSpec extends FunSuite {
   def mkModule(name: String, decls: List[TopLevelDeclaration[Pos]]) = Module(
     pkg = List("Test", "Resolver"),
     name = name,
@@ -29,35 +29,35 @@ class ResolverSpec extends FlatSpec with Matchers {
 
   def mkResolvedInt(i: Int) = LiteralInt(i, Meta.Untyped(NoName, Pos.Empty))
 
-  "Resolver" should "resolve names for local let bindings" in {
+  test("Resolver should resolve names for local let bindings") {
     val mod = mkModule("Int", List(mkLet("int", mkInt(42))))
     val expected = mkResolvedModule("Int", List(
       mkResolvedLet("Int", "int", mkResolvedInt(42))
     ))
     Resolver.resolve(mod).fold(
       errs => fail(s"""Name resolution failed with errors ${errs.mkString(", ")}"""),
-      mod => mod shouldBe expected
+      mod => assertEquals(mod, expected)
     )
   }
 
-  it should "return an error when there is a reference to a field which doesn't exist" in {
+  test("Parser should return an error when there is a reference to a field which doesn't exist") {
     val mod = mkModule("Ref", List(
       mkLet("int", mkInt(42)),
       mkLet("int2", mkRef("int3"))
     ))
     Resolver.resolve(mod).fold(
-      _ => succeed,
+      identity,
       _ => fail("Resolution should fail as 'int3' is not defined")
     )
   }
 
-  it should "return an error when there is a field which is defined twice" in {
+  test("Parser should return an error when there is a field which is defined twice") {
     val mod = mkModule("Ref", List(
       mkLet("int", mkInt(42)),
       mkLet("int", mkInt(43))
     ))
     Resolver.resolve(mod).fold(
-      _ => succeed,
+      identity,
       _ => fail("Resolution should fail as the field 'int' is defined twice")
     )
   }

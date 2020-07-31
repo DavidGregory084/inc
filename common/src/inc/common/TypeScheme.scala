@@ -47,7 +47,7 @@ object TypeScheme {
   }
 
   def fromProto(typ: proto.TypeScheme) = typ match {
-    case proto.TypeScheme(bound, t) =>
+    case proto.TypeScheme(bound, t, _) =>
       // Instantiate the type scheme with fresh type variables for this compilation run
       val typ = Type.fromProto(t)
 
