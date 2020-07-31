@@ -47,7 +47,7 @@ class CodegenSpec extends ScalaCheckSuite with Generators {
 
     Codegen.print(result.head.bytes, baos)
 
-    assertEquals(
+    assertNoDiff(
       baos.toString,
       """// class version 52.0 (52)
       |// access flags 0x21
