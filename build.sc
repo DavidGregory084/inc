@@ -14,6 +14,9 @@ import mill.contrib.scalapblib._
 import $ivy.`com.lihaoyi::mill-contrib-buildinfo:0.8.0`
 import mill.contrib.BuildInfo
 
+import $ivy.`com.lihaoyi::mill-contrib-scoverage:0.8.0`
+import mill.contrib.scoverage.ScoverageModule
+
 import $ivy.`io.github.davidgregory084::mill-tpolecat:0.1.4`
 import io.github.davidgregory084.TpolecatModule
 
@@ -90,7 +93,8 @@ object proto extends ScalaPBModule with ScalaSettingsModule {
   def scalacOptions = T { super.scalacOptions().filterNot(Set("-Yno-imports")) }
 }
 
-object common extends ScalaSettingsModule {
+object common extends ScalaSettingsModule with ScoverageModule {
+  def scoverageVersion = "1.4.1"
   def moduleDeps = Seq(proto)
   def ivyDeps = T {
     super.ivyDeps() ++ Agg(
@@ -101,28 +105,32 @@ object common extends ScalaSettingsModule {
       ivy"com.typesafe.scala-logging::scala-logging:3.9.2"
     )
   }
-  object test extends super.Test
+  object test extends super.Test with ScoverageTests
 }
 
 object rts extends JavaModule with PublishSettingsModule
 
-object parser extends ScalaSettingsModule {
+object parser extends ScalaSettingsModule with ScoverageModule {
+  def scoverageVersion = "1.4.1"
   def moduleDeps = Seq(common)
   def ivyDeps = Agg(ivy"com.lihaoyi::fastparse:2.3.0")
-  object test extends super.Test
+  object test extends super.Test with ScoverageTests
 }
 
-object resolver extends ScalaSettingsModule {
+object resolver extends ScalaSettingsModule with ScoverageModule {
+  def scoverageVersion = "1.4.1"
   def moduleDeps = Seq(common)
-  object test extends super.Test
+  object test extends super.Test with ScoverageTests
 }
 
-object typechecker extends ScalaSettingsModule {
+object typechecker extends ScalaSettingsModule with ScoverageModule {
+  def scoverageVersion = "1.4.1"
   def moduleDeps = Seq(common)
-  object test extends super.Test
+  object test extends super.Test with ScoverageTests
 }
 
-object codegen extends ScalaSettingsModule {
+object codegen extends ScalaSettingsModule with ScoverageModule {
+  def scoverageVersion = "1.4.1"
   def moduleDeps = Seq(common, rts)
   def asmVersion = T { "8.0.1" }
   def ivyDeps = Agg(
@@ -130,14 +138,16 @@ object codegen extends ScalaSettingsModule {
     ivy"org.ow2.asm:asm-commons:${asmVersion()}",
     ivy"org.ow2.asm:asm-util:${asmVersion()}"
   )
-  object test extends super.Test {
+  object test extends super.Test with ScoverageTests {
     override def moduleDeps =
       super.moduleDeps :+ common.test
   }
 }
 
-object main extends ScalaSettingsModule with BuildInfo {
+object main extends ScalaSettingsModule with ScoverageModule with BuildInfo {
   def mainClass = Some("inc.main.Main")
+
+  def scoverageVersion = "1.4.1"
 
   def moduleDeps = Seq(common, rts, parser, resolver, typechecker, codegen)
 
@@ -313,7 +323,7 @@ object main extends ScalaSettingsModule with BuildInfo {
     }
   }
 
-  object test extends super.Test {
+  object test extends super.Test with ScoverageTests {
     override def moduleDeps =
       super.moduleDeps :+ common.test
   }
@@ -379,18 +389,7 @@ trait IncModule extends ScalaModule {
     val analysisFile = dest / "inc.analysis.dummy"
     os.write(target = analysisFile, data = "", createFolders = true)
 
-    compileResults match {
-      case Result.Aborted =>
-        Result.Aborted
-      case Result.Skipped =>
-        Result.Skipped
-      case exception @ Result.Exception(_, _) =>
-        exception
-      case Result.Success(_) =>
-        Result.Success(CompilationResult(analysisFile, PathRef(classes)))
-      case Result.Failure(reason, value) =>
-        Result.Failure(reason, Some(CompilationResult(analysisFile, PathRef(classes))))
-    }
+    compileResults.map { _ => CompilationResult(analysisFile, PathRef(classes)) }
   }
 
   trait Test extends Tests {

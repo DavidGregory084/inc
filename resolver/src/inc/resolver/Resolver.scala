@@ -7,7 +7,7 @@ import cats.syntax.functor._
 import cats.syntax.foldable._
 import cats.syntax.traverse._
 import inc.common._
-import scala.{ Right, Option, Some, None, StringContext }
+import scala.{ Right, Option, Some, None }
 import scala.collection.immutable.List
 import scala.Predef.ArrowAssoc
 
@@ -35,13 +35,13 @@ object Resolver {
             case ((patsSoFar, envSoFar), FieldPattern(field, None, pos)) =>
               val fieldName = LocalName(field)
               if (!members.exists(_.name == fieldName))
-                ResolverError.singleton(pos, s"Constructor ${constrNm.name} has no member ${name}")
+                ResolverError.unknownMember(pos, constrNm.name, name)
               else
                 Right((patsSoFar :+ FieldPattern(field, Option.empty[Pattern[Meta.Untyped]], Meta.Untyped(fieldName, pos)), envSoFar.withName(field, fieldName)))
             case ((patsSoFar, envSoFar), FieldPattern(field, Some(nextPat), pos)) =>
               val fieldName = LocalName(field)
               if (!members.exists(_.name == fieldName))
-                ResolverError.singleton(pos, s"Constructor ${constrNm.name} has no member ${name}")
+                ResolverError.unknownMember(pos, constrNm.name, name)
               else resolve(nextPat, envSoFar).map {
                 case (resolvedPat, patEnv) =>
                   (patsSoFar :+ FieldPattern(field, Some(resolvedPat), Meta.Untyped(fieldName, pos)), patEnv)
@@ -52,7 +52,7 @@ object Resolver {
               val aliasEnv = alias.map(patEnv.withName(_, aliasName)).getOrElse(patEnv)
               (ConstrPattern(name, alias, resolvedPats.toList, Meta.Untyped(aliasName, pos)), aliasEnv)
           }
-      }.getOrElse(ResolverError.singleton(pos, s"Reference to unknown constructor: $name"))
+      }.getOrElse(ResolverError.unknownConstructor(pos, name))
   }
 
   def resolve(matchCase: MatchCase[Pos], env: SymbolTable): Resolve[MatchCase[Meta.Untyped]] = matchCase match {
@@ -92,7 +92,7 @@ object Resolver {
     case ref @ Reference(_, name, pos)  =>
       env.names.get(ref.fullName)
         .map(nm => withName(ref, nm, env))
-        .getOrElse(ResolverError.singleton(pos, s"Reference to undefined symbol: $name"))
+        .getOrElse(ResolverError.undefined(pos, name))
 
     case If(cond, thenExpr, elseExpr, pos) =>
       for {
@@ -109,7 +109,7 @@ object Resolver {
       val resolvedParams = params.foldM(emptyRes) {
         case ((paramsSoFar, updatedEnv), param @ Param(name, _, pos)) =>
           if (updatedEnv.names.contains(name))
-            ResolverError.singleton(pos, s"Symbol $name is already defined")
+            ResolverError.alreadyDefined(pos, name, updatedEnv.names(name))
           else {
             val localName = LocalName(name)
             val paramWithName = param.copy(meta = Meta.Untyped(localName, pos))
@@ -171,7 +171,7 @@ object Resolver {
           val resolvedParams = params.foldM(emptyRes) {
             case ((paramsSoFar, updatedEnv), param @ Param(name, _, pos)) =>
                 if (updatedEnv.names.contains(name))
-                  ResolverError.singleton(pos, s"Symbol $name is already defined")
+                  ResolverError.alreadyDefined(pos, name, updatedEnv.names(name))
                 else {
                   val localName = LocalName(name)
                   val paramWithName = param.copy(meta = Meta.Untyped(localName, pos))
@@ -209,7 +209,7 @@ object Resolver {
     decls.foldM(importedEnv) {
       case (env, Let(name, _, pos)) =>
         if (env.names.contains(name))
-          ResolverError.singleton(pos, s"Symbol $name is already defined")
+          ResolverError.alreadyDefined(pos, name, env.names(name))
         else
           Right(env.withName(name, MemberName(module.pkg, module.name, name)))
       case (outerEnv, Data(dataNm, _, cases, _)) =>
@@ -219,7 +219,7 @@ object Resolver {
         val constrEnv = cases.foldM(dataEnv){
           case (env, DataConstructor(name, _, _, pos)) =>
             if (env.names.contains(name))
-              ResolverError.singleton(pos, s"Symbol $name is already defined")
+              ResolverError.alreadyDefined(pos, name, env.names(name))
             else
               Right(env.withName(name, ConstrName(module.pkg, module.name, dataNm, name)))
         }
