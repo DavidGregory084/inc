@@ -47,8 +47,7 @@ class MainSpec extends ScalaCheckSuite with Generators {
     val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
     val pkg = "Test/Main/"
     val mod = s"module ${pkg}${fieldName.capitalize} { let ${fieldName} = ${stringValue} }"
-    val ctx = Printer.SourceContext(80, s"${fieldName.capitalize}.inc", mod)
-    val classFile = Main.compileModule(dir, ctx, config).fold(err => fail(err.head.message), identity)
+    val classFile = Main.compileModule(dir, s"${fieldName.capitalize}.inc", config, mod).fold(err => fail(err.head.message), identity)
     val clazz = loadClassFrom(dir, pkg + classFile.head.toFile.toScala.nameWithoutExtension)
     assertEquals(getStatic(clazz, fieldName), expectedValue)
   }
@@ -97,8 +96,7 @@ class MainSpec extends ScalaCheckSuite with Generators {
       val pkg = "Test/Main/"
       val fieldName = "reference"
       val mod = s"module ${pkg}Reference { let integer = 42; let ${fieldName} = integer }"
-      val ctx = Printer.SourceContext(80, s"${fieldName.capitalize}.inc", mod)
-      val result = Main.compileModule(dir, ctx, config).fold(
+      val result = Main.compileModule(dir, s"${fieldName.capitalize}.inc", config, mod).fold(
         errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
         identity
       )
@@ -116,8 +114,7 @@ class MainSpec extends ScalaCheckSuite with Generators {
       val pkg = "Test/Main/"
       val fieldName = "z"
       val mod = s"module ${pkg}If { let a = true; let x = 42; let y = 41; let ${fieldName} = if a then x else y }"
-      val ctx = Printer.SourceContext(80, "If.inc", mod)
-      val result = Main.compileModule(dir, ctx, config).fold(
+      val result = Main.compileModule(dir, "If.inc", config, mod).fold(
         errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
         identity
       )
@@ -135,8 +132,7 @@ class MainSpec extends ScalaCheckSuite with Generators {
       val pkg = "Test/Main/"
       val fieldName = "z"
       val mod = s"module ${pkg}If { let a = false; let x = 42; let y = 41; let ${fieldName} = if a then x else y }"
-      val ctx = Printer.SourceContext(80, "If.inc", mod)
-      val result = Main.compileModule(dir, ctx, config).fold(
+      val result = Main.compileModule(dir, "If.inc", config, mod).fold(
         errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
         identity
       )
@@ -149,8 +145,7 @@ class MainSpec extends ScalaCheckSuite with Generators {
     withTmpDir { dir =>
       val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
       val mod = "module Test/Main/Lambda { let x = 42; let y = 41; let lam = bool -> if bool then x else y }"
-      val ctx = Printer.SourceContext(80, "Lambda.inc", mod)
-      val result = Main.compileModule(dir, ctx, config).fold(
+      val result = Main.compileModule(dir, "Lambda.inc", config, mod).fold(
         errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
         identity
       )
@@ -162,8 +157,7 @@ class MainSpec extends ScalaCheckSuite with Generators {
     withTmpDir { dir =>
       val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
       val mod = "module Test/Main/Lambda { let id = a -> a }"
-      val ctx = Printer.SourceContext(80, "Lambda.inc", mod)
-      val result = Main.compileModule(dir, ctx, config).fold(
+      val result = Main.compileModule(dir, "Lambda.inc", config, mod).fold(
         errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
         identity
       )
@@ -175,8 +169,7 @@ class MainSpec extends ScalaCheckSuite with Generators {
     withTmpDir { dir =>
       val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
       val mod = """module Test/Main/Lambda { let id = a -> a; let str = id("string") }"""
-      val ctx = Printer.SourceContext(80, "Lambda.inc", mod)
-      val result = Main.compileModule(dir, ctx, config).fold(
+      val result = Main.compileModule(dir, "Lambda.inc", config, mod).fold(
         errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
         identity
       )
@@ -188,8 +181,7 @@ class MainSpec extends ScalaCheckSuite with Generators {
     withTmpDir { dir =>
       val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
       val mod = """module Test/Main/Lambda { let id = a -> a; let int = id(1) }"""
-      val ctx = Printer.SourceContext(80, "Lambda.inc", mod)
-      val result = Main.compileModule(dir, ctx, config).fold(
+      val result = Main.compileModule(dir, "Lambda.inc", config, mod).fold(
         errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
         identity
       )
@@ -201,8 +193,7 @@ class MainSpec extends ScalaCheckSuite with Generators {
     withTmpDir { dir =>
       val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
       val mod = """module Test/Main/Const { let const = (a, b) -> a; let foo = a -> "a"; let bar = f -> foo(f(42, 36)); let baz = foo(const) }"""
-      val ctx = Printer.SourceContext(80, "Const.inc", mod)
-      val result = Main.compileModule(dir, ctx, config).fold(
+      val result = Main.compileModule(dir, "Const.inc", config, mod).fold(
         errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
         identity
       )
@@ -220,9 +211,7 @@ class MainSpec extends ScalaCheckSuite with Generators {
         |  let id = a -> a
         |}""".trim.stripMargin
 
-      val ctx1 = Printer.SourceContext(80, "Id.inc", mod1)
-
-      Main.compileModule(dir, ctx1, config).fold(
+      Main.compileModule(dir, "Id.inc", config, mod1).fold(
         errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
         identity
       )
@@ -235,9 +224,7 @@ class MainSpec extends ScalaCheckSuite with Generators {
         |}
         """.trim.stripMargin
 
-      val ctx2 = Printer.SourceContext(80, "Apply.inc", mod2)
-
-      val result2 = Main.compileModule(dir, ctx2, config).fold(
+      val result2 = Main.compileModule(dir, "Apply.inc", config, mod2).fold(
         errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
         identity
       )
@@ -254,9 +241,8 @@ class MainSpec extends ScalaCheckSuite with Generators {
       forAll(modGen) { generatedMod =>
         val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
         val mod = Printer.print(generatedMod).render(80)
-        val ctx = Printer.SourceContext(80, s"${generatedMod.name}.inc", mod)
         try {
-          val result = Main.compileModule(dir, ctx, config).fold(
+          val result = Main.compileModule(dir, s"${generatedMod.name}.inc", config, mod).fold(
             errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
             identity
           )

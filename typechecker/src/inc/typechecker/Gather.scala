@@ -8,77 +8,12 @@ import cats.instances.list._
 import cats.syntax.either._
 import cats.syntax.foldable._
 import cats.syntax.functor._
-import org.typelevel.paiges._
-import java.lang.String
-import scala.{ Boolean, Some, None, Right, StringContext }
+import scala.{ Some, None, Right, StringContext }
 import scala.collection.immutable.{ List, Map }
 import scala.Predef.ArrowAssoc
 import com.typesafe.scalalogging.LazyLogging
 
-class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boolean) extends LazyLogging {
-  val kindchecker = new Kindchecker(context, isTraceEnabled: Boolean)
-
-  def highlightSource(msg: String, pos: Pos): String =
-    Printer.withSourceContext(context)(msg, pos, Style.Ansi.Fg.Yellow)
-
-  def trace(name: String, pos: Pos, typ: Type) = {
-    if (isTraceEnabled) {
-      val formattedMsg = Doc.hardLine + Doc.text(name + ":") & Printer.print(typ)
-      val formattedStr = formattedMsg.render(context.consoleWidth)
-      logger.info(highlightSource(formattedStr, pos))
-    }
-  }
-
-  def trace(name: String, pos: Pos, typ: TypeScheme) = {
-    if (isTraceEnabled) {
-      val formattedMsg = Doc.hardLine + Doc.text(name + ":") & Printer.print(typ)
-      val formattedStr = formattedMsg.render(context.consoleWidth)
-      logger.info(highlightSource(formattedStr, pos))
-    }
-  }
-
-  def trace(name: String, pos: Pos, constraints: List[Constraint]) = {
-    if (constraints.nonEmpty && isTraceEnabled) {
-      val header = Doc.hardLine + Doc.text(name + ":") & (Doc.hardLine * 2)
-      val formattedMsg = header + Doc.intercalate(Doc.hardLine, constraints.map(Printer.print))
-      val formattedStr = formattedMsg.render(context.consoleWidth)
-      logger.info(highlightSource(formattedStr, pos))
-    }
-  }
-
-  def trace(name: String, constraints: List[Constraint]) = {
-    if (constraints.nonEmpty && isTraceEnabled) {
-      val header = Doc.hardLine + Doc.text(name + ":") & (Doc.hardLine * 2)
-      val formattedMsg = header + Doc.intercalate(Doc.hardLine, constraints.map(Printer.print))
-      val formattedStr = formattedMsg.render(context.consoleWidth)
-      logger.info(formattedStr)
-    }
-  }
-
-  def trace(context: Printer.SourceContext, name: String, env: Environment[Meta.Typed]) = {
-    if (isTraceEnabled) {
-      val header = Doc.hardLine + Doc.text(name + ":") + (Doc.hardLine * 2)
-
-      val formattedTypesMsg = header + Doc.intercalate(Doc.hardLine, env.types.map {
-        case (nm, meta) =>
-          val tpStr = Printer.print(meta.typ)
-          Doc.text(nm + ":") & tpStr
-      })
-
-      val formattedKindsMsg = Doc.intercalate(Doc.hardLine, env.kinds.map {
-        case (nm, kind) =>
-          val kindStr = Printer.print(kind)
-          Doc.text(nm + ":") & kindStr
-      })
-
-      val formattedMsg = formattedTypesMsg + (Doc.hardLine * 2) + formattedKindsMsg
-
-      val formattedStr = formattedMsg.render(context.consoleWidth)
-
-      logger.info(formattedStr)
-    }
-  }
-
+object Gather extends LazyLogging {
 
   def withTypeScheme(expr: Expr[Meta.Untyped], typ: TypeScheme): Infer[(Expr[Meta.Typed], List[Constraint])] = {
     val exprWithType = expr.map(_.withType(typ))
@@ -94,7 +29,6 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
   ): Infer[(Pattern[Meta.Typed], Environment[Meta.Typed], List[Constraint])] = pattern match {
     case IdentPattern(name, meta) =>
       val tv = TypeVariable()
-      trace(s"Identifier pattern $name", meta.pos, tv)
       Right((IdentPattern(name, meta.withSimpleType(tv)), env.withType(name, TypeScheme(tv)), List.empty))
 
     case ConstrPattern(name, alias, patterns, meta) =>
@@ -134,7 +68,6 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
 
       typedPatterns.map {
         case (patterns, patEnv, patCsts) =>
-          trace(s"Constructor pattern ${alias.getOrElse(name)}", meta.pos, dataType)
           val constrEnv = alias.map { a => patEnv.withType(a, TypeScheme(dataType)) }.getOrElse(patEnv)
           (ConstrPattern(name, alias, patterns.toList, meta.withSimpleType(dataType)), constrEnv, patCsts)
       }
@@ -184,15 +117,6 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
       case ref @ Reference(_, name, meta)  =>
         env.types.get(ref.fullName).map { refTyp =>
           val instTyp = refTyp.instantiate
-
-          if (refTyp.bound.nonEmpty && isTraceEnabled) {
-            val generalized = Printer.print(refTyp).render(context.consoleWidth)
-            val instantiated = Printer.print(instTyp).render(context.consoleWidth)
-            logger.info(NL + s"Instantiate ${generalized} as ${instantiated}")
-          }
-
-          trace(s"Reference to $name", meta.pos, instTyp)
-
           Right((expr.map(_.withSimpleType(instTyp)), List.empty))
         }.getOrElse(TypeError.generic(meta.pos, s"Reference to undefined symbol: $name"))
 
@@ -203,21 +127,15 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
 
           Meta.Typed(_, condType, _) = c.meta
 
-          _ = trace("If condition", c.meta.pos, condCst)
-
           // Gather constraints from the then expression
           (t, thenCst) <- gather(thenExpr, env)
 
           Meta.Typed(_, thenType, _) = t.meta
 
-          _ = trace("Then expression", t.meta.pos, thenCst)
-
           // Gather constraints from the else expression
           (e, elseCst) <- gather(elseExpr, env)
 
           Meta.Typed(_, elseType, _) = e.meta
-
-          _ = trace("Else expression", e.meta.pos, elseCst)
 
           // Emit a constraint that the condition must be Boolean
           condBoolean = List(Equal(condType.typ, Type.Boolean, meta.pos))
@@ -227,8 +145,6 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
           thenElseEqual = List(Equal(thenType.typ, elseType.typ, meta.pos))
 
           expr = If(c, t, e, meta.withType(thenType))
-
-          _ = trace("If expression", expr.meta.pos, condBoolean ++ thenElseEqual)
 
           constraints = condCst ++ thenCst ++ elseCst ++ condBoolean ++ thenElseEqual
 
@@ -244,16 +160,9 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
 
         val paramMappings = typedParams.map(p => p.name -> p.meta.typ)
 
-        typedParams.foreach {
-          case Param(name, _, meta) =>
-            trace(name, meta.pos, meta.typ)
-        }
-
         for {
           // Gather constraints from the body with the params in scope
           (body, bodyCst) <- gather(body, env.withTypes(paramMappings))
-
-          _ = trace("Lambda body", body.meta.pos, bodyCst)
 
           bodyTp = body.meta.typ.typ
 
@@ -262,15 +171,11 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
 
           expr = Lambda(typedParams, body, meta.withSimpleType(funTp))
 
-          _ = trace("Lambda expression", expr.meta.pos, expr.meta.typ)
-
         } yield (expr, bodyCst)
 
       case Ascription(expr, ascribedAs, meta) =>
         for {
           (e, exprCst) <- gather(expr, env)
-
-          _ = trace("Ascribed expression", e.meta.pos, exprCst)
 
           ascriptionCst =
             // Unless we know the ascription is correct
@@ -284,31 +189,22 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
 
           ascription = Ascription(e, ascribedAs, e.meta)
 
-          _ = trace("Ascription", ascription.meta.pos, ascriptionCst)
-
         } yield (ascription, constraints)
 
       case Apply(fn, args, meta) =>
         val tv = TypeVariable()
 
-        trace("Function application", meta.pos, tv)
-
         for {
           // Gather constraints from the function expression
           (f, fnCst) <- gather(fn, env)
-
-          _ = trace("Function to apply", f.meta.pos, fnCst)
 
           initialResult = (Chain.empty[Expr[Meta.Typed]], List.empty[Constraint])
 
           // Gather constraints from the arg expressions
           (as, argCsts) <- args.zipWithIndex.foldM(initialResult) {
-            case ((typedSoFar, cstsSoFar), (nextArg, idx)) =>
+            case ((typedSoFar, cstsSoFar), (nextArg, _)) =>
               for {
                 (typedArg, argCst) <- gather(nextArg, env)
-
-                _ = trace(s"Argument ${idx + 1}", typedArg.meta.pos, argCst)
-
               } yield (typedSoFar :+ typedArg, cstsSoFar ++ argCst)
           }
 
@@ -318,8 +214,6 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
 
           // Create a new function type of the applied argument types and the inferred return type
           appliedTp = Type.Function(argTps.toList, tv)
-
-          _ = trace("Applied type", meta.pos, appliedTp)
 
           fnTp = f.meta.typ.typ
 
@@ -333,22 +227,15 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
       case Match(matchExpr, cases, meta) =>
         val tv = TypeVariable()
 
-        trace("Match expression", meta.pos, tv)
-
         for  {
           (e, exprCsts) <- gather(matchExpr, env)
-
-          _ = trace("Match target expression", meta.pos, exprCsts)
 
           initialResult = (Chain.empty[MatchCase[Meta.Typed]], List.empty[Constraint])
 
           (cs, caseCsts) <- cases.zipWithIndex.foldM(initialResult) {
-            case ((typedSoFar, cstsSoFar), (nextCase, idx)) =>
+            case ((typedSoFar, cstsSoFar), (nextCase, _)) =>
               for {
                 (typedCase, caseCst) <- gather(nextCase, env)
-
-                _ = trace(s"Case ${idx + 1}", typedCase.meta.pos, caseCst)
-
               } yield (typedSoFar :+ typedCase, cstsSoFar ++ caseCst)
           }
 
@@ -366,28 +253,19 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
     env: Environment[Meta.Typed]
   ): Infer[(TopLevelDeclaration[Meta.Typed], Environment[Meta.Typed], List[Constraint])] =
     decl match {
-      case let @ Let(name, expr, meta) =>
+      case let @ Let(_, expr, meta) =>
         for {
           (checkedExpr, constraints) <- gather(expr, env)
 
           // We have to solve the constraints under a `let` before we generalize
-          subst <- solve.solve(constraints)
+          subst <- Solve.solve(constraints)
 
           // Otherwise, the constraint substitution could not be applied to any bound type variables
           solvedExpr = checkedExpr.substitute(subst)
         } yield {
             val eTp = solvedExpr.meta.typ.typ
             val tp = TypeScheme.generalize(env, eTp)
-
-            if (tp.bound.nonEmpty && isTraceEnabled) {
-              val bound = tp.bound.map(t => Printer.print(t).render(context.consoleWidth))
-              logger.info(NL + "Generalize: " + bound.mkString("[", ", ", "]"))
-            }
-
-            trace(name, meta.pos, tp)
-
             val checkedLet = let.copy(binding = checkedExpr, meta = meta.withType(tp))
-
             (checkedLet, env, constraints)
         }
       case data @ Data(_, _, _, _) =>
@@ -440,7 +318,7 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
           .withTypes(dataTypes)
           .copy(members = env.members ++ groupedMembers)
 
-        kindchecker.kindcheck(data.withAscribedTypes, updatedEnv).map {
+        Kindchecker.kindcheck(data.withAscribedTypes, updatedEnv).map {
           case (kindedEnv, updatedSubst) =>
             (kindedEnv, subst ++ updatedSubst)
         }
@@ -454,8 +332,6 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
   ): Infer[(Module[Meta.Typed], List[Constraint])] = {
     initialPass(module, module.declarations, importedEnv).flatMap {
       case (initialEnv, kindSubst) =>
-        trace(context, "Initial environment", initialEnv)
-
         val emptyRes = (Chain.empty[TopLevelDeclaration[Meta.Typed]], initialEnv, List.empty[Constraint])
 
         val constraintsFromDecls = module.declarations.foldM(emptyRes) {
@@ -471,8 +347,6 @@ class Gather(solve: Solve, context: Printer.SourceContext, isTraceEnabled: Boole
 
             val constraintsWithKinds =
               constraints.map(_.substituteKinds(kindSubst).defaultKinds)
-
-            trace("Constraints", constraintsWithKinds)
 
             val modWithKinds = module.copy(
               declarations = checked.toList,

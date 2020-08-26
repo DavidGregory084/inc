@@ -1,70 +1,9 @@
 package inc.common
 
-import java.lang.{ String, System }
 import org.typelevel.paiges._
-import scala.{ Int, StringContext, Some, None }
-import scala.collection.immutable.Map
-import scala.Predef.{ augmentString, wrapRefArray }
+import scala.{ Some, None, StringContext }
 
 object Printer {
-  case class SourceContext(consoleWidth: Int, fileName: String, source: String)
-
-  def withMargin(marginWidth: Int, lineNumber: Int, line: String) = {
-    val margin = White(s"%${marginWidth}d".format(lineNumber) + '|')
-    margin + line
-  }
-
-  def withSourceContext(context: SourceContext)(msg: String, pos: Pos, highlight: Style): String = {
-    if (pos.isEmpty || context.source.isEmpty)
-      NL + msg
-    else {
-      val blue = Style.Ansi.Fg.Blue
-      val header = blue.start + context.fileName + blue.end
-
-      val before = context.source.substring(0, pos.from)
-      val toHighlight = context.source.substring(pos.from, pos.to)
-      val after = context.source.substring(pos.to, context.source.length)
-
-      val dropBefore = before.split("\\r?\\n").length - 1
-      val dropAfter = after.split("\\r?\\n").length - 1
-
-      val highlightedString = {
-        val linesToHighlight = toHighlight.split("\\r?\\n")
-        val linesWithHighlight = linesToHighlight.map(highlight.start + _ + highlight.end)
-        before + linesWithHighlight.mkString(System.lineSeparator) + after
-      }
-
-      val allLines = highlightedString.split("\\r?\\n")
-
-      val marginWidth = String.valueOf(allLines.length).length + 1
-
-      val highlightedLines = allLines
-        .zipWithIndex
-        .map { case (line, idx) => withMargin(marginWidth, idx + 1, line) }
-        .drop(dropBefore)
-        .dropRight(dropAfter)
-
-      NL + header + NL + highlightedLines.mkString(System.lineSeparator) + NL + msg
-    }
-  }
-
-  def print(constraint: Constraint): Doc = constraint match {
-    case Equal(l, r, _) =>
-      print(l) + Doc.text(" \u2261 ") + print(r)
-  }
-
-  def print(constraint: KindConstraint): Doc = constraint match {
-    case EqualKind(l, r, _) =>
-      print(l) + Doc.text(" \u2261 ") + print(r)
-  }
-
-  def print[K, V](subst: Map[K, V])(printKey: K => Doc, printValue: V => Doc): Doc = {
-    Doc.intercalate(Doc.char(',') + Doc.space, subst.map {
-      case (k, v) =>
-        printKey(k) + Doc.text(" |-> ") + printValue(v)
-    })
-  }
-
   def print(typ: Type): Doc = typ match {
     case NamedTypeVariable(n, _, _) =>
       Doc.text(n)

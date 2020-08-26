@@ -51,8 +51,7 @@ class TypecheckerSpec extends FunSuite {
   test("Typechecker should typecheck let bound literals successfully") {
     val mod = mkModule("Int", List(mkLet("int", mkInt(42))))
     val expected = mkCheckedModule("Int", List(mkCheckedLet("int", mkCheckedInt(42))))
-    val ctx = Printer.SourceContext(80, "Int.inc", Printer.print(expected).render(80))
-    Typechecker.typecheck(mod, noImports, ctx).fold(
+    Typechecker.typecheck(mod, noImports).fold(
       errs => fail(s"""Typechecking failed with errors ${errs.mkString(", ")}"""),
       mod  => assertEquals(mod, expected)
     )
@@ -67,8 +66,7 @@ class TypecheckerSpec extends FunSuite {
       mkCheckedLet("int", mkCheckedInt(42)),
       mkCheckedLet("int2", mkCheckedRef("int", TypeScheme(Type.Int)))
     ))
-    val ctx = Printer.SourceContext(80, "Ref.inc", Printer.print(expected).render(80))
-    Typechecker.typecheck(mod, noImports, ctx).fold(
+    Typechecker.typecheck(mod, noImports).fold(
       errs => fail(s"""Typechecking failed with errors ${errs.mkString(", ")}"""),
       mod  => assertEquals(mod, expected)
     )
@@ -79,8 +77,7 @@ class TypecheckerSpec extends FunSuite {
       mkLet("int", mkInt(42)),
       mkLet("int2", mkRef("int3"))
     ))
-    val ctx = Printer.SourceContext(80, "Ref.inc", "")
-    Typechecker.typecheck(mod, noImports, ctx).fold(
+    Typechecker.typecheck(mod, noImports).fold(
       identity,
       _ => fail("Typechecking should fail as 'int3' is not defined")
     )
@@ -91,9 +88,7 @@ class TypecheckerSpec extends FunSuite {
       mkLet("integer", mkIf(mkBool(true), mkInt(42), mkInt(41)))
     ))
 
-    val ctx1 = Printer.SourceContext(80, "Ref.inc", "")
-
-    Typechecker.typecheck(mod1, noImports, ctx1).fold(
+    Typechecker.typecheck(mod1, noImports).fold(
       errs => fail(s"""Typechecking failed with errors ${errs.mkString(", ")}"""),
       identity
     )
@@ -102,10 +97,8 @@ class TypecheckerSpec extends FunSuite {
       mkLet("integer", mkIf(mkInt(1), mkInt(42), mkInt(41)))
     ))
 
-    val ctx2 = Printer.SourceContext(80, "If.inc", "")
-
     assertEquals(
-      Typechecker.typecheck(mod2, noImports, ctx2),
+      Typechecker.typecheck(mod2, noImports),
       TypeError.typeUnification(Pos.Empty, Type.Int, Type.Boolean)
     )
   }
@@ -115,9 +108,7 @@ class TypecheckerSpec extends FunSuite {
       mkLet("integer", mkIf(mkBool(true), mkInt(42), mkInt(41)))
     ))
 
-    val ctx = Printer.SourceContext(80, "If.inc", "")
-
-    Typechecker.typecheck(mod1, noImports, ctx).fold(
+    Typechecker.typecheck(mod1, noImports).fold(
       errs => fail(s"""Typechecking failed with errors ${errs.mkString(", ")}"""),
       identity
     )
@@ -127,7 +118,7 @@ class TypecheckerSpec extends FunSuite {
     ))
 
     assertEquals(
-      Typechecker.typecheck(mod2, noImports, ctx),
+      Typechecker.typecheck(mod2, noImports),
       TypeError.typeUnification(Pos.Empty, Type.Int, Type.Double)
     )
   }
@@ -137,9 +128,7 @@ class TypecheckerSpec extends FunSuite {
       mkLet("lam", mkLam(List("bool"), mkIf(mkRef("bool"), mkInt(42), mkInt(41))))
     ))
 
-    val ctx1 = Printer.SourceContext(80, "If.inc", "")
-
-    Typechecker.typecheck(mod1, noImports, ctx1).fold(
+    Typechecker.typecheck(mod1, noImports).fold(
       errs => fail(s"""Typechecking failed with errors ${errs.mkString(", ")}"""),
       identity
     )
@@ -148,9 +137,7 @@ class TypecheckerSpec extends FunSuite {
       mkLet("lam", mkLam(List("a"), mkRef("a")))
     ))
 
-    val ctx2 = Printer.SourceContext(80, "Lambda.inc", "")
-
-    Typechecker.typecheck(mod2, noImports, ctx2).fold(
+    Typechecker.typecheck(mod2, noImports).fold(
       errs => fail(s"""Typechecking failed with errors ${errs.mkString(", ")}"""),
       identity
     )
@@ -162,9 +149,7 @@ class TypecheckerSpec extends FunSuite {
       mkLet("app", mkApp(mkRef("lam"), List(mkBool(true))))
     ))
 
-    val ctx = Printer.SourceContext(80, "Apply.inc", "")
-
-    Typechecker.typecheck(mod1, noImports, ctx).fold(
+    Typechecker.typecheck(mod1, noImports).fold(
       errs => fail(s"""Typechecking failed with errors ${errs.mkString(", ")}"""),
       identity
     )
@@ -174,7 +159,7 @@ class TypecheckerSpec extends FunSuite {
       mkLet("app", mkApp(mkRef("lam"), List(mkBool(true))))
     ))
 
-    Typechecker.typecheck(mod2, noImports, ctx).fold(
+    Typechecker.typecheck(mod2, noImports).fold(
       errs => fail(s"""Typechecking failed with errors ${errs.mkString(", ")}"""),
       identity
     )
@@ -191,9 +176,7 @@ class TypecheckerSpec extends FunSuite {
       mkLet("app", constAppliedToStr)
     ))
 
-    val ctx = Printer.SourceContext(80, "Const.inc", "")
-
-    Typechecker.typecheck(mod, noImports, ctx).fold(
+    Typechecker.typecheck(mod, noImports).fold(
       errs => fail(s"""Typechecking failed with errors ${errs.mkString(", ")}"""),
       identity
     )
@@ -204,9 +187,7 @@ class TypecheckerSpec extends FunSuite {
       mkLet("occ", mkLam(List("f"), mkApp(mkRef("f"), List(mkRef("f")))))
     ))
 
-    val ctx = Printer.SourceContext(80, "Occurs.inc", "")
-
-    Typechecker.typecheck(mod, noImports, ctx).fold(
+    Typechecker.typecheck(mod, noImports).fold(
       err => assert(err.head.isInstanceOf[TypeOccursCheck]),
       _ => fail("Typechecking should fail as this code fails the occurs check")
     )

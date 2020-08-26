@@ -404,7 +404,6 @@ trait Generators { self: Assertions =>
       modName = ModuleName(pkg, name)
       emptyMod = Module(pkg, name, List.empty, List.empty, Meta.Typed(modName, TypeScheme(Type.Module), Pos.Empty))
       mod <- declsGen(emptyMod)
-      _ = println(Printer.print(mod).render(80))
     } yield mod
   }
 }

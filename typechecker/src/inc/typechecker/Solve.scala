@@ -6,14 +6,11 @@ import cats.instances.either._
 import cats.syntax.either._
 import cats.syntax.flatMap._
 import com.typesafe.scalalogging.LazyLogging
-import org.typelevel.paiges._
-import scala.{ ::, Boolean, Left, Right, Nil }
+import scala.{ ::, Left, Right, Nil }
 import scala.collection.immutable.{ List, Map }
 import scala.Predef.ArrowAssoc
 
-class Solve(context: Printer.SourceContext, isTraceEnabled: Boolean) extends LazyLogging {
-  val kindChecker = new Kindchecker(context, isTraceEnabled)
-
+object Solve extends LazyLogging {
   type Substitution = Map[TypeVariable, Type]
   val EmptySubst: Substitution = Map.empty
 
@@ -35,7 +32,7 @@ class Solve(context: Printer.SourceContext, isTraceEnabled: Boolean) extends Laz
       case t if tyVar.occursIn(t) =>
         TypeError.typeOccursCheck(pos, tyVar, typ)
       case t if tyVar.kind != t.kind =>
-        kindChecker.unify(tyVar.kind, t.kind, pos).map { subst =>
+        Kindchecker.unify(tyVar.kind, t.kind, pos).map { subst =>
           val updatedTyVar = tyVar.substituteKinds(subst).asInstanceOf[TypeVariable]
           val updatedTyp = t.substituteKinds(subst)
           Map(updatedTyVar.forgetPos -> updatedTyp)
@@ -50,15 +47,6 @@ class Solve(context: Printer.SourceContext, isTraceEnabled: Boolean) extends Laz
     }
 
   def unify(left: Type, right: Type, pos: Pos): Infer[Substitution] = {
-    if (isTraceEnabled) {
-      val lStr = Printer.print(left)
-      val rStr = Printer.print(right)
-      val llYellow = lStr.style(Style.Ansi.Fg.Yellow)
-      val rrYellow = rStr.style(Style.Ansi.Fg.Yellow)
-      val traceMsg = Doc.hardLine + Doc.text("Unifying") & llYellow & Doc.text("with") & rrYellow
-      logger.info(traceMsg.render(context.consoleWidth))
-    }
-
     def go(left: Type, right: Type): Infer[Substitution] = {
       (left, right) match {
         case (Type.Function(largs), Type.Function(rargs)) if largs.length != rargs.length =>

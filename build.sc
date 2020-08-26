@@ -53,7 +53,7 @@ trait ScalaSettingsModule extends TpolecatModule with PublishSettingsModule {
   )
 
   def scalacOptions = T {
-    super.scalacOptions() ++ Seq(
+    super.scalacOptions().filterNot(Set("-Xfatal-warnings")) ++ Seq(
       "-Yno-imports",
       "-Yrangepos",
       // "-opt:l:method",

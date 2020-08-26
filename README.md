@@ -11,7 +11,7 @@ This is a hobby project. Expect lots of bugs and don't expect to be able to use 
 
 ## Getting started
 
-This project is built with [mill](https://www.lihaoyi.com/mill/) version 0.5.2 and requires Java 8 or above to be installed.
+This project is built with [mill](https://www.lihaoyi.com/mill/) version 0.8.0 and requires Java 8 or above to be installed.
 
 To build the project:
 
