@@ -2,7 +2,7 @@ package inc.main
 
 import inc.common._
 import inc.codegen.Codegen
-import cats.data.{ Chain, Validated }
+import cats.data.{ Chain, OptionT, Validated }
 import cats.instances.either._
 import cats.instances.list._
 import cats.syntax.either._
@@ -17,13 +17,16 @@ import scala.collection.immutable.List
 import scala.Predef.{ ArrowAssoc, wrapRefArray }
 
 object Classpath extends LazyLogging {
-  def parseUrls(classpath: String): Either[List[Error], Array[URL]] = {
+  def parseUrls(classpath: String): Compile[Array[URL]] = {
     val urlStrings = classpath.split(File.pathSeparator)
-    Chain.fromSeq(urlStrings.toIndexedSeq).traverse { p =>
+
+    val urls = Chain.fromSeq(urlStrings.toIndexedSeq).traverse { p =>
       val path = Validated.catchNonFatal(Paths.get(p))
       val url = path.map(_.toUri.toURL)
       url.leftMap(_ => ConfigError.invalidClasspathEntry(p))
     }.map(_.iterator.toArray).toEither
+
+    OptionT.liftF(urls)
   }
 
   def classNotFound(pos: Pos, className: String): Either[List[ConfigError], Array[Byte]] =
@@ -55,7 +58,7 @@ object Classpath extends LazyLogging {
     }
   }
 
-  def readEnvironment(imports: List[Import], classloader: ClassLoader): Either[List[Error], Environment[Meta.Typed]] = {
+  def readEnvironment(imports: List[Import], classloader: ClassLoader): Compile[Environment[Meta.Typed]] = {
     val distinctPrefixes = imports.map {
       case ImportModule(pkg, nm, pos) =>
         (pkg, nm, pos)
@@ -94,6 +97,6 @@ object Classpath extends LazyLogging {
       environments.foldLeft(Environment.empty[Meta.Typed])(_ ++ _)
     }
 
-    environment
+    OptionT.liftF(environment)
   }
 }

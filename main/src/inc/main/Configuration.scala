@@ -1,7 +1,7 @@
 package inc.main
 
 import java.lang.String
-import scala.Boolean
+import scala.{ Boolean, Option, None }
 
 case class Configuration(
   classpath: String = ".",
@@ -12,7 +12,8 @@ case class Configuration(
   printCodegen: Boolean = false,
   printPhaseTiming: Boolean = false,
   verifyCodegen: Boolean = false,
-  exitOnError: Boolean = true
+  exitOnError: Boolean = true,
+  stopBefore: Option[Phase] = None
 )
 
 object Configuration {

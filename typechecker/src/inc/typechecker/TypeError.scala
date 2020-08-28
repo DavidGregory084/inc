@@ -68,7 +68,6 @@ object TypeError {
     Left(List(KindUnificationError(pos, left, right)))
   def kindOccursCheck(pos: Pos, kindVar: KindVariable, kind: Kind)(implicit file: sourcecode.File, line: sourcecode.Line): Either[List[TypeError], Nothing] =
     Left(List(KindOccursCheck(pos, kindVar, kind)))
-  def generic(pos: Pos, msg: String)(implicit file: sourcecode.File, line: sourcecode.Line): Either[List[TypeError], Nothing] = {
+  def generic(pos: Pos, msg: String)(implicit file: sourcecode.File, line: sourcecode.Line): Either[List[TypeError], Nothing] =
     Left(List(GenericError(pos,  Error.formatMessage(file, line, msg))))
-  }
 }

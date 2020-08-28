@@ -448,6 +448,8 @@ final case class Match[A](
     env.members.get(matchExpr.meta.name).map { dataMembers =>
       dataMembers.forall { dataMember =>
         cases.exists {
+          case MatchCase(pat, _, _) if pat.isIrrefutable =>
+            true
           case MatchCase(ConstrPattern(name, _, _, _), _, _) =>
             dataMember.name.shortName == name
           case _ =>

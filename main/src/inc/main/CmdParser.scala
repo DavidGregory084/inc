@@ -35,9 +35,9 @@ object CmdParser extends scopt.OptionParser[Configuration]("inc") {
       dir = Paths.get(d)
     }
 
-  opt[Unit]("trace-typer")
-    .text("Print a trace during the typechecking phase")
-    .action((_, config) => config.copy(traceTyper = true))
+  // opt[Unit]("trace-typer")
+  //   .text("Print a trace during the typechecking phase")
+  //   .action((_, config) => config.copy(traceTyper = true))
 
   opt[Unit]("print-parser")
     .text("Print syntax trees after the parsing phase")
@@ -66,6 +66,16 @@ object CmdParser extends scopt.OptionParser[Configuration]("inc") {
   opt[Boolean]("exit-on-error")
     .text("Exit the Java VM with exit code 1 if an error occurs")
     .action((exitOnError, config) => config.copy(exitOnError = exitOnError))
+
+  opt[String]("stop-before")
+    .text(s"""Stop before the named phase. Currently defined phases: ${Phase.names.mkString(", ")}""")
+    .action((stopBefore, config) => config.copy(stopBefore = Phase.withName(stopBefore)))
+    .validate { stopBefore =>
+      if (Phase.names.contains(stopBefore))
+        success
+      else
+        failure(s"${stopBefore} is not a known compilation phase")
+    }
 
   arg[String]("<file>")
     .text("The source file to compile")

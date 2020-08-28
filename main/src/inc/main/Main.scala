@@ -1,5 +1,8 @@
 package inc.main
 
+import cats.data.OptionT
+import cats.instances.either._
+import cats.syntax.flatMap._
 import inc.common._
 import inc.parser.Parser
 import inc.resolver.Resolver
@@ -24,7 +27,7 @@ object Main extends LazyLogging {
       val source = readFileAsString(path)
       val fileName = dir.resolve(path).toString
 
-      compileModule(dir, fileName, config, source).left.foreach { errors =>
+      compileModule(dir, fileName, config, source).value.left.foreach { errors =>
         errors
           .map(_.message)
           .foreach(logger.error(_))
@@ -40,7 +43,7 @@ object Main extends LazyLogging {
     .asScala.mkString(System.lineSeparator)
 
   def runPhase[A](
-    phaseName: String,
+    phaseName: Phase,
     fileName: String,
     config: Configuration,
     printOutput: Configuration => Boolean,
@@ -48,24 +51,26 @@ object Main extends LazyLogging {
     print: A => Unit = (a: A) => {
       logger.info(NL + pprint.apply(a, height = 1000))
     }
-  ): Either[List[Error], A] = {
+  ): Compile[A] = {
     val before = System.nanoTime
+    val shouldRun = config.stopBefore.map(_ != phaseName).getOrElse(true)
+    val shouldRunF = OptionT.pure[Either[List[Error], *]](shouldRun)
 
     for {
-      out <- phase
+      out <- shouldRunF.ifM(OptionT.liftF(phase), OptionT.none)
 
       after = System.nanoTime
 
       _ = if (config.printPhaseTiming) {
-        logger.info(Messages.phaseTime(phaseName, fileName, before, after))
+        logger.info(Messages.phaseTime(phaseName.name, fileName, before, after))
       }
 
       _ = if (printOutput(config)) print(out)
 
     } yield out
   }
-
-  def compileModule(dest: Path, fileName: String, config: Configuration = Configuration.default, source: String): Either[List[Error], List[Path]] = {
+  
+  def compileModule(dest: Path, fileName: String, config: Configuration = Configuration.default, source: String): Compile[List[Path]] = {
     val beforeAll = System.nanoTime
 
     val codegen = new Codegen(config.verifyCodegen)
@@ -73,15 +78,15 @@ object Main extends LazyLogging {
     val res = for {
       urls <- Classpath.parseUrls(config.classpath)
 
-      mod <- runPhase[Module[Pos]]("parser", fileName, config, _.printParser, Parser.parse(source))
+      mod <- runPhase[Module[Pos]](Phase.Parser, fileName, config, _.printParser, Parser.parse(source))
 
       importedEnv <- Classpath.readEnvironment(mod.imports, new URLClassLoader(urls))
 
-      resolved <- runPhase[Module[Meta.Untyped]]("resolver", fileName, config, _.printResolver, Resolver.resolve(mod, importedEnv.forgetMemberTypes))
+      resolved <- runPhase[Module[Meta.Untyped]](Phase.Resolver, fileName, config, _.printResolver, Resolver.resolve(mod, importedEnv.forgetMemberTypes))
 
-      checked <- runPhase[Module[Meta.Typed]]("typechecker", fileName, config, _.printTyper, Typechecker.typecheck(resolved, importedEnv))
+      checked <- runPhase[Module[Meta.Typed]](Phase.Typer, fileName, config, _.printTyper, Typechecker.typecheck(resolved, importedEnv))
 
-      classFiles <- runPhase[List[ClassFile]]("codegen", fileName, config, _.printCodegen, codegen.generate(checked, importedEnv), _.foreach(f => codegen.print(f.bytes)))
+      classFiles <- runPhase[List[ClassFile]](Phase.Codegen, fileName, config, _.printCodegen, codegen.generate(checked, importedEnv), _.foreach(f => codegen.print(f.bytes)))
 
     } yield {
       val outDir = mod.pkg.foldLeft(dest) {
@@ -103,7 +108,7 @@ object Main extends LazyLogging {
       outFiles
     }
 
-    res.left.foreach { _ =>
+    res.value.left.foreach { _ =>
       val afterAll = System.nanoTime
       logger.info(Messages.compilationErrorTime(fileName, beforeAll, afterAll))
     }

@@ -47,8 +47,8 @@ class MainSpec extends ScalaCheckSuite with Generators {
     val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
     val pkg = "Test/Main/"
     val mod = s"module ${pkg}${fieldName.capitalize} { let ${fieldName} = ${stringValue} }"
-    val classFile = Main.compileModule(dir, s"${fieldName.capitalize}.inc", config, mod).fold(err => fail(err.head.message), identity)
-    val clazz = loadClassFrom(dir, pkg + classFile.head.toFile.toScala.nameWithoutExtension)
+    val classFile = Main.compileModule(dir, s"${fieldName.capitalize}.inc", config, mod).value.fold(err => fail(err.head.message), identity)
+    val clazz = loadClassFrom(dir, pkg + classFile.get.head.toFile.toScala.nameWithoutExtension)
     assertEquals(getStatic(clazz, fieldName), expectedValue)
   }
 
@@ -96,11 +96,11 @@ class MainSpec extends ScalaCheckSuite with Generators {
       val pkg = "Test/Main/"
       val fieldName = "reference"
       val mod = s"module ${pkg}Reference { let integer = 42; let ${fieldName} = integer }"
-      val result = Main.compileModule(dir, s"${fieldName.capitalize}.inc", config, mod).fold(
+      val result = Main.compileModule(dir, s"${fieldName.capitalize}.inc", config, mod).value.fold(
         errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
         identity
       )
-      val clazz = loadClassFrom(dir, pkg + result.head.toFile.toScala.nameWithoutExtension)
+      val clazz = loadClassFrom(dir, pkg + result.get.head.toFile.toScala.nameWithoutExtension)
       assertEquals(
         getStatic(clazz, fieldName),
         42
@@ -114,11 +114,11 @@ class MainSpec extends ScalaCheckSuite with Generators {
       val pkg = "Test/Main/"
       val fieldName = "z"
       val mod = s"module ${pkg}If { let a = true; let x = 42; let y = 41; let ${fieldName} = if a then x else y }"
-      val result = Main.compileModule(dir, "If.inc", config, mod).fold(
+      val result = Main.compileModule(dir, "If.inc", config, mod).value.fold(
         errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
         identity
       )
-      val clazz = loadClassFrom(dir, pkg + result.head.toFile.toScala.nameWithoutExtension)
+      val clazz = loadClassFrom(dir, pkg + result.get.head.toFile.toScala.nameWithoutExtension)
       assertEquals(
         getStatic(clazz, fieldName),
         42
@@ -132,11 +132,11 @@ class MainSpec extends ScalaCheckSuite with Generators {
       val pkg = "Test/Main/"
       val fieldName = "z"
       val mod = s"module ${pkg}If { let a = false; let x = 42; let y = 41; let ${fieldName} = if a then x else y }"
-      val result = Main.compileModule(dir, "If.inc", config, mod).fold(
+      val result = Main.compileModule(dir, "If.inc", config, mod).value.fold(
         errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
         identity
       )
-      val clazz = loadClassFrom(dir, pkg + result.head.toFile.toScala.nameWithoutExtension)
+      val clazz = loadClassFrom(dir, pkg + result.get.head.toFile.toScala.nameWithoutExtension)
       assertEquals(getStatic(clazz, fieldName), 41)
     }
   }
@@ -145,11 +145,11 @@ class MainSpec extends ScalaCheckSuite with Generators {
     withTmpDir { dir =>
       val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
       val mod = "module Test/Main/Lambda { let x = 42; let y = 41; let lam = bool -> if bool then x else y }"
-      val result = Main.compileModule(dir, "Lambda.inc", config, mod).fold(
+      val result = Main.compileModule(dir, "Lambda.inc", config, mod).value.fold(
         errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
         identity
       )
-      assert(loadClassFrom(dir, "Test.Main." + result.head.toFile.toScala.nameWithoutExtension) != null)
+      assert(loadClassFrom(dir, "Test.Main." + result.get.head.toFile.toScala.nameWithoutExtension) != null)
     }
   }
 
@@ -157,11 +157,11 @@ class MainSpec extends ScalaCheckSuite with Generators {
     withTmpDir { dir =>
       val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
       val mod = "module Test/Main/Lambda { let id = a -> a }"
-      val result = Main.compileModule(dir, "Lambda.inc", config, mod).fold(
+      val result = Main.compileModule(dir, "Lambda.inc", config, mod).value.fold(
         errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
         identity
       )
-      assert(loadClassFrom(dir, "Test.Main." + result.head.toFile.toScala.nameWithoutExtension) != null)
+      assert(loadClassFrom(dir, "Test.Main." + result.get.head.toFile.toScala.nameWithoutExtension) != null)
     }
   }
 
@@ -169,11 +169,11 @@ class MainSpec extends ScalaCheckSuite with Generators {
     withTmpDir { dir =>
       val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
       val mod = """module Test/Main/Lambda { let id = a -> a; let str = id("string") }"""
-      val result = Main.compileModule(dir, "Lambda.inc", config, mod).fold(
+      val result = Main.compileModule(dir, "Lambda.inc", config, mod).value.fold(
         errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
         identity
       )
-      assert(loadClassFrom(dir, "Test.Main." + result.head.toFile.toScala.nameWithoutExtension) != null)
+      assert(loadClassFrom(dir, "Test.Main." + result.get.head.toFile.toScala.nameWithoutExtension) != null)
     }
   }
 
@@ -181,11 +181,11 @@ class MainSpec extends ScalaCheckSuite with Generators {
     withTmpDir { dir =>
       val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
       val mod = """module Test/Main/Lambda { let id = a -> a; let int = id(1) }"""
-      val result = Main.compileModule(dir, "Lambda.inc", config, mod).fold(
+      val result = Main.compileModule(dir, "Lambda.inc", config, mod).value.fold(
         errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
         identity
       )
-      assert(loadClassFrom(dir, "Test.Main." + result.head.toFile.toScala.nameWithoutExtension) != null)
+      assert(loadClassFrom(dir, "Test.Main." + result.get.head.toFile.toScala.nameWithoutExtension) != null)
     }
   }
 
@@ -193,11 +193,11 @@ class MainSpec extends ScalaCheckSuite with Generators {
     withTmpDir { dir =>
       val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
       val mod = """module Test/Main/Const { let const = (a, b) -> a; let foo = a -> "a"; let bar = f -> foo(f(42, 36)); let baz = foo(const) }"""
-      val result = Main.compileModule(dir, "Const.inc", config, mod).fold(
+      val result = Main.compileModule(dir, "Const.inc", config, mod).value.fold(
         errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
         identity
       )
-      assert(loadClassFrom(dir, "Test.Main." + result.head.toFile.toScala.nameWithoutExtension) != null)
+      assert(loadClassFrom(dir, "Test.Main." + result.get.head.toFile.toScala.nameWithoutExtension) != null)
     }
   }
 
@@ -211,7 +211,7 @@ class MainSpec extends ScalaCheckSuite with Generators {
         |  let id = a -> a
         |}""".trim.stripMargin
 
-      Main.compileModule(dir, "Id.inc", config, mod1).fold(
+      Main.compileModule(dir, "Id.inc", config, mod1).value.fold(
         errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
         identity
       )
@@ -224,12 +224,12 @@ class MainSpec extends ScalaCheckSuite with Generators {
         |}
         """.trim.stripMargin
 
-      val result2 = Main.compileModule(dir, "Apply.inc", config, mod2).fold(
+      val result2 = Main.compileModule(dir, "Apply.inc", config, mod2).value.fold(
         errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
         identity
       )
 
-      val clazz = loadClassFrom(dir, "Test." + result2.head.toFile.toScala.nameWithoutExtension)
+      val clazz = loadClassFrom(dir, "Test." + result2.get.head.toFile.toScala.nameWithoutExtension)
 
       assertEquals(getStatic(clazz, "int"), 1)
     }
@@ -242,11 +242,11 @@ class MainSpec extends ScalaCheckSuite with Generators {
         val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
         val mod = Printer.print(generatedMod).render(80)
         try {
-          val result = Main.compileModule(dir, s"${generatedMod.name}.inc", config, mod).fold(
+          val result = Main.compileModule(dir, s"${generatedMod.name}.inc", config, mod).value.fold(
             errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
             identity
           )
-          assert(loadClassFrom(dir, "Test.Main." + result.head.toFile.toScala.nameWithoutExtension) != null)
+          assert(loadClassFrom(dir, "Test.Main." + result.get.head.toFile.toScala.nameWithoutExtension) != null)
         } catch {
           case e: Throwable =>
             println(NL + mod)

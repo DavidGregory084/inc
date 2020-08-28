@@ -38,19 +38,14 @@ case class AlreadyDefinedSymbolError(position: Pos, name: String, existing: Name
 case class GenericError(position: Pos, message: String) extends ResolverError(position)
 
 object ResolverError {
-  def unknownMember(pos: Pos, constr: String, member: String)(implicit file: sourcecode.File, line: sourcecode.Line): Either[List[ResolverError], Nothing] = {
+  def unknownMember(pos: Pos, constr: String, member: String)(implicit file: sourcecode.File, line: sourcecode.Line): Either[List[ResolverError], Nothing] =
     Left(List(UnknownMemberError(pos, constr, member)))
-  }
-  def unknownConstructor(pos: Pos, name: String)(implicit file: sourcecode.File, line: sourcecode.Line): Either[List[ResolverError], Nothing] = {
+  def unknownConstructor(pos: Pos, name: String)(implicit file: sourcecode.File, line: sourcecode.Line): Either[List[ResolverError], Nothing] =
     Left(List(UnknownConstructorError(pos, name)))
-  }
-  def undefined(pos: Pos, name: String)(implicit file: sourcecode.File, line: sourcecode.Line): Either[List[ResolverError], Nothing] = {
+  def undefined(pos: Pos, name: String)(implicit file: sourcecode.File, line: sourcecode.Line): Either[List[ResolverError], Nothing] =
     Left(List(UndefinedSymbolError(pos, name)))
-  }
-  def alreadyDefined(pos: Pos, name: String, existing: Name)(implicit file: sourcecode.File, line: sourcecode.Line): Either[List[ResolverError], Nothing] = {
+  def alreadyDefined(pos: Pos, name: String, existing: Name)(implicit file: sourcecode.File, line: sourcecode.Line): Either[List[ResolverError], Nothing] =
     Left(List(AlreadyDefinedSymbolError(pos, name, existing)))
-  }
-  def generic(pos: Pos, msg: String)(implicit file: sourcecode.File, line: sourcecode.Line): Either[List[ResolverError], Nothing] = {
+  def generic(pos: Pos, msg: String)(implicit file: sourcecode.File, line: sourcecode.Line): Either[List[ResolverError], Nothing] =
     Left(List(GenericError(pos, Error.formatMessage(file, line, msg))))
-  }
 }
