@@ -28,3 +28,9 @@ jobs:
       run: |
         chmod +x ./mill
         ./mill _.test
+        ./mill _.scoverage.xmlReport
+        
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v1
+      with:
+        file: ./out/*/scoverage/xmlReport/dest/scoverage.xml
