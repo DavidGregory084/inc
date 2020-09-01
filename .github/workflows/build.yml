@@ -32,5 +32,8 @@ jobs:
         
     - name: Upload coverage reports
       uses: codecov/codecov-action@v1
+      env:
+        JAVA_VERSION: ${{ matrix.java-version }}
       with:
         file: ./out/*/scoverage/xmlReport/dest/scoverage.xml
+        env_vars: JAVA_VERSION
