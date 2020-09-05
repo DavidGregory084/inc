@@ -73,7 +73,7 @@ module Test/Let {
   let litFloat = 42.0F
   let litDouble = 42.0D
   let litBool = true
-  let litChar = 'a' 
+  let litChar = 'a'
   let litString = "foo"
   let litUnit = ()
 }
@@ -120,7 +120,7 @@ module Test/Data {
     case Left(a: A)
     case Right(b: B)
   }
-   
+
   data Fix[F] {
     case Unfix(unfix: F[Fix[F]])
   }
@@ -140,7 +140,7 @@ module Test/Data {
     case Cons(head: A, tail: List[A])
     case Nil()
   }
-  
+
   let last = list -> match list with {
     case Cons { head, tail: Nil {} } -> Some(head)
     case Cons { tail } -> last(tail)
@@ -148,6 +148,16 @@ module Test/Data {
   }
 }
 ```
+
+## Structure of the project
+
+The dependency structure of the modules is described in the following diagram:
+
+![Dependency structure diagram](./architecture/structurizr-Structure.png)
+
+The relationship of the modules during compilation is as follows:
+
+![Diagram of compilation](./architecture/structurizr-Compilation.png)
 
 ## Continuous Benchmarks
 

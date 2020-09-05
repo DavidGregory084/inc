@@ -1,0 +1,62 @@
+@startuml(id=Compilation)
+title inc compiler - Dynamic
+caption Diagram of the compilation process
+
+skinparam {
+  shadowing false
+  arrowFontSize 10
+  defaultTextAlignment center
+  wrapWidth 200
+  maxMessageSize 100
+}
+hide stereotype
+skinparam rectangle<<1>> {
+  BackgroundColor #08427b
+  FontColor #ffffff
+  BorderColor #052E56
+}
+skinparam rectangle<<6>> {
+  BackgroundColor #85bbf0
+  FontColor #000000
+  BorderColor #5D82A8
+  roundCorner 20
+}
+skinparam rectangle<<7>> {
+  BackgroundColor #85bbf0
+  FontColor #000000
+  BorderColor #5D82A8
+  roundCorner 20
+}
+skinparam rectangle<<8>> {
+  BackgroundColor #85bbf0
+  FontColor #000000
+  BorderColor #5D82A8
+  roundCorner 20
+}
+skinparam rectangle<<9>> {
+  BackgroundColor #85bbf0
+  FontColor #000000
+  BorderColor #5D82A8
+  roundCorner 20
+}
+skinparam rectangle<<10>> {
+  BackgroundColor #85bbf0
+  FontColor #000000
+  BorderColor #5D82A8
+  roundCorner 20
+}
+left to right direction
+
+rectangle "==User\n<size:10>[Person]</size>" <<1>> as 1
+rectangle "==/main\n<size:10>[Component]</size>\n\nOrchestrates compilation using the other modules. Fetches imported modules from the classpath." <<10>> as 10
+rectangle "==/parser\n<size:10>[Component]</size>\n\nParses a textual module into a syntax tree." <<6>> as 6
+rectangle "==/resolver\n<size:10>[Component]</size>\n\nResolves fully qualified names for each identifier in the syntax trees." <<7>> as 7
+rectangle "==/typechecker\n<size:10>[Component]</size>\n\nInfers types for every declaration and expression in the syntax tree." <<8>> as 8
+rectangle "==/codegen\n<size:10>[Component]</size>\n\nGenerates JVM bytecode from syntax trees. Embeds a protobuf syntax tree as a class file attribute." <<9>> as 9
+1 .[#707070].> 10 : "1. Source files"
+10 .[#707070].> 6 : "2. Source text"
+6 .[#707070].> 7 : "3. Parsed syntax trees"
+7 .[#707070].> 8 : "4. Resolved syntax trees"
+8 .[#707070].> 9 : "5. Typechecked syntax trees"
+10 <.[#707070]. 9 : "6. Compiled classfiles"
+@enduml
