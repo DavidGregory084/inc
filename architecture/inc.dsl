@@ -56,6 +56,7 @@ workspace {
             resolver -> typechecker "Resolved syntax trees"
             typechecker -> codegen "Typechecked syntax trees"
             codegen -> main "Compiled classfiles"
+            autoLayout lr
         }
     }
 }
