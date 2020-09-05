@@ -36,28 +36,35 @@ final case class Module[A](
     val names = namedDeclarations.flatMap {
       case Let(name, _, meta) =>
         List(name -> meta.name)
-      case Data(name, _, cases, meta) =>
-        (name -> meta.name) :: cases.map {
-          case DataConstructor(caseName, _, _, caseMeta) =>
+      case Data(_, _, cases, _) =>
+        cases.map {
+          case DataConstructor(caseName, _, caseMeta) =>
             caseName -> caseMeta.name
         }
+    }
+
+    val typeNames = namedDeclarations.flatMap {
+      case Data(name, _, _, meta) =>
+        List(name -> meta.name)
+      case _ =>
+        List.empty
     }
 
     val members = namedDeclarations.flatMap {
       case Data(_, _, cases, dataMeta) =>
         val dataMembers = for {
-          DataConstructor(_, params, _, constrMeta) <- cases
+          DataConstructor(_, params, constrMeta) <- cases
           dataMember = dataMeta.name -> constrMeta
         } yield dataMember
 
         val constrMembers = for {
-          DataConstructor(_, params, _, constrMeta) <- cases
+          DataConstructor(_, params, constrMeta) <- cases
           Param(_, _, paramMeta) <- params
           constrMember = constrMeta.name -> paramMeta
         } yield constrMember
 
         val emptyConstrs = for {
-          DataConstructor(name, params, _, constrMeta) <- cases
+          DataConstructor(name, params, constrMeta) <- cases
           if params.isEmpty
         } yield constrMeta.name -> List.empty[Meta.Untyped]
 
@@ -70,7 +77,8 @@ final case class Module[A](
     }
 
     val env = Environment.empty
-      .withNames(names)
+      .withValueNames(names)
+      .withTypeNames(typeNames)
       .copy(members = members.toMap)
 
     envFrom(env)
@@ -85,11 +93,18 @@ final case class Module[A](
     val names = typedDeclarations.flatMap {
       case Let(name, _, meta) =>
         List(name -> meta.name)
-      case Data(name, _, cases, meta) =>
-        (name -> meta.name) :: cases.map {
-          case DataConstructor(caseName, _, _, caseMeta) =>
+      case Data(_, _, cases, _) =>
+        cases.map {
+          case DataConstructor(caseName, _, caseMeta) =>
             caseName -> caseMeta.name
         }
+    }
+
+    val typeNames = typedDeclarations.flatMap {
+      case Data(name, _, _, meta) =>
+        List(name -> meta.name)
+      case _ =>
+        List.empty
     }
 
     val types = typedDeclarations.flatMap {
@@ -97,27 +112,34 @@ final case class Module[A](
         List(name -> meta.typ)
       case Data(_, _, cases, _) =>
         cases.map {
-          case DataConstructor(name, _, _, meta) =>
+          case DataConstructor(name, _, meta) =>
             name -> meta.typ
         }
     }
 
     val members = typedDeclarations.flatMap {
-      case Data(_, tparams, cases, dataMeta) =>
+      case Data(_, _, cases, dataMeta) =>
         val dataMembers = for {
-          DataConstructor(_, params, _, constrMeta) <- cases
+          DataConstructor(_, params, constrMeta) <- cases
           dataMember = dataMeta.name -> constrMeta
         } yield dataMember
 
         val constrMembers = for {
-          DataConstructor(_, params, returnTyp, constrMeta) <- cases
+          DataConstructor(_, params, constrMeta) <- cases
+
           Param(_, ascribedAs, paramMeta) <- params
-          fnType = TypeScheme(tparams, Type.Function(List(returnTyp.typ), ascribedAs.get.typ))
+
+          fnType = TypeScheme(
+            dataMeta.typ.bound,
+            Type.Function(List(dataMeta.typ.typ), ascribedAs.get.meta.typ.typ)
+          )
+
           constrMember = constrMeta.name -> paramMeta.copy(typ = fnType)
+
         } yield constrMember
 
         val emptyConstrs = for {
-          DataConstructor(name, params, _, constrMeta) <- cases
+          DataConstructor(name, params, constrMeta) <- cases
           if params.isEmpty
         } yield constrMeta.name -> List.empty[Meta.Typed]
 
@@ -135,7 +157,8 @@ final case class Module[A](
     }
 
     val env = Environment.empty
-      .withNames(names)
+      .withValueNames(names)
+      .withTypeNames(typeNames)
       .withTypes(types)
       .withKinds(kinds)
       .copy(members = members.toMap)
@@ -191,5 +214,15 @@ object Module {
         declarations = ma.declarations.map(_.map(f))
       )
     }
+  }
+
+  implicit val moduleSubstitutableTypes: Substitutable[TypeVariable, Type, Module[Meta.Typed]] = new Substitutable[TypeVariable, Type, Module[Meta.Typed]] {
+    def substitute(mod: Module[Meta.Typed], subst: Substitution[TypeVariable, Type]): Module[Meta.Typed] =
+      mod.substitute(subst.subst)
+  }
+
+  implicit val moduleSubstitutableKinds: Substitutable[KindVariable, Kind, Module[Meta.Typed]] = new Substitutable[KindVariable, Kind, Module[Meta.Typed]] {
+    def substitute(mod: Module[Meta.Typed], subst: Substitution[KindVariable, Kind]): Module[Meta.Typed] =
+      mod.substituteKinds(subst.subst)
   }
 }

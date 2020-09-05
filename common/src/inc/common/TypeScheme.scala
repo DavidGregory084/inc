@@ -31,7 +31,7 @@ case class TypeScheme(bound: List[TypeVariable], typ: Type) {
       typ
     else {
       val freshVars = bound.map(b => TypeVariable(b.kind))
-      val subst = bound.map(_.forgetPos).zip(freshVars)
+      val subst = bound.zip(freshVars)
       typ.substitute(subst.toMap)
     }
 }
@@ -54,13 +54,25 @@ object TypeScheme {
       val tyVars = bound.toList.map(TypeVariable.fromProto)
 
       val (freshVars, subst) = tyVars.foldLeft((Vector.empty[TypeVariable], Map.empty[TypeVariable, Type])) {
-        case ((vars, subst), named @ NamedTypeVariable(_, _, _)) =>
+        case ((vars, subst), named @ NamedTypeVariable(_, _)) =>
           (vars :+ named, subst)
-        case ((vars, subst), inferred @ InferredTypeVariable(_, kind, _)) =>
+        case ((vars, subst), inferred @ InferredTypeVariable(_, kind)) =>
           val freshVar = TypeVariable(kind)
           (vars :+ freshVar, subst.updated(inferred, freshVar))
       }
 
       TypeScheme(freshVars.toList, typ.substitute(subst))
   }
+
+  implicit val typeSchemeSubstitutableTypes: Substitutable[TypeVariable, Type, TypeScheme] =
+    new Substitutable[TypeVariable, Type, TypeScheme] {
+      def substitute(scheme: TypeScheme, subst: Substitution[TypeVariable, Type]): TypeScheme =
+        scheme.substitute(subst.subst)
+    }
+
+  implicit val typeSchemeSubstitutableKinds: Substitutable[KindVariable, Kind, TypeScheme] =
+    new Substitutable[KindVariable, Kind, TypeScheme] {
+      def substitute(scheme: TypeScheme, subst: Substitution[KindVariable, Kind]): TypeScheme =
+        scheme.substituteKinds(subst.subst)
+    }
 }

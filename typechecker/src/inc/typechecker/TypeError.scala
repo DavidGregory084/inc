@@ -29,9 +29,7 @@ case class TypeApplicationError(position: Pos, left: Type, right: Type)(implicit
   val message: String = {
     val leftStr = Printer.print(left).render(80)
     val rightStr = Printer.print(right).render(80)
-
     val msg = s"${Red(leftStr)} does not unify with ${Red(rightStr)}: ${leftStr} has arity ${left.kind.arity}; ${rightStr} has arity ${right.kind.arity}"
-
     Error.formatMessage(file, line, msg)
   }
 }

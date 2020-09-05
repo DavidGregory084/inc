@@ -69,6 +69,11 @@ object Kind {
     case proto.Kind.Empty =>
       throw new Exception("Empty Kind in protobuf")
   }
+
+  implicit val kindSubstitutableKinds: Substitutable[KindVariable, Kind, Kind] = new Substitutable[KindVariable, Kind, Kind] {
+    def substitute(kind: Kind, subst: Substitution[KindVariable, Kind]): Kind =
+      kind.substitute(subst.subst)
+  }
 }
 
 case object Atomic extends Kind

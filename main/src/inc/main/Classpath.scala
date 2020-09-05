@@ -3,8 +3,6 @@ package inc.main
 import inc.common._
 import inc.codegen.Codegen
 import cats.data.{ Chain, OptionT, Validated }
-import cats.instances.either._
-import cats.instances.list._
 import cats.syntax.either._
 import cats.syntax.traverse._
 import com.typesafe.scalalogging.LazyLogging

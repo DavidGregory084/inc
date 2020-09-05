@@ -118,7 +118,7 @@ sealed abstract class Expr[A] extends Product with Serializable {
       proto.Apply(fn.toProto, args.map(_.toProto), typedMeta)
     case Ascription(expr, ascribedAs, meta) =>
       val typedMeta = Some(eqv(meta).toProto)
-      proto.Ascription(expr.toProto, Some(ascribedAs.toProto), typedMeta)
+      proto.Ascription(expr.toProto, ascribedAs.toProto, typedMeta)
     case Match(matchExpr, cases, meta) =>
       val typedMeta = Some(eqv(meta).toProto)
       proto.Match(matchExpr.toProto, cases.map(_.toProto), typedMeta)
@@ -326,7 +326,7 @@ object Expr {
     case asc @ proto.Ascription(_, _, _, _) =>
       Ascription(
         Expr.fromProto(asc.expr),
-        TypeScheme.fromProto(asc.getAscribedAs),
+        TypeExpr.fromProto(asc.ascribedAs),
         Meta.fromProto(asc.getNameWithType))
     case mat @ proto.Match(_, _, _, _) =>
       Match(
@@ -376,6 +376,7 @@ object Expr {
       case asc @ Ascription(_, _, _) =>
         asc.copy(
           expr = map(asc.expr)(f),
+          ascribedAs = asc.ascribedAs.map(f),
           meta = f(asc.meta))
       case mat @ Match(_, _, _) =>
         mat.copy(
@@ -383,6 +384,15 @@ object Expr {
           cases = mat.cases.map(_.map(f)),
           meta = f(mat.meta))
     }
+  }
+
+  implicit val exprSubstitutableTypes: Substitutable[TypeVariable, Type, Expr[Meta.Typed]] = new Substitutable[TypeVariable, Type, Expr[Meta.Typed]] {
+    def substitute(expr: Expr[Meta.Typed], subst: Substitution[TypeVariable,Type]): Expr[Meta.Typed] =
+      expr.substitute(subst.subst)
+  }
+  implicit val exprSubstitutableKinds: Substitutable[KindVariable, Kind, Expr[Meta.Typed]] = new Substitutable[KindVariable, Kind, Expr[Meta.Typed]] {
+    def substitute(expr: Expr[Meta.Typed], subst: Substitution[KindVariable, Kind]): Expr[Meta.Typed] =
+      expr.substituteKinds(subst.subst)
   }
 }
 
@@ -407,7 +417,7 @@ final case class Apply[A](
 
 final case class Ascription[A](
   expr: Expr[A],
-  ascribedAs: TypeScheme,
+  ascribedAs: TypeExpr[A],
   meta: A
 ) extends Expr[A]
 
@@ -445,18 +455,17 @@ final case class Match[A](
   meta: A
 ) extends Expr[A] {
   def isExhaustive(env: Environment[Meta.Typed])(implicit eqv: A =:= Meta.Typed): Boolean = {
-    env.members.get(matchExpr.meta.name).map { dataMembers =>
-      dataMembers.forall { dataMember =>
-        cases.exists {
-          case MatchCase(pat, _, _) if pat.isIrrefutable =>
-            true
-          case MatchCase(ConstrPattern(name, _, _, _), _, _) =>
-            dataMember.name.shortName == name
-          case _ =>
-            false
+    cases.exists(_.pattern.isIrrefutable) ||
+      env.members.get(matchExpr.meta.name).map { dataMembers =>
+        dataMembers.forall { dataMember =>
+          cases.exists {
+            case MatchCase(ConstrPattern(name, _, _, _), _, _) =>
+              dataMember.name.shortName == name
+            case _ =>
+              false
+          }
         }
-      }
-    }.getOrElse(false)
+      }.getOrElse(false)
   }
 }
 

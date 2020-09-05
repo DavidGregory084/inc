@@ -49,4 +49,15 @@ object Meta {
       TypeScheme.fromProto(nameWithType.getType),
       Pos.Empty
     )
+
+  object Typed {
+    implicit val typedMetaSubstitutableTypes: Substitutable[TypeVariable, Type, Typed] = new Substitutable[TypeVariable, Type, Typed] {
+      def substitute(meta: Typed, subst: Substitution[TypeVariable,Type]): Typed =
+        meta.substitute(subst.subst)
+    }
+    implicit val typedMetaSubstitutableKinds: Substitutable[KindVariable, Kind, Typed] = new Substitutable[KindVariable, Kind, Typed] {
+      def substitute(meta: Typed, subst: Substitution[KindVariable, Kind]): Typed =
+        meta.substituteKinds(subst.subst)
+    }
+  }
 }

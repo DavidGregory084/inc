@@ -16,7 +16,7 @@ object Typechecker extends LazyLogging {
       subst       <- Solve.solve(csts)
 
       // Apply the substitution from the constraint solution to the module
-      typedMod = mod.substitute(subst)
+      typedMod = subst(mod)
 
     } yield typedMod
   }

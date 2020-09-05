@@ -5,13 +5,13 @@ import scala.{ Some, None, StringContext }
 
 object Printer {
   def print(typ: Type): Doc = typ match {
-    case NamedTypeVariable(n, _, _) =>
+    case NamedTypeVariable(n, _) =>
       Doc.text(n)
-    case InferredTypeVariable(i, _, _) =>
+    case InferredTypeVariable(i, _) =>
       Doc.text("T" + i.toString)
-    case TypeConstructor(nm, _, _) =>
+    case TypeConstructor(nm, _) =>
       Doc.text(nm)
-    case TypeApply(typ, params, _, _) if params.isEmpty =>
+    case TypeApply(typ, params, _) if params.isEmpty =>
       print(typ)
     case Type.Function(params) =>
       val withParens = params.headOption match {
@@ -33,7 +33,7 @@ object Printer {
 
       paramDocs & Doc.text("->") & print(params.last)
 
-    case TypeApply(typ, params, _, _) =>
+    case TypeApply(typ, params, _) =>
       print(typ) + Doc.intercalate(Doc.char(',') + Doc.space, params.map(print))
         .tightBracketBy(Doc.char('['), Doc.char(']'))
   }
@@ -71,6 +71,8 @@ object Printer {
       bound.tightBracketBy(Doc.char('['), Doc.char(']')) & print(typ.typ).bracketBy(Doc.char('{'), Doc.char('}'))
     }
   }
+
+  def print[A](e: TypeExpr[A]): Doc = print(e.toType)
 
   def print[A](p: Param[A]): Doc = {
     Doc.text(p.name) +
@@ -153,7 +155,7 @@ object Printer {
   }
 
   def print[A](data: DataConstructor[A]): Doc = data match {
-    case DataConstructor(name, params, _, _) =>
+    case DataConstructor(name, params, _) =>
       val prefix = Doc.text("case") & Doc.text(name) + Doc.char('(')
       val suffix = Doc.char(')')
       val argsList = Doc.intercalate(Doc.char(',') + Doc.space, params.map(print(_)))
@@ -170,7 +172,7 @@ object Printer {
         else
           Doc.intercalate(
             Doc.text(", "),
-            tparams.map(print)).tightBracketBy(Doc.char('['), Doc.char(']'))
+            tparams.map(print(_))).tightBracketBy(Doc.char('['), Doc.char(']'))
 
       val prefix = Doc.text("data") & Doc.text(name) + typeParams & Doc.char('{')
       val suffix = Doc.char('}')

@@ -24,4 +24,9 @@ package object common {
 
   def Blue(str: String) =
     styled(Style.Ansi.Fg.Blue, str)
+
+  implicit class SubstitutableOps[A, B](subst: Substitution[A, B]) {
+    def apply[C](c: C)(implicit S: Substitutable[A, B, C]): C =
+      S.substitute(c, subst)
+  }
 }

@@ -1,24 +1,24 @@
 import java.nio.file.attribute.PosixFilePermission
 import mill._
+import mill.define._
 import mill.scalalib._
 import mill.scalalib.publish._
 
 import ammonite.ops._
 import coursier.MavenRepository
 import mill.api.{ Ctx, Result }
-import mill.define.Worker
 import mill.modules.Jvm
 import mill.scalalib.api.CompilationResult
 import mill.scalalib.Lib
 import java.net.{ URI, URL, URLClassLoader }
 
-import $ivy.`com.lihaoyi::mill-contrib-scalapblib:0.8.0`
+import $ivy.`com.lihaoyi::mill-contrib-scalapblib:$MILL_VERSION`
 import mill.contrib.scalapblib._
 
-import $ivy.`com.lihaoyi::mill-contrib-buildinfo:0.8.0`
+import $ivy.`com.lihaoyi::mill-contrib-buildinfo:$MILL_VERSION`
 import mill.contrib.BuildInfo
 
-import $ivy.`com.lihaoyi::mill-contrib-scoverage:0.8.0`
+import $ivy.`com.lihaoyi::mill-contrib-scoverage:$MILL_VERSION`
 import mill.contrib.scoverage.ScoverageModule
 
 import $ivy.`io.github.davidgregory084::mill-tpolecat:0.1.4`
@@ -43,7 +43,7 @@ trait PublishSettingsModule extends PublishModule {
 
 trait ScalaSettingsModule extends TpolecatModule with PublishSettingsModule {
   def scalaVersion = "2.13.3"
-  def catsVersion = T { "2.1.1" }
+  def catsVersion = T { "2.2.0" }
   def munitVersion = T { "0.7.10" }
   def pprintVersion = T { "0.6.0" }
 
