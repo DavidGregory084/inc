@@ -6,17 +6,77 @@ import cats.syntax.flatMap._
 import cats.syntax.monoid._
 import scala.{ ::, Left, Right, Nil }
 import scala.collection.immutable.{ List, Map }
-import scala.Predef.{ ???, ArrowAssoc }
+import scala.Predef.ArrowAssoc
 import com.typesafe.scalalogging.LazyLogging
 
 object Kindchecker extends LazyLogging {
   type Subst = Substitution[KindVariable, Kind]
 
-  def gather(typ: TypeExpr[Meta.Typed], env: Environment[Meta.Typed]): List[KindConstraint] = ???
+  def gather(typ: TypeExpr[Meta.Typed], env: Environment[Meta.Typed]): List[KindConstraint] =
+    typ match {
+      case TypeApplyExpr(typ, args, meta) =>
+        val typKind = typ.meta.typ.typ.kind
+        val resultKind = meta.typ.typ.kind
 
-  def gather(constr: DataConstructor[Meta.Typed], env: Environment[Meta.Typed]): List[KindConstraint] = ???
+        val tpCsts = gather(typ, env)
+        val tparamCsts = args.flatMap(gather(_, env))
 
-  def gather(data: Data[Meta.Typed], env: Environment[Meta.Typed]): Infer[List[KindConstraint]] = ???
+        val tparamKinds = args.map(_.meta.typ.typ.kind)
+        val appliedKind = Parameterized(tparamKinds, resultKind)
+        val appCst = List(EqualKind(typKind, appliedKind, meta.pos))
+
+        tpCsts ++ tparamCsts ++ appCst
+
+      case TypeConstructorExpr(_, name, meta) =>
+        val typKind = meta.typ.typ.kind
+        val envKind = env.kinds.getOrElse(name, typKind)
+
+        if (typKind != envKind)
+          List(EqualKind(typKind, envKind, meta.pos))
+        else
+          List.empty
+    }
+
+  def gather(constr: DataConstructor[Meta.Typed], env: Environment[Meta.Typed]): List[KindConstraint] =
+    constr match {
+      case DataConstructor(_, params, _) =>
+        params.foldLeft(List.empty[KindConstraint]) {
+          case (cstsSoFar, Param(_, ascribedAs, meta)) =>
+            val paramType = meta.typ.typ
+            val paramKind = paramType.kind
+            val paramResultCst = EqualKind(paramKind, Atomic, meta.pos)
+            val paramCsts = gather(ascribedAs.get, env)
+            cstsSoFar ++ List(paramResultCst) ++ paramCsts
+        }
+    }
+
+  def gather(data: Data[Meta.Typed], env: Environment[Meta.Typed]): Infer[List[KindConstraint]] =
+    data match {
+      case Data(_, tparams, cases, meta) =>
+        val dataKind = data.kind
+
+        val inferredKind =
+          if (tparams.isEmpty) {
+            val TypeConstructor(_, tyConKind) = meta.typ.typ
+            tyConKind
+          } else {
+            val TypeApply(TypeConstructor(_, tyConKind), _, _) = meta.typ.typ
+            tyConKind
+          }
+
+        val parentConstraint =
+          if (inferredKind == dataKind)
+            List.empty
+          else
+            List(EqualKind(inferredKind, dataKind, meta.pos))
+
+        val constraintsFromConstrs = cases.foldLeft(List.empty[KindConstraint]) {
+          case (cstsSoFar, nextConstr) =>
+            cstsSoFar ++ gather(nextConstr, env)
+        }
+
+        Right(parentConstraint ++ constraintsFromConstrs)
+    }
 
   def bind(kindVar: KindVariable, kind: Kind, pos: Pos): Infer[Subst] =
     kind match {

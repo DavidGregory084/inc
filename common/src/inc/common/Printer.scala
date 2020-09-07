@@ -72,7 +72,15 @@ object Printer {
     }
   }
 
-  def print[A](e: TypeExpr[A]): Doc = print(e.toType)
+  def print[A](expr: TypeExpr[A]): Doc = expr match {
+    case TypeApplyExpr(typ, args, _) if args.isEmpty =>
+      print(typ)
+    case TypeApplyExpr(typ, args, _) =>
+      print(typ) + Doc.intercalate(Doc.char(',') + Doc.space, args.map(print(_)))
+        .tightBracketBy(Doc.char('['), Doc.char(']'))
+    case TypeConstructorExpr(mod, name, _) =>
+      Doc.intercalate(Doc.comma, mod.map(Doc.text)) + Doc.char('.') + Doc.text(name)
+  }
 
   def print[A](p: Param[A]): Doc = {
     Doc.text(p.name) +

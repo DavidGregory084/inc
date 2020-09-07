@@ -9,7 +9,7 @@ import cats.syntax.functor._
 import cats.syntax.monoid._
 import scala.{ Some, None, Right, StringContext }
 import scala.collection.immutable.List
-import scala.Predef.{ ???, ArrowAssoc }
+import scala.Predef.ArrowAssoc
 import com.typesafe.scalalogging.LazyLogging
 
 object Gather extends LazyLogging {
@@ -85,6 +85,54 @@ object Gather extends LazyLogging {
   }
 
   def gather(
+    expr: TypeConstructorExpr[Meta.Untyped],
+    env: Environment[Meta.Typed]
+  ): Infer[(TypeConstructorExpr[Meta.Typed], List[TypeConstraint])] = expr match {
+    case tyCon @ TypeConstructorExpr(_, _, meta) =>
+      (tyCon.copy(meta = meta.withSimpleType(TypeVariable())), List.empty).asRight
+  }
+
+  def gather(
+    expr: TypeExpr[Meta.Untyped],
+    env: Environment[Meta.Typed]
+  ): Infer[(TypeExpr[Meta.Typed], List[TypeConstraint])] = expr match {
+    case TypeApplyExpr(typ, args, meta) =>
+      val tpArgResult = (Chain.empty[TypeExpr[Meta.Typed]], List.empty[TypeConstraint])
+
+      for {
+        (tp, tpCst) <- gather(typ, env)
+
+        (args, argCst) <- args.foldM(tpArgResult) {
+          case ((typedSoFar, cstsSoFar), nextArg) =>
+            for {
+              (typedArg, argCst) <- gather(nextArg, env)
+            } yield (typedSoFar :+ typedArg, cstsSoFar ++ argCst)
+        }
+
+        typedArgs = args.toList
+
+        tAppType = TypeApply(tp.meta.typ.typ, typedArgs.map(_.meta.typ.typ), Atomic)
+
+      } yield (TypeApplyExpr(tp, typedArgs, meta.withSimpleType(tAppType)), tpCst ++ argCst)
+
+    case tyCon @ TypeConstructorExpr(_, _, _) =>
+      gather(tyCon, env)
+  }
+
+  def gather(
+    param: Param[Meta.Untyped],
+    env: Environment[Meta.Typed]
+  ): Infer[(Param[Meta.Typed], List[TypeConstraint])] = param match {
+    case param @ Param(_, None, meta) =>
+      (param.copy(ascribedAs = None, meta = meta.withSimpleType(TypeVariable())), List.empty).asRight
+    case Param(name, Some(typeExpr), meta) =>
+      gather(typeExpr, env).map {
+        case (tyExpr, tyExpCst) =>
+          (param.copy(name, Some(tyExpr), meta.withSimpleType(tyExpr.meta.typ.typ)), tyExpCst)
+      }
+  }
+
+  def gather(
     expr: Expr[Meta.Untyped],
     env: Environment[Meta.Typed]
   ): Infer[(Expr[Meta.Typed], List[TypeConstraint])] =
@@ -150,20 +198,21 @@ object Gather extends LazyLogging {
         } yield (expr, constraints)
 
       case Lambda(params, body, meta) =>
-        val typedParams = params.map {
-          case Param(name, None, meta) =>
-            Param(name, None, meta.withSimpleType(TypeVariable()))
-          case Param(name, ascribedAs @ Some(typeExpr), meta) =>
-            val typeExprType = typeExpr.toType
-            Param(
-              name,
-              ascribedAs.map(_.map(_.withSimpleType(typeExprType))),
-              meta.withSimpleType(typeExprType))
-        }
-
-        val paramMappings = typedParams.map(p => p.name -> p.meta.typ)
+        val paramResult = (Chain.empty[Param[Meta.Typed]], List.empty[TypeConstraint])
 
         for {
+          (params, paramCst) <- params.foldM(paramResult) {
+            case ((paramsSoFar, cstsSoFar), param) =>
+              gather(param, env).map {
+                case (param, paramCst) =>
+                  (paramsSoFar :+ param, cstsSoFar ++ paramCst)
+              }
+          }
+
+          typedParams = params.toList
+
+          paramMappings = typedParams.map(p => p.name -> p.meta.typ)
+
           // Gather constraints from the body with the params in scope
           (body, bodyCst) <- gather(body, env.withTypes(paramMappings))
 
@@ -180,7 +229,9 @@ object Gather extends LazyLogging {
         for {
           (e, exprCst) <- gather(expr, env)
 
-          ascribedType = ascribedAs.toType
+          (a, ascCst) <- gather(ascribedAs, env)
+
+          ascribedType = a.meta.typ.typ
 
           ascriptionCst =
             // Unless we know the ascription is correct
@@ -254,6 +305,34 @@ object Gather extends LazyLogging {
     }
 
   def gather(
+    constr: DataConstructor[Meta.Untyped],
+    dataType: TypeScheme,
+    env: Environment[Meta.Typed]
+  ): Infer[(DataConstructor[Meta.Typed], List[TypeConstraint])] = constr match {
+    case DataConstructor(_, params, meta) =>
+      val paramResult = (Chain.empty[Param[Meta.Typed]], List.empty[TypeConstraint])
+
+      for {
+        (typedParams, paramsCst) <- params.foldM(paramResult) {
+          case ((typedSoFar, cstsSoFar), nextParam) =>
+            for {
+              (typedParam, paramCst) <- gather(nextParam, env)
+            } yield (typedSoFar :+ typedParam, cstsSoFar ++ paramCst)
+        }
+
+        typedParamTypes = typedParams.toList.map(_.meta.typ.typ)
+
+        tyScheme = dataType.copy(typ = Type.Function(typedParamTypes, dataType.typ))
+
+        updatedConstr = constr.copy(
+          params = typedParams.toList,
+          meta = meta.withType(tyScheme)
+        )
+
+      } yield (updatedConstr, paramsCst)
+  }
+
+  def gather(
     decl: TopLevelDeclaration[Meta.Untyped],
     env: Environment[Meta.Typed]
   ): Infer[(TopLevelDeclaration[Meta.Typed], Environment[Meta.Typed], List[TypeConstraint])] =
@@ -273,8 +352,52 @@ object Gather extends LazyLogging {
             val checkedLet = let.copy(binding = checkedExpr, meta = meta.withType(tp))
             (checkedLet, env, constraints)
         }
-      case data @ Data(_, _, _, _) =>
-        ???
+      case data @ Data(_, typeParams, cases, _) =>
+        val tparamResult = (Chain.empty[TypeConstructorExpr[Meta.Typed]], List.empty[TypeConstraint])
+        val casesResult = (Chain.empty[DataConstructor[Meta.Typed]], List.empty[TypeConstraint])
+
+        for {
+          (tps, _) <- typeParams.foldM(tparamResult) {
+            case ((paramsSoFar, cstsSoFar), param) =>
+              gather(param, env).map {
+                case (param, paramCst) =>
+                  (paramsSoFar :+ param, cstsSoFar ++ paramCst)
+              }
+          }
+
+          typedTparams = tps.toList
+
+          tparamTypes = typedTparams.map(_.meta.typ.typ).collect {
+            case tyVar: TypeVariable => tyVar
+          }
+
+          tyCon =
+            TypeConstructor(data.name, KindVariable())
+
+          tyScheme =
+            if (data.typeParams.isEmpty)
+              TypeScheme(List.empty, tyCon)
+            else
+              TypeScheme(
+                tparamTypes,
+                TypeApply(tyCon, tparamTypes, KindVariable())
+              )
+
+          (cases, _) <- cases.foldM(casesResult) {
+            case ((casesSoFar, cstsSoFar), cse) =>
+              gather(cse, tyScheme, env).map {
+                case (cse, cseCst) =>
+                  (casesSoFar :+ cse, cstsSoFar ++ cseCst)
+              }
+          }
+
+          updatedData = data.copy(
+            typeParams = typedTparams,
+            cases = cases.toList,
+            meta = data.meta.withType(tyScheme)
+          )
+
+        } yield (updatedData, env, List.empty)
     }
 
   def initialPass(
@@ -295,12 +418,12 @@ object Gather extends LazyLogging {
         env.withType(name, TypeScheme(List.empty, TypeVariable())).asRight
 
       case (env, data @ Data(_, tparams, cases, dataMeta)) =>
-        val tyVars = tparams.map(_.toType.asInstanceOf[NamedTypeVariable])
+        val tyVars = tparams.map(tp => TypeVariable.named(tp.name))
         val tyConType = TypeScheme(tyVars, TypeApply(TypeConstructor(data.name, KindVariable()), tyVars, Atomic))
 
         val dataTypes = cases.map {
           case DataConstructor(caseName, params, _) =>
-            val paramTypes = params.map(_.ascribedAs.get.toType)
+            val paramTypes = params.map(_ => TypeVariable())
             val typeScheme = TypeScheme(tyVars, Type.Function(paramTypes, tyConType.typ))
             caseName -> typeScheme
         }.toMap
@@ -312,8 +435,8 @@ object Gather extends LazyLogging {
 
         val constrMembers = for {
           DataConstructor(_, params, constrMeta) <- cases
-          Param(_, ascribedAs, paramMeta) <- params
-          fnType = TypeScheme(tyVars, Type.Function(List(tyConType.typ), ascribedAs.get.toType))
+          Param(_, _, paramMeta) <- params
+          fnType = TypeScheme(tyVars, Type.Function(List(tyConType.typ), TypeVariable()))
           constrMember = constrMeta.name -> paramMeta.withType(fnType)
         } yield constrMember
 
