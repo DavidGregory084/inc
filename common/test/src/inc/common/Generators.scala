@@ -69,7 +69,7 @@ trait Generators { self: Assertions =>
     List(intGen, longGen, fltGen, dblGen, boolGen, charGen, strGen, unitGen)
 
   def referenceGen(env: Env): Gen[Expr[Meta.Typed]] =
-    Gen.oneOf(env.names.values).flatMap {
+    Gen.oneOf(env.valueNames.values).flatMap {
       case nm @ LocalName(_) =>
         Gen.const(Reference(List.empty, nm.shortName, Meta.Typed(nm, env.types(nm.shortName), Pos.Empty)))
       case nm @ MemberName(_, _, _) =>
@@ -101,14 +101,14 @@ trait Generators { self: Assertions =>
 
       ps = pNms.lazyZip(pAscs).lazyZip(pTps).map {
         case (nm, ascribed, tp) =>
-          Param(nm, if (ascribed) Some(tp) else None, Meta.Typed(LocalName(nm), tp, Pos.Empty))
+          Param(nm, if (ascribed) Some(tp.toExpr) else None, Meta.Typed(LocalName(nm), tp, Pos.Empty))
       }
 
       body <- exprGen(
         // We need to replace any existing declarations that clash with our params,
         // since params can shadow top level declarations
         env ++ Environment.empty[Meta.Typed]
-            .withNames(ps.map(p => (p.name, p.meta.name)))
+            .withValueNames(ps.map(p => (p.name, p.meta.name)))
             .withTypes(ps.map(p => (p.name, p.meta.typ)))
       )
 
@@ -118,8 +118,8 @@ trait Generators { self: Assertions =>
 
   def genArg(tp: Type)(env: Env): Gen[Expr[Meta.Typed]] = {
     val candidateDecls = env.types.collect {
-      case (nm, ts @ TypeScheme(_, `tp`)) =>
-        val name = env.names(nm)
+      case (nm, ts @ TypeScheme(_, `tp`)) if !Type.builtIns.contains(nm) =>
+        val name = env.valueNames(nm)
         Reference(List.empty, nm, Meta.Typed(name, ts, Pos.Empty))
     }
 
@@ -132,13 +132,13 @@ trait Generators { self: Assertions =>
       case Type.Char => charGen
       case Type.String => strGen
       case Type.Unit => unitGen
-      case TypeConstructor(nm, _, _) if env.names(nm).isInstanceOf[DataName] =>
-        val tcName = env.names(nm)
+      case TypeConstructor(nm, _) if env.typeNames(nm).isInstanceOf[DataName] =>
+        val tcName = env.typeNames(nm)
         val tcMembers = env.members(tcName)
         for {
           constrMeta <- Gen.oneOf(tcMembers).suchThat { m =>
             // Constructors can be shadowed by lambda params
-            env.names(m.name.shortName).isInstanceOf[ConstrName]
+            env.valueNames(m.name.shortName).isInstanceOf[ConstrName]
           }
           TypeScheme(_, Type.Function(tpArgs)) = constrMeta.typ
           args <- tpArgs.init.traverse(tp => genArg(tp)(env))
@@ -170,9 +170,10 @@ trait Generators { self: Assertions =>
     } yield Apply(Reference(List.empty, lam.shortName, lambdaMeta), args, Meta.Typed(NoName, TypeScheme(tpArgs.last), Pos.Empty))
 
   def ifGen(env: Env): Gen[Expr[Meta.Typed]] = {
+    pprint.pprintln(env.types)
     val condDecls: List[Gen[Expr[Meta.Typed]]] = boolGen :: env.types.toList.collect {
-      case (nm, ts @ TypeScheme(_, Type.Boolean)) =>
-        Reference(List.empty, nm, Meta.Typed(env.names(nm), ts, Pos.Empty))
+      case (nm, ts @ TypeScheme(_, Type.Boolean)) if !Type.builtIns.contains(nm) =>
+        Reference(List.empty, nm, Meta.Typed(env.valueNames(nm), ts, Pos.Empty))
     }.map(Gen.const)
 
     val condGen = Gen.oneOf(condDecls).flatMap(identity)
@@ -186,7 +187,7 @@ trait Generators { self: Assertions =>
 
   def ascriptionGen(env: Env): Gen[Expr[Meta.Typed]] = {
     Gen.delay(exprGen(env)).map { expr =>
-      Ascription(expr, expr.meta.typ, expr.meta)
+      Ascription(expr, expr.meta.typ.toExpr, expr.meta)
     }
   }
 
@@ -198,7 +199,7 @@ trait Generators { self: Assertions =>
 
       idPat = IdentPattern(name, idPatMeta)
 
-      resultExpr <- Gen.delay(exprGen(env.withName(name, idPatMeta.name).withType(name, idPatMeta.typ)))
+      resultExpr <- Gen.delay(exprGen(env.withValueName(name, idPatMeta.name).withType(name, idPatMeta.typ)))
 
     } yield MatchCase(idPat, resultExpr, Meta.Typed(NoName, resultExpr.meta.typ, Pos.Empty))
   }
@@ -232,7 +233,7 @@ trait Generators { self: Assertions =>
       }
 
       patEnv = env
-        .withNames(chosenParams.map(p => (p.name.shortName, p.name)))
+        .withValueNames(chosenParams.map(p => (p.name.shortName, p.name)))
         .withTypes(chosenParams.map(p => (p.name.shortName, p.typ)))
 
       alias <- nameGen.suchThat(!collides(patEnv, _))
@@ -251,7 +252,7 @@ trait Generators { self: Assertions =>
         patterns,
         Meta.Typed(constrPatName, constrType, Pos.Empty))
 
-      newEnv = if (useAlias) patEnv.withName(alias, constrPatName).withType(alias, constrType) else patEnv
+      newEnv = if (useAlias) patEnv.withValueName(alias, constrPatName).withType(alias, constrType) else patEnv
 
       resultExpr <- Gen.delay(exprGen(newEnv))
 
@@ -260,7 +261,7 @@ trait Generators { self: Assertions =>
 
   def matchConstrGen(env: Env): Gen[Expr[Meta.Typed]] = {
     for {
-      data <- Gen.oneOf(env.names.values).suchThat(_.isInstanceOf[DataName])
+      data <- Gen.oneOf(env.typeNames.values).suchThat(_.isInstanceOf[DataName])
 
       constrMeta <- Gen.oneOf(env.members(data))
 
@@ -286,7 +287,7 @@ trait Generators { self: Assertions =>
   def exprGen(env: Env): Gen[Expr[Meta.Typed]] = {
     val fnDecls = env.types.toList.collect {
       case (nm, TypeScheme(_, Type.Function(_))) =>
-        env.names(nm)
+        env.valueNames(nm)
     }
 
     val applyGens =
@@ -296,7 +297,7 @@ trait Generators { self: Assertions =>
       literalGens ++ applyGens :+ lambdaGen(env) :+ ifGen(env) :+ ascriptionGen(env)
 
     val exprGens =
-      if (env.names.isEmpty)
+      if (env.valueNames.isEmpty)
         noRefExprGens
       else
         noRefExprGens :+ referenceGen(env) :+ matchGen(env)
@@ -335,15 +336,15 @@ trait Generators { self: Assertions =>
 
       params = pNms.lazyZip(pTps).map {
         case (nm, tp) =>
-          Param(nm, Some(tp), Meta.Typed(LocalName(nm), tp, Pos.Empty))
+          Param(nm, Some(tp.toExpr), Meta.Typed(LocalName(nm), tp, Pos.Empty))
       }
 
       typeScheme = TypeScheme(List.empty, Type.Function(pTps.map(_.typ), dataType.typ))
 
-    } yield DataConstructor(name, params, dataType, Meta.Typed(ConstrName(dataName.pkg, dataName.mod, dataName.name, name), typeScheme, Pos.Empty))
+    } yield DataConstructor(name, params, Meta.Typed(ConstrName(dataName.pkg, dataName.mod, dataName.name, name), typeScheme, Pos.Empty))
 
   def collides(env: Env, name: String): Boolean = {
-    env.names.values
+    env.valueNames.values
       .map(_.shortName.toUpperCase).toList
       .contains(name.toUpperCase)
   }

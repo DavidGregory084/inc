@@ -12,23 +12,38 @@ import com.typesafe.scalalogging.LazyLogging
 object Kindchecker extends LazyLogging {
   type Subst = Substitution[KindVariable, Kind]
 
-  def gather(typ: TypeExpr[Meta.Typed], env: Environment[Meta.Typed]): List[KindConstraint] =
-    typ match {
-      case TypeApplyExpr(typ, args, meta) =>
-        val typKind = typ.meta.typ.typ.kind
-        val resultKind = meta.typ.typ.kind
+  def gather(expr: TypeExpr[Meta.Typed], env: Environment[Meta.Typed]): List[KindConstraint] =
+    expr match {
+      case tyApp @ TypeApplyExpr(appliedTyp, args, meta) =>
+        val typKind =
+          if (appliedTyp.meta.typ.bound.isEmpty) {
+            appliedTyp.meta.typ.typ.kind
+          } else {
+            val TypeApply(TypeConstructor(_, tyConKind), _, _) = appliedTyp.meta.typ.typ
+            tyConKind
+          }
 
-        val tpCsts = gather(typ, env)
+        val resultKind = tyApp.meta.typ.typ.kind
+
+        val tpCsts = gather(appliedTyp, env)
         val tparamCsts = args.flatMap(gather(_, env))
 
         val tparamKinds = args.map(_.meta.typ.typ.kind)
         val appliedKind = Parameterized(tparamKinds, resultKind)
+
         val appCst = List(EqualKind(typKind, appliedKind, meta.pos))
 
         tpCsts ++ tparamCsts ++ appCst
 
-      case TypeConstructorExpr(_, name, meta) =>
-        val typKind = meta.typ.typ.kind
+      case TypeConstructorExpr(name, meta) =>
+        val typKind =
+          if (meta.typ.bound.isEmpty) {
+            meta.typ.typ.kind
+          } else {
+            val TypeApply(TypeConstructor(_, tyConKind), _, _) = meta.typ.typ
+            tyConKind
+          }
+
         val envKind = env.kinds.getOrElse(name, typKind)
 
         if (typKind != envKind)
@@ -57,8 +72,7 @@ object Kindchecker extends LazyLogging {
 
         val inferredKind =
           if (tparams.isEmpty) {
-            val TypeConstructor(_, tyConKind) = meta.typ.typ
-            tyConKind
+            meta.typ.typ.kind
           } else {
             val TypeApply(TypeConstructor(_, tyConKind), _, _) = meta.typ.typ
             tyConKind

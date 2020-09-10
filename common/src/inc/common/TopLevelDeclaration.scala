@@ -67,11 +67,11 @@ sealed abstract class TopLevelDeclaration[A] extends Product with Serializable {
         data.copy(
           typeParams = typeParams.map(_.defaultKinds),
           cases = cases.map(_.defaultKinds),
-          meta = from(typedMeta.defaultKinds))
+          meta = from(typedMeta))
       case let @ Let(_, binding, _) =>
         let.copy(
           binding = binding.defaultKinds,
-          meta = from(typedMeta.defaultKinds))
+          meta = from(typedMeta))
     }
   }
 }

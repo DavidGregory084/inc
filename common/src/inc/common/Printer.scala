@@ -78,8 +78,8 @@ object Printer {
     case TypeApplyExpr(typ, args, _) =>
       print(typ) + Doc.intercalate(Doc.char(',') + Doc.space, args.map(print(_)))
         .tightBracketBy(Doc.char('['), Doc.char(']'))
-    case TypeConstructorExpr(mod, name, _) =>
-      Doc.intercalate(Doc.comma, mod.map(Doc.text)) + Doc.char('.') + Doc.text(name)
+    case TypeConstructorExpr(name, _) =>
+      Doc.text(name)
   }
 
   def print[A](p: Param[A]): Doc = {

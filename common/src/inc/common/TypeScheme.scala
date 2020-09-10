@@ -7,6 +7,20 @@ case class TypeScheme(bound: List[TypeVariable], typ: Type) {
   def toProto: proto.TypeScheme =
     proto.TypeScheme(bound.map(tv => tv.toProto), typ.toProto)
 
+  def toExpr: TypeExpr[Meta.Typed] =
+    this.typ.toExpr match {
+      case tyCon @ TypeConstructorExpr(_, meta @ Meta.Typed(_, typ, _)) =>
+        tyCon.copy(
+          meta = meta.copy(
+            typ = typ.copy(
+              bound = this.bound)))
+      case tyApp @ TypeApplyExpr(_, _, meta @ Meta.Typed(_, typ, _)) =>
+        tyApp.copy(
+          meta = meta.copy(
+            typ = typ.copy(
+              bound = this.bound)))
+    }
+
   def freeTypeVariables: Set[TypeVariable] =
     typ.freeTypeVariables diff bound.toSet
 

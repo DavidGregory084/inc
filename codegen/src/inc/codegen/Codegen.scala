@@ -231,7 +231,11 @@ class Codegen(verifyCodegen: Boolean) {
           // Constructor functions are encoded as static methods
           val Type.Function(tpArgs) = meta.typ.typ
           val lambdaType = Asm.asmType(classEnv, meta.typ.typ)
+          import scala.Predef.println
+          println(lambdaType)
+          println(tpArgs)
           val boxedAsmTypes = tpArgs.map(Asm.boxedAsmType(classEnv, _))
+          println(boxedAsmTypes)
           val objType = AsmType.getType(classOf[Object])
           val declaredType = classEnv.typeEnvironment.types(ref.fullName)
           // In order to load a reference to a static method, we need to construct a method reference

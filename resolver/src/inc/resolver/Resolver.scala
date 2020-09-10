@@ -63,10 +63,10 @@ object Resolver {
 
   def resolve(expr: TypeConstructorExpr[Pos], env: SymbolTable): Resolve[(TypeConstructorExpr[Meta.Untyped], SymbolTable)] =
     expr match {
-      case TypeConstructorExpr(_, _, pos) =>
-        env.typeNames.get(expr.fullName)
+      case TypeConstructorExpr(name, pos) =>
+        env.typeNames.get(name)
           .map(nm => Right((expr.copy(meta = Meta.Untyped(nm, pos)), env)))
-          .getOrElse(ResolverError.undefined(pos, expr.fullName))
+          .getOrElse(ResolverError.undefined(pos, name))
     }
 
   def resolve(expr: TypeExpr[Pos], env: SymbolTable): Resolve[(TypeExpr[Meta.Untyped], SymbolTable)] = expr match {
@@ -87,7 +87,7 @@ object Resolver {
 
       } yield (TypeApplyExpr(resolvedTyp, resolvedArgs.toList, Meta.Untyped(NoName, pos)), env)
 
-    case tyCon @ TypeConstructorExpr(_, _, _) =>
+    case tyCon @ TypeConstructorExpr(_, _) =>
       resolve(tyCon, env)
   }
 
@@ -95,8 +95,6 @@ object Resolver {
     case Param(name, ascribedAs, pos) =>
       if (env.valueNames.contains(name))
         ResolverError.alreadyDefined(pos, name, env.valueNames(name))
-      else if (env.typeNames.contains(name))
-        ResolverError.alreadyDefined(pos, name, env.typeNames(name))
       else ascribedAs match {
         case Some(ascription) =>
           resolve(ascription, env).map {
@@ -220,7 +218,7 @@ object Resolver {
 
       for {
         (resolvedTparams, tparamEnv) <- tparams.foldM(emptyRes) {
-          case ((tparamsSoFar, updatedEnv), tparam @ TypeConstructorExpr(_, _, _)) =>
+          case ((tparamsSoFar, updatedEnv), tparam @ TypeConstructorExpr(_, _)) =>
             val tyVarEnv = updatedEnv.withTypeName(tparam.name, LocalName(tparam.name))
 
             resolve(tparam, tyVarEnv).map {
@@ -272,10 +270,9 @@ object Resolver {
       case (env, Let(name, _, pos)) =>
         if (env.valueNames.contains(name))
           ResolverError.alreadyDefined(pos, name, env.valueNames(name))
-        else if (env.typeNames.contains(name))
-          ResolverError.alreadyDefined(pos, name, env.typeNames(name))
         else
           Right(env.withValueName(name, MemberName(module.pkg, module.name, name)))
+
       case (outerEnv, Data(dataNm, _, cases, dataPos)) =>
         val dataName = DataName(module.pkg, module.name, dataNm)
         val dataEnv = outerEnv.withTypeName(dataNm, dataName)

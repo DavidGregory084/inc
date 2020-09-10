@@ -2,7 +2,7 @@ package inc.common
 
 import java.lang.{ Exception, String }
 import java.util.concurrent.atomic.AtomicInteger
-import scala.{ Option, Some, None, Int, Product, Serializable }
+import scala.{ Option, Some, None, Int, Product, Serializable, StringContext }
 import scala.collection.immutable.{ List, Map, Set }
 
 sealed abstract class Type extends Product with Serializable {
@@ -28,6 +28,26 @@ sealed abstract class Type extends Product with Serializable {
       Type.primitives.contains(name)
     case _ =>
       false
+  }
+
+  def toExpr: TypeExpr[Meta.Typed] = this match {
+    case InferredTypeVariable(id, _) =>
+      TypeConstructorExpr(
+        name = s"T${id}",
+        meta = Meta.Typed(LocalName(s"T${id}"), TypeScheme(List.empty, this), Pos.Empty))
+    case NamedTypeVariable(name, _) =>
+      TypeConstructorExpr(
+        name = name,
+        meta = Meta.Typed(LocalName(name), TypeScheme(List.empty, this), Pos.Empty))
+    case TypeApply(typ, params, _) =>
+      TypeApplyExpr(
+        typ = typ.toExpr,
+        args = params.map(_.toExpr),
+        meta = Meta.Typed(NoName, TypeScheme(List.empty, this), Pos.Empty))
+    case TypeConstructor(name, _) =>
+      TypeConstructorExpr(
+        name = name,
+        meta = Meta.Typed(LocalName(name), TypeScheme(List.empty, this), Pos.Empty))
   }
 
   def freeTypeVariables: Set[TypeVariable] = this match {
@@ -187,6 +207,17 @@ sealed abstract class TypeVariable extends Type {
       proto.TypeVariable(
         proto.TypeVariable.TyVar.Inferred(
           proto.InferredTypeVariable(i, kind.toProto)))
+  }
+
+  override def toExpr: TypeConstructorExpr[Meta.Typed] = this match {
+    case InferredTypeVariable(id, _) =>
+      TypeConstructorExpr(
+        name = s"T${id}",
+        meta = Meta.Typed(LocalName(s"T${id}"), TypeScheme(List.empty, this), Pos.Empty))
+    case NamedTypeVariable(name, _) =>
+      TypeConstructorExpr(
+        name = name,
+        meta = Meta.Typed(LocalName(name), TypeScheme(List.empty, this), Pos.Empty))
   }
 }
 

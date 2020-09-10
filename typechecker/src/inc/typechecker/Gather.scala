@@ -7,6 +7,7 @@ import cats.syntax.either._
 import cats.syntax.foldable._
 import cats.syntax.functor._
 import cats.syntax.monoid._
+import cats.syntax.traverse._
 import scala.{ Some, None, Right, StringContext }
 import scala.collection.immutable.List
 import scala.Predef.ArrowAssoc
@@ -88,8 +89,10 @@ object Gather extends LazyLogging {
     expr: TypeConstructorExpr[Meta.Untyped],
     env: Environment[Meta.Typed]
   ): Infer[(TypeConstructorExpr[Meta.Typed], List[TypeConstraint])] = expr match {
-    case tyCon @ TypeConstructorExpr(_, _, meta) =>
-      (tyCon.copy(meta = meta.withSimpleType(TypeVariable())), List.empty).asRight
+    case TypeConstructorExpr(name, meta) =>
+      env.types.get(name).map { typ =>
+        Right((TypeConstructorExpr(name, meta.withType(typ)), List.empty))
+      }.getOrElse(TypeError.generic(meta.pos, s"Reference to undefined type: ${name}"))
   }
 
   def gather(
@@ -115,7 +118,7 @@ object Gather extends LazyLogging {
 
       } yield (TypeApplyExpr(tp, typedArgs, meta.withSimpleType(tAppType)), tpCst ++ argCst)
 
-    case tyCon @ TypeConstructorExpr(_, _, _) =>
+    case tyCon @ TypeConstructorExpr(_, _) =>
       gather(tyCon, env)
   }
 
@@ -161,11 +164,13 @@ object Gather extends LazyLogging {
       case unit @ LiteralUnit(_) =>
         withSimpleType(unit, Type.Unit)
 
-      case ref @ Reference(_, name, meta)  =>
+      case ref @ Reference(_, _, meta)  =>
         env.types.get(ref.fullName).map { refTyp =>
+          pprint.pprintln(refTyp)
           val instTyp = refTyp.instantiate
+          pprint.pprintln(instTyp)
           Right((expr.map(_.withSimpleType(instTyp)), List.empty))
-        }.getOrElse(TypeError.generic(meta.pos, s"Reference to undefined symbol: $name"))
+        }.getOrElse(TypeError.generic(meta.pos, s"Reference to undefined value: ${ref.fullName}"))
 
       case If(cond, thenExpr, elseExpr, meta) =>
         for {
@@ -311,13 +316,20 @@ object Gather extends LazyLogging {
   ): Infer[(DataConstructor[Meta.Typed], List[TypeConstraint])] = constr match {
     case DataConstructor(_, params, meta) =>
       val paramResult = (Chain.empty[Param[Meta.Typed]], List.empty[TypeConstraint])
+      val envMemberTypes = env.members(meta.name)
+        .map(meta => meta.name -> meta.typ.typ)
+        .toMap
 
       for {
         (typedParams, paramsCst) <- params.foldM(paramResult) {
           case ((typedSoFar, cstsSoFar), nextParam) =>
             for {
               (typedParam, paramCst) <- gather(nextParam, env)
-            } yield (typedSoFar :+ typedParam, cstsSoFar ++ paramCst)
+              typedParamPos = typedParam.meta.pos
+              typedParamName = typedParam.meta.name
+              typedParamType = typedParam.meta.typ.typ
+              envEqualsAscribedCst = List(EqualType(typedParamType, envMemberTypes(typedParamName), meta.pos))
+            } yield (typedSoFar :+ typedParam, cstsSoFar ++ paramCstk
         }
 
         typedParamTypes = typedParams.toList.map(_.meta.typ.typ)
@@ -352,40 +364,21 @@ object Gather extends LazyLogging {
             val checkedLet = let.copy(binding = checkedExpr, meta = meta.withType(tp))
             (checkedLet, env, constraints)
         }
-      case data @ Data(_, typeParams, cases, _) =>
-        val tparamResult = (Chain.empty[TypeConstructorExpr[Meta.Typed]], List.empty[TypeConstraint])
+      case data @ Data(dataName, typeParams, cases, _) =>
         val casesResult = (Chain.empty[DataConstructor[Meta.Typed]], List.empty[TypeConstraint])
+        val dataType = env.types(dataName)
+        val typeParamTypes = dataType.bound
+        val envWithTparams = env.withTypes(typeParamTypes.map(tparam => tparam.name -> TypeScheme(tparam)))
 
         for {
-          (tps, _) <- typeParams.foldM(tparamResult) {
-            case ((paramsSoFar, cstsSoFar), param) =>
-              gather(param, env).map {
-                case (param, paramCst) =>
-                  (paramsSoFar :+ param, cstsSoFar ++ paramCst)
-              }
+          typedTparams <- typeParams.zip(typeParamTypes).traverse {
+            case (param, paramType) =>
+              param.map(_.withSimpleType(paramType)).asRight
           }
 
-          typedTparams = tps.toList
-
-          tparamTypes = typedTparams.map(_.meta.typ.typ).collect {
-            case tyVar: TypeVariable => tyVar
-          }
-
-          tyCon =
-            TypeConstructor(data.name, KindVariable())
-
-          tyScheme =
-            if (data.typeParams.isEmpty)
-              TypeScheme(List.empty, tyCon)
-            else
-              TypeScheme(
-                tparamTypes,
-                TypeApply(tyCon, tparamTypes, KindVariable())
-              )
-
-          (cases, _) <- cases.foldM(casesResult) {
+          (cases, casesCst) <- cases.foldM(casesResult) {
             case ((casesSoFar, cstsSoFar), cse) =>
-              gather(cse, tyScheme, env).map {
+              gather(cse, dataType, envWithTparams).map {
                 case (cse, cseCst) =>
                   (casesSoFar :+ cse, cstsSoFar ++ cseCst)
               }
@@ -394,17 +387,17 @@ object Gather extends LazyLogging {
           updatedData = data.copy(
             typeParams = typedTparams,
             cases = cases.toList,
-            meta = data.meta.withType(tyScheme)
+            meta = data.meta.withType(dataType)
           )
 
-        } yield (updatedData, env, List.empty)
+        } yield (updatedData, env, casesCst)
     }
 
   def initialPass(
     module: Module[Meta.Untyped],
     decls: List[TopLevelDeclaration[Meta.Untyped]],
     importedEnv: Environment[Meta.Typed]
-  ): Infer[Environment[Meta.Typed]] = {
+  ): Infer[(Environment[Meta.Typed], List[TypeConstraint])] = {
 
     val symbolTable = module.symbolTable
 
@@ -417,26 +410,27 @@ object Gather extends LazyLogging {
       case (env, Let(name, _, _)) =>
         env.withType(name, TypeScheme(List.empty, TypeVariable())).asRight
 
-      case (env, data @ Data(_, tparams, cases, dataMeta)) =>
+      case (env, data @ Data(dataName, tparams, cases, dataMeta)) =>
         val tyVars = tparams.map(tp => TypeVariable.named(tp.name))
-        val tyConType = TypeScheme(tyVars, TypeApply(TypeConstructor(data.name, KindVariable()), tyVars, Atomic))
+        val dataConType = TypeConstructor(data.name, KindVariable())
+        val dataAppType = TypeScheme(tyVars, TypeApply(dataConType, tyVars, Atomic))
 
-        val dataTypes = cases.map {
+        val constrTypes = cases.map {
           case DataConstructor(caseName, params, _) =>
             val paramTypes = params.map(_ => TypeVariable())
-            val typeScheme = TypeScheme(tyVars, Type.Function(paramTypes, tyConType.typ))
+            val typeScheme = TypeScheme(tyVars, Type.Function(paramTypes, dataAppType.typ))
             caseName -> typeScheme
         }.toMap
 
         val dataMembers = for {
           DataConstructor(caseName, params, caseMeta) <- cases
-          dataMember = dataMeta.name -> caseMeta.withType(dataTypes(caseName))
+          dataMember = dataMeta.name -> caseMeta.withType(constrTypes(caseName))
         } yield dataMember
 
         val constrMembers = for {
           DataConstructor(_, params, constrMeta) <- cases
           Param(_, _, paramMeta) <- params
-          fnType = TypeScheme(tyVars, Type.Function(List(tyConType.typ), TypeVariable()))
+          fnType = TypeScheme(tyVars, Type.Function(List(dataAppType.typ), TypeVariable()))
           constrMember = constrMeta.name -> paramMeta.withType(fnType)
         } yield constrMember
 
@@ -450,7 +444,8 @@ object Gather extends LazyLogging {
         val groupedMembers = allMembers.groupMap(_._1)(_._2) ++ emptyConstrs
 
         val updatedEnv = env
-          .withTypes(dataTypes)
+          .withType(dataName, dataAppType)
+          .withTypes(constrTypes)
           .copy(members = env.members ++ groupedMembers)
 
         updatedEnv.asRight
@@ -486,14 +481,12 @@ object Gather extends LazyLogging {
             }
         }
 
-        kindSubstWithDefault = kindSubst.withDefault(Atomic)
+        constraintsWithKinds = constraints.map(cst => kindSubst(cst))
 
-        constraintsWithKinds = constraints.map(cst => kindSubstWithDefault(cst))
-
-        modWithKinds = kindSubstWithDefault(module.copy(
+        modWithKinds = kindSubst(module.copy(
           declarations = checked.toList,
           meta = module.meta.withSimpleType(Type.Module)
-        ))
+        )).defaultKinds
 
       } yield (modWithKinds, constraintsWithKinds)
     }

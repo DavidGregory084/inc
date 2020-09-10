@@ -202,23 +202,25 @@ object Parser {
     Index ~ identifier ~ Index
   ).map {
     case (from, id, to) =>
-      TypeConstructorExpr(List.empty, id, Pos(from, to))
+      TypeConstructorExpr(id, Pos(from, to))
   }
 
   def funTypeExpr[_: P]: P[TypeExpr[Pos]] = P(
     Index ~ (inParens(typeExpr.rep(sep = comma./)) | primaryTypeExpr.map(Seq(_))) ~ "->" ~/ typeExpr ~ Index
   ).map {
     case (from, paramTyps, returnTyp, to) =>
-      TypeApplyExpr(TypeConstructorExpr(List.empty, "->", Pos(from, to)), (paramTyps :+ returnTyp).toList, Pos(from, to))
+      TypeApplyExpr(TypeConstructorExpr("->", Pos(from, to)), (paramTyps :+ returnTyp).toList, Pos(from, to))
   }
 
   def primaryTypeExpr[_: P]: P[TypeExpr[Pos]] = P(
     Index ~  (identifier.rep(sep = "/", min = 0) ~ ".").? ~ identifier ~ Index ~ inSquareBraces(typeExpr.rep(min = 1, sep = comma./)).? ~ Index
   ).map {
     case (from, mod, name, _, None, to) =>
-      TypeConstructorExpr(mod.map(_.toList).getOrElse(List.empty), name, Pos(from, to))
+      val fullName = if (mod.isEmpty) name else mod.mkString("/") + "." + name
+      TypeConstructorExpr(fullName, Pos(from, to))
     case (from, mod, name, endTyCon, Some(params), endTyApp) =>
-      TypeApplyExpr(TypeConstructorExpr(mod.map(_.toList).getOrElse(List.empty), name, Pos(from, endTyCon)), params.toList, Pos(from, endTyApp))
+      val fullName = if (mod.isEmpty) name else mod.mkString("/") + "." + name
+      TypeApplyExpr(TypeConstructorExpr(fullName, Pos(from, endTyCon)), params.toList, Pos(from, endTyApp))
   }
 
   def typeExpr[_: P]: P[TypeExpr[Pos]] =

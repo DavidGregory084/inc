@@ -10,12 +10,12 @@ class KindcheckerSpec extends FunSuite {
 
   def mkParam(name: String, typ: Type) = {
     val scheme = TypeScheme(List.empty, typ)
-    Param(name, Some(scheme), Meta.Typed(LocalName(name), scheme, Pos.Empty))
+    Param(name, Some(scheme.toExpr), Meta.Typed(LocalName(name), scheme, Pos.Empty))
   }
 
   def mkConstr(name: String, params: List[Param[Meta.Typed]], parent: Data[Meta.Typed]) = {
-    val typ = TypeScheme(parent.typeParams, Type.Function(params.map(_.meta.typ.typ), parent.meta.typ.typ))
-    DataConstructor(name, params, parent.meta.typ, Meta.Typed(LocalName(name), typ, Pos.Empty))
+    val typ = TypeScheme(parent.meta.typ.bound, Type.Function(params.map(_.meta.typ.typ), parent.meta.typ.typ))
+    DataConstructor(name, params, Meta.Typed(LocalName(name), typ, Pos.Empty))
   }
 
   def mkData(name: String, typeParams: List[TypeVariable], kind: Option[Kind] = None)(mkCases: Data[Meta.Typed] => List[DataConstructor[Meta.Typed]]) = {
@@ -25,7 +25,7 @@ class KindcheckerSpec extends FunSuite {
       else
         TypeScheme(typeParams, TypeApply(TypeConstructor(name, kind.getOrElse(KindVariable())), typeParams, kind.map(_ => `*`).getOrElse(KindVariable())))
 
-    val data = Data(name, typeParams, List.empty, Meta.Typed(LocalName(name), typ, Pos.Empty))
+    val data = Data(name, typeParams.map(_.toExpr), List.empty, Meta.Typed(LocalName(name), typ, Pos.Empty))
 
     val cases = mkCases(data)
 
@@ -49,7 +49,7 @@ class KindcheckerSpec extends FunSuite {
       )
     }
 
-    val actual = subst.map { s => data.substituteKinds(s).defaultKinds }
+    val actual = subst.map { s => data.substituteKinds(s.subst).defaultKinds }
 
     val expected = Right(expectedData.defaultKinds)
 
@@ -82,7 +82,7 @@ class KindcheckerSpec extends FunSuite {
         mkConstr("Nil", List.empty, data))
     }
 
-    val actual = subst.map { s => data.substituteKinds(s).defaultKinds }
+    val actual = subst.map { s => data.substituteKinds(s.subst).defaultKinds }
     val expected = Right(expectedData.defaultKinds)
 
     assertEquals(actual, expected)
@@ -107,7 +107,7 @@ class KindcheckerSpec extends FunSuite {
       List(mkConstr("Fix", List(mkParam("unfix", expectedUnfixTy)), data))
     }
 
-    val actual = subst.map { s => data.substituteKinds(s).defaultKinds }
+    val actual = subst.map { s => data.substituteKinds(s.subst).defaultKinds }
     val expected = Right(expectedData.defaultKinds)
 
     assertEquals(actual, expected)
@@ -140,7 +140,7 @@ class KindcheckerSpec extends FunSuite {
       )
     }
 
-    val actual = subst.map { s => data.substituteKinds(s).defaultKinds }
+    val actual = subst.map { s => data.substituteKinds(s.subst).defaultKinds }
     val expected = Right(expectedData.defaultKinds)
 
     assertEquals(actual, expected)
@@ -162,7 +162,7 @@ class KindcheckerSpec extends FunSuite {
     val env = Environment.empty[Meta.Typed].withKind("List", `* -> *`)
     val subst = Kindchecker.kindcheck(data, env).map(_._2)
 
-    val actual = subst.map { s => data.substituteKinds(s).defaultKinds }
+    val actual = subst.map { s => data.substituteKinds(s.subst).defaultKinds }
     val expected = TypeError.kindUnification(Pos.Empty, `*`, `* -> *`)
 
     assertEquals(actual, expected)

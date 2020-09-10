@@ -4,10 +4,7 @@ import scala.collection.immutable.{ List, Map }
 import cats.kernel.Monoid
 import scala.AnyVal
 
-case class Substitution[A, B](subst: Map[A, B]) extends AnyVal {
-  def withDefault(b: B) =
-    Substitution(this.subst.withDefaultValue(b))
-}
+case class Substitution[A, B](subst: Map[A, B]) extends AnyVal
 
 object Substitution {
   def empty[A, B]: Substitution[A, B] =
