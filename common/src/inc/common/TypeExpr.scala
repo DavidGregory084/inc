@@ -2,12 +2,11 @@ package inc
 package common
 
 import cats.Functor
-import java.io.Serializable
 import java.lang.{ Exception, String }
-import scala.{ =:=, Product, Some }
+import scala.{ =:=, Option, Some, None }
 import scala.collection.immutable.{ List, Map }
 
-sealed abstract class TypeExpr[A] extends Product with Serializable {
+sealed abstract class TypeExpr[A] extends SyntaxTree[A] {
   def meta: A
 
   def toProto(implicit eqv: A =:= Meta.Typed): proto.TypeExpr = this match {
@@ -64,6 +63,15 @@ sealed abstract class TypeExpr[A] extends Product with Serializable {
 }
 
 object TypeExpr {
+  object Function {
+    def unapply[A](typExpr: TypeExpr[A]): Option[List[TypeExpr[A]]] = typExpr match {
+      case TypeApplyExpr(TypeConstructorExpr("->", _), tpArgs, _) =>
+        Some(tpArgs)
+      case _ =>
+        None
+    }
+  }
+
   def fromProto(expr: proto.TypeExpr): TypeExpr[Meta.Typed] =
     expr match {
       case tyApp @ proto.TypeApplyExpr(typ, args, _, _) =>

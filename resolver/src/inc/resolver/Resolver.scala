@@ -20,9 +20,9 @@ object Resolver {
 
   def resolve(pattern: Pattern[Pos], env: SymbolTable): Resolve[(Pattern[Meta.Untyped], SymbolTable)] = pattern match {
     case IdentPattern(name, pos) =>
-        // Allow shadowing in patterns
-        val localName = LocalName(name)
-        Right((IdentPattern(name, Meta.Untyped(localName, pos)), env.withValueName(name, localName)))
+      // Allow shadowing in patterns
+      val localName = LocalName(name)
+      Right((IdentPattern(name, Meta.Untyped(localName, pos)), env.withValueName(name, localName)))
 
     case ConstrPattern(name, alias, patterns, pos) =>
       env.valueNames.get(name).collectFirst {

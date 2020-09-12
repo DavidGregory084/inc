@@ -1,6 +1,6 @@
 package inc.common
 
-import scala.{ Product, Serializable }
+import scala.{ Boolean, Product, Serializable }
 import scala.collection.immutable.Map
 
 sealed abstract class TypeConstraint extends Product with Serializable {
@@ -26,6 +26,12 @@ sealed abstract class TypeConstraint extends Product with Serializable {
     this match {
       case EqualType(l, r, pos) =>
         EqualType(l.defaultKinds, r.defaultKinds, pos)
+    }
+
+  def containsError: Boolean =
+    this match {
+      case EqualType(l, r, _) =>
+        l.containsError || r.containsError
     }
 }
 

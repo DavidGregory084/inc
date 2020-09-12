@@ -170,7 +170,6 @@ trait Generators { self: Assertions =>
     } yield Apply(Reference(List.empty, lam.shortName, lambdaMeta), args, Meta.Typed(NoName, TypeScheme(tpArgs.last), Pos.Empty))
 
   def ifGen(env: Env): Gen[Expr[Meta.Typed]] = {
-    pprint.pprintln(env.types)
     val condDecls: List[Gen[Expr[Meta.Typed]]] = boolGen :: env.types.toList.collect {
       case (nm, ts @ TypeScheme(_, Type.Boolean)) if !Type.builtIns.contains(nm) =>
         Reference(List.empty, nm, Meta.Typed(env.valueNames(nm), ts, Pos.Empty))
@@ -300,7 +299,7 @@ trait Generators { self: Assertions =>
       if (env.valueNames.isEmpty)
         noRefExprGens
       else
-        noRefExprGens :+ referenceGen(env) :+ matchGen(env)
+        noRefExprGens :+ referenceGen(env) /*:+ matchGen(env)*/
 
     Gen.oneOf(exprGens)
       .flatMap(identity)
@@ -374,7 +373,7 @@ trait Generators { self: Assertions =>
     StateT.modifyF[Gen, (Module[Meta.Typed], Int)] {
       case (mod, remaining) =>
         val env = mod.typeEnvironment
-        val declGens = List(letGen(modName, env), dataGen(modName, env))
+        val declGens = List(letGen(modName, env)/*, dataGen(modName, env)*/)
         Gen.oneOf(declGens).flatMap { declGen =>
           declGen.map { decl =>
             val updatedMod = mod.copy(declarations = mod.declarations :+ decl)

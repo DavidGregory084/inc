@@ -3,10 +3,10 @@ package inc.common
 import cats.Functor
 import cats.syntax.functor._
 import java.lang.{ Exception, String }
-import scala.{ Boolean, Product, Serializable, Option, Some, None, =:= }
+import scala.{ Boolean, Option, Some, None, =:= }
 import scala.collection.immutable.{ List, Set }
 
-sealed abstract class Pattern[A] extends Product with Serializable {
+sealed abstract class Pattern[A] extends SyntaxTree[A] {
   def meta: A
 
   def isIrrefutable: Boolean = this match {

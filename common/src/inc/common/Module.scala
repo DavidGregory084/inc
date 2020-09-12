@@ -14,7 +14,7 @@ final case class Module[A](
   imports: List[Import],
   declarations: List[TopLevelDeclaration[A]],
   meta: A,
-) {
+) extends SyntaxTree[A] {
 
   override def toString = pprint.apply(this).toString()
 

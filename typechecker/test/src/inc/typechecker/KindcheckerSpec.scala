@@ -40,7 +40,7 @@ class KindcheckerSpec extends FunSuite {
       )
     }
 
-    val subst = Kindchecker.kindcheck(data, Environment.empty[Meta.Typed]).map(_._2)
+    val solveState = Kindchecker.kindcheck(data, Environment.empty[Meta.Typed])
 
     val expectedData = mkData("Bool", List.empty, Some(`*`)) { data =>
       List(
@@ -49,9 +49,9 @@ class KindcheckerSpec extends FunSuite {
       )
     }
 
-    val actual = subst.map { s => data.substituteKinds(s.subst).defaultKinds }
+    val actual = data.substituteKinds(solveState.subst.subst).defaultKinds
 
-    val expected = Right(expectedData.defaultKinds)
+    val expected = expectedData.defaultKinds
 
     assertEquals(actual, expected)
   }
@@ -70,7 +70,7 @@ class KindcheckerSpec extends FunSuite {
       )
     }
 
-    val subst = Kindchecker.kindcheck(data, Environment.empty[Meta.Typed]).map(_._2)
+    val solveState = Kindchecker.kindcheck(data, Environment.empty[Meta.Typed])
 
     val expectedTyVar = TypeVariable.named("A", kind = `*`)
     val expectedListTy = TypeApply(TypeConstructor("List", `* -> *`), List(expectedTyVar), `*`)
@@ -82,8 +82,8 @@ class KindcheckerSpec extends FunSuite {
         mkConstr("Nil", List.empty, data))
     }
 
-    val actual = subst.map { s => data.substituteKinds(s.subst).defaultKinds }
-    val expected = Right(expectedData.defaultKinds)
+    val actual = data.substituteKinds(solveState.subst.subst).defaultKinds
+    val expected = expectedData.defaultKinds
 
     assertEquals(actual, expected)
   }
@@ -97,7 +97,7 @@ class KindcheckerSpec extends FunSuite {
       List(mkConstr("Fix", List(mkParam("unfix", unfixTy)), data))
     }
 
-    val subst = Kindchecker.kindcheck(data, Environment.empty[Meta.Typed]).map(_._2)
+    val solveState = Kindchecker.kindcheck(data, Environment.empty[Meta.Typed])
 
     val expectedTyVar = TypeVariable.named("F", kind = `* -> *`)
     val expectedFixTy = TypeApply(TypeConstructor("Fix", `(* -> *) -> *`), List(expectedTyVar), `*`)
@@ -107,8 +107,8 @@ class KindcheckerSpec extends FunSuite {
       List(mkConstr("Fix", List(mkParam("unfix", expectedUnfixTy)), data))
     }
 
-    val actual = subst.map { s => data.substituteKinds(s.subst).defaultKinds }
-    val expected = Right(expectedData.defaultKinds)
+    val actual = data.substituteKinds(solveState.subst.subst).defaultKinds
+    val expected = expectedData.defaultKinds
 
     assertEquals(actual, expected)
   }
@@ -127,7 +127,7 @@ class KindcheckerSpec extends FunSuite {
     }
 
     val env = Environment.empty[Meta.Typed].withKind("List", `* -> *`)
-    val subst = Kindchecker.kindcheck(data, env).map(_._2)
+    val solveState = Kindchecker.kindcheck(data, env)
 
     val expectedTyVar = TypeVariable.named("A", kind = `*`)
     val expectedListTy = TypeApply(TypeConstructor("List", `* -> *`), List(expectedTyVar), `*`)
@@ -140,8 +140,8 @@ class KindcheckerSpec extends FunSuite {
       )
     }
 
-    val actual = subst.map { s => data.substituteKinds(s.subst).defaultKinds }
-    val expected = Right(expectedData.defaultKinds)
+    val actual = data.substituteKinds(solveState.subst.subst).defaultKinds
+    val expected = expectedData.defaultKinds
 
     assertEquals(actual, expected)
   }
@@ -160,11 +160,13 @@ class KindcheckerSpec extends FunSuite {
     }
 
     val env = Environment.empty[Meta.Typed].withKind("List", `* -> *`)
-    val subst = Kindchecker.kindcheck(data, env).map(_._2)
+    val solveState = Kindchecker.kindcheck(data, env)
 
-    val actual = subst.map { s => data.substituteKinds(s.subst).defaultKinds }
-    val expected = TypeError.kindUnification(Pos.Empty, `*`, `* -> *`)
+    val expectedError = TypeError.kindUnification(Pos.Empty, `*`, `* -> *`)
 
-    assertEquals(actual, expected)
+    assert(
+      solveState.errors.toList.contains(expectedError),
+      s"Kindchecker did not produce the expected error ${expectedError.message}"
+    )
   }
 }

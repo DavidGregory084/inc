@@ -2,7 +2,7 @@ package inc.common
 
 import java.lang.{ Exception, String }
 import java.util.concurrent.atomic.AtomicInteger
-import scala.{ Option, Some, None, Int, Product, Serializable, StringContext }
+import scala.{ Boolean, Int, Option, Some, None, Product, Serializable, StringContext }
 import scala.collection.immutable.{ List, Map, Set }
 
 sealed abstract class Type extends Product with Serializable {
@@ -21,6 +21,8 @@ sealed abstract class Type extends Product with Serializable {
       proto.TypeApply(typ.toProto, params.map(_.toProto), kind.toProto)
     case TypeConstructor(name, kind) =>
       proto.TypeConstructor(name, kind.toProto)
+    case ErrorType =>
+      throw new Exception("Attempt to serialize ErrorType to proto")
   }
 
   def isPrimitive = this match {
@@ -34,20 +36,24 @@ sealed abstract class Type extends Product with Serializable {
     case InferredTypeVariable(id, _) =>
       TypeConstructorExpr(
         name = s"T${id}",
-        meta = Meta.Typed(LocalName(s"T${id}"), TypeScheme(List.empty, this), Pos.Empty))
+        meta = Meta.Typed(LocalName(s"T${id}"), TypeScheme(this), Pos.Empty))
     case NamedTypeVariable(name, _) =>
       TypeConstructorExpr(
         name = name,
-        meta = Meta.Typed(LocalName(name), TypeScheme(List.empty, this), Pos.Empty))
+        meta = Meta.Typed(LocalName(name), TypeScheme(this), Pos.Empty))
     case TypeApply(typ, params, _) =>
       TypeApplyExpr(
         typ = typ.toExpr,
         args = params.map(_.toExpr),
-        meta = Meta.Typed(NoName, TypeScheme(List.empty, this), Pos.Empty))
+        meta = Meta.Typed(NoName, TypeScheme(this), Pos.Empty))
     case TypeConstructor(name, _) =>
       TypeConstructorExpr(
         name = name,
-        meta = Meta.Typed(LocalName(name), TypeScheme(List.empty, this), Pos.Empty))
+        meta = Meta.Typed(LocalName(name), TypeScheme(this), Pos.Empty))
+    case ErrorType =>
+      TypeConstructorExpr(
+        name = "<error>",
+        meta = Meta.Typed(NoName, TypeScheme(this), Pos.Empty))
   }
 
   def freeTypeVariables: Set[TypeVariable] = this match {
@@ -62,6 +68,8 @@ sealed abstract class Type extends Product with Serializable {
     case TypeApply(typ, params, _) =>
       typ.freeTypeVariables ++ params.flatMap(_.freeTypeVariables).toSet
     case TypeConstructor(_, _) =>
+      Set.empty
+    case ErrorType =>
       Set.empty
   }
 
@@ -95,6 +103,8 @@ sealed abstract class Type extends Product with Serializable {
         ta.copy(
           typ = typ.substitute(subst),
           params = params.map(_.substitute(subst)))
+      case ErrorType =>
+        ErrorType
     }
 
   def defaultKinds: Type = this match {
@@ -111,6 +121,8 @@ sealed abstract class Type extends Product with Serializable {
         typ = defaultedTyp,
         params = defaultedTparams,
         kind = ta.kind.default)
+    case ErrorType =>
+      ErrorType
   }
 
   def substituteKinds(subst: Map[KindVariable, Kind]): Type = this match {
@@ -125,6 +137,22 @@ sealed abstract class Type extends Product with Serializable {
         typ = ta.typ.substituteKinds(subst),
         params = ta.params.map(_.substituteKinds(subst)),
         kind = ta.kind.substitute(subst))
+    case ErrorType =>
+      ErrorType
+  }
+
+  def containsError: Boolean = this match {
+    case InferredTypeVariable(_, _) =>
+      false
+    case NamedTypeVariable(_, _) =>
+      false
+    case TypeConstructor(_, _) =>
+      false
+    case TypeApply(ErrorType, _, _) =>
+      true
+    case TypeApply(_, args, _) =>
+      args.exists(_.containsError)
+    case ErrorType => true
   }
 }
 
@@ -209,6 +237,13 @@ sealed abstract class TypeVariable extends Type {
           proto.InferredTypeVariable(i, kind.toProto)))
   }
 
+  override def substituteKinds(subst: Map[KindVariable, Kind]): TypeVariable = this match {
+    case tv @ NamedTypeVariable(_, _) =>
+      tv.copy(kind = kind.substitute(subst))
+    case tv @ InferredTypeVariable(_, _) =>
+      tv.copy(kind = kind.substitute(subst))
+  }
+
   override def toExpr: TypeConstructorExpr[Meta.Typed] = this match {
     case InferredTypeVariable(id, _) =>
       TypeConstructorExpr(
@@ -246,3 +281,7 @@ object TypeVariable {
 case class TypeConstructor(name: String, kind: Kind) extends Type
 
 case class TypeApply(typ: Type, params: List[Type], kind: Kind) extends Type
+
+case object ErrorType extends Type {
+  val kind = Atomic
+}

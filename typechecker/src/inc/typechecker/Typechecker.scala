@@ -1,23 +1,29 @@
 package inc.typechecker
 
 import inc.common._
-import com.typesafe.scalalogging.LazyLogging
+import scala.Either
 
-object Typechecker extends LazyLogging {
+object Typechecker {
   def typecheck(
     module: Module[Meta.Untyped],
     importedEnv: Environment[Meta.Typed],
   ): Infer[Module[Meta.Typed]] = {
-    for {
-      // Gather constraints from the module's definitions
-      (mod, csts) <- Gather.gather(module, importedEnv)
+    // Gather type constraints from the module's definitions
+    val (typedMod, Gather.State(env, gatherErrors, constraints)) =
+      Gather.gather(module, importedEnv)
 
-      // Try to solve the constraints
-      subst       <- Solve.solve(csts)
+    // Try to solve the constraints
+    val Solve.State(_, subst, solveErrors) =
+      Solve.solve(env, constraints.toList)
 
-      // Apply the substitution from the constraint solution to the module
-      typedMod = subst(mod)
+    // Apply the substition from the constraint solution to the module
+    val solvedMod = subst(typedMod)
 
-    } yield typedMod
+    val typeErrors = gatherErrors ++ solveErrors
+
+    Either.cond(
+      typeErrors.isEmpty,
+      solvedMod,
+      typeErrors.toList)
   }
 }

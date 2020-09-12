@@ -3,11 +3,11 @@ package inc.common
 import cats.Functor
 import cats.syntax.functor._
 import java.lang.{ Exception, String }
-import scala.{ =:=, Boolean, Char, Double, Float, Int, Long, Product, Serializable, Some, StringContext }
+import scala.{ =:=, Boolean, Char, Double, Float, Int, Long, Some, StringContext }
 import scala.collection.immutable.{ List, Map, Set }
 import scala.Predef.wrapRefArray
 
-sealed abstract class Expr[A] extends Product with Serializable {
+sealed abstract class Expr[A] extends SyntaxTree[A] {
   def meta: A
 
   def capturedVariables(implicit eqv: A =:= Meta.Typed): Set[Reference[A]] = this match {

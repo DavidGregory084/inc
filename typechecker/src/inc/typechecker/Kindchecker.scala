@@ -1,18 +1,41 @@
 package inc.typechecker
 
 import inc.common._
-import cats.syntax.foldable._
-import cats.syntax.flatMap._
+import cats.Monoid
+import cats.data.Chain
 import cats.syntax.monoid._
-import scala.{ ::, Left, Right, Nil }
 import scala.collection.immutable.{ List, Map }
 import scala.Predef.ArrowAssoc
-import com.typesafe.scalalogging.LazyLogging
 
-object Kindchecker extends LazyLogging {
+object Kindchecker {
   type Subst = Substitution[KindVariable, Kind]
 
-  def gather(expr: TypeExpr[Meta.Typed], env: Environment[Meta.Typed]): List[KindConstraint] =
+  case class State(
+    env: Environment[Meta.Typed],
+    subst: Subst,
+    errors: Chain[TypeError],
+    constraints: List[KindConstraint]
+  ) {
+    def withEnv(newEnv: Environment[Meta.Typed]) =
+      copy(env = newEnv)
+    def withSubst(newSubst: Subst) =
+      copy(subst = subst |+| newSubst)
+    def withError(newError: TypeError) =
+      copy(errors = errors :+ newError)
+    def withConstraints(newConstraints: List[KindConstraint]) =
+      copy(constraints = constraints ++ newConstraints)
+  }
+  object State {
+    val empty = State(Environment.empty, Substitution.empty, Chain.empty, List.empty)
+    def init(env: Environment[Meta.Typed]) = State(env, Substitution.empty, Chain.empty, List.empty)
+    implicit def monoidForSolveState: Monoid[State] = new Monoid[State] {
+      def empty: State = State.empty
+      def combine(l: State, r: State): State =
+        State(l.env ++ r.env, l.subst |+| r.subst, l.errors ++ r.errors, l.constraints ++ r.constraints)
+    }
+  }
+
+  def gather(env: Environment[Meta.Typed], expr: TypeExpr[Meta.Typed]): List[KindConstraint] =
     expr match {
       case tyApp @ TypeApplyExpr(appliedTyp, args, meta) =>
         val typKind =
@@ -25,8 +48,8 @@ object Kindchecker extends LazyLogging {
 
         val resultKind = tyApp.meta.typ.typ.kind
 
-        val tpCsts = gather(appliedTyp, env)
-        val tparamCsts = args.flatMap(gather(_, env))
+        val tpCsts = gather(env, appliedTyp)
+        val tparamCsts = args.flatMap(gather(env, _))
 
         val tparamKinds = args.map(_.meta.typ.typ.kind)
         val appliedKind = Parameterized(tparamKinds, resultKind)
@@ -52,20 +75,20 @@ object Kindchecker extends LazyLogging {
           List.empty
     }
 
-  def gather(constr: DataConstructor[Meta.Typed], env: Environment[Meta.Typed]): List[KindConstraint] =
+  def gather(env: Environment[Meta.Typed], constr: DataConstructor[Meta.Typed]): State =
     constr match {
       case DataConstructor(_, params, _) =>
-        params.foldLeft(List.empty[KindConstraint]) {
-          case (cstsSoFar, Param(_, ascribedAs, meta)) =>
+        params.foldLeft(State.empty) {
+          case (stateSoFar, Param(_, ascribedAs, meta)) =>
             val paramType = meta.typ.typ
             val paramKind = paramType.kind
-            val paramResultCst = EqualKind(paramKind, Atomic, meta.pos)
-            val paramCsts = gather(ascribedAs.get, env)
-            cstsSoFar ++ List(paramResultCst) ++ paramCsts
+            val paramResultCst = List(EqualKind(paramKind, Atomic, meta.pos))
+            val paramCsts = gather(env, ascribedAs.get)
+            stateSoFar.withConstraints(paramResultCst ++ paramCsts)
         }
     }
 
-  def gather(data: Data[Meta.Typed], env: Environment[Meta.Typed]): Infer[List[KindConstraint]] =
+  def gather(env: Environment[Meta.Typed], data: Data[Meta.Typed]): State =
     data match {
       case Data(_, tparams, cases, meta) =>
         val dataKind = data.kind
@@ -84,40 +107,40 @@ object Kindchecker extends LazyLogging {
           else
             List(EqualKind(inferredKind, dataKind, meta.pos))
 
-        val constraintsFromConstrs = cases.foldLeft(List.empty[KindConstraint]) {
-          case (cstsSoFar, nextConstr) =>
-            cstsSoFar ++ gather(nextConstr, env)
+        val constrState = cases.foldLeft(State.empty) {
+          case (stateSoFar, nextConstr) =>
+            stateSoFar |+| gather(env, nextConstr)
         }
 
-        Right(parentConstraint ++ constraintsFromConstrs)
+        constrState.withConstraints(parentConstraint) |+| constrState
     }
 
-  def bind(kindVar: KindVariable, kind: Kind, pos: Pos): Infer[Subst] =
+  def bind(kindVar: KindVariable, kind: Kind, pos: Pos): State =
     kind match {
       case k @ KindVariable(_) if kindVar == k =>
-        Right(Substitution.empty)
+        State.empty
       case k if kindVar.occursIn(k) =>
-        TypeError.kindOccursCheck(pos, kindVar, kind)
+        State.empty.withError(TypeError.kindOccursCheck(pos, kindVar, kind))
       case _ =>
-        Right(Substitution(Map(kindVar -> kind)))
+        State.empty.withSubst(Substitution(Map(kindVar -> kind)))
     }
 
-  def unify(left: Kind, right: Kind, pos: Pos): Infer[Subst] = {
-    def go(left: Kind, right: Kind): Infer[Subst] = {
+  def unify(env: Environment[Meta.Typed], left: Kind, right: Kind, pos: Pos): State = {
+    def go(left: Kind, right: Kind): State = {
       (left, right) match {
         case (Parameterized(lParams, _), Parameterized(rParams, _)) if lParams.length != rParams.length =>
-          TypeError.kindUnification(pos, left, right)
+          State.empty.withError(TypeError.kindUnification(pos, left, right))
 
         case (Parameterized(lArgs, lRes), Parameterized(rArgs, rRes)) =>
-          lArgs.zip(rArgs).foldM(Substitution.empty: Subst) {
-            case (subst, (lArg, rArg)) =>
-              unify(subst(lArg), subst(rArg), pos).map { subst |+| _ }
-          }.flatMap { paramSubst =>
-            unify(paramSubst(lRes), paramSubst(rRes), pos).map { paramSubst |+| _ }
+          val paramState = lArgs.zip(rArgs).foldLeft(State.empty) {
+            case (stateSoFar, (lArg, rArg)) =>
+              unify(env, stateSoFar.subst(lArg), stateSoFar.subst(rArg), pos)
           }
 
+          unify(env, paramState.subst(lRes), paramState.subst(rRes), pos)
+
         case (Atomic, Atomic) =>
-          Right(Substitution.empty)
+          State.empty
 
         case (kindVar @ KindVariable(_), kind) =>
           bind(kindVar, kind, pos)
@@ -126,34 +149,34 @@ object Kindchecker extends LazyLogging {
           bind(kindVar, kind, pos)
 
         case (_, _) =>
-          TypeError.kindUnification(pos, left, right)
+          State.empty.withError(TypeError.kindUnification(pos, left, right))
       }
     }
 
     go(left, right)
   }
 
-  def solve(constraints: List[KindConstraint]): Infer[Subst] = {
-    (constraints, Substitution.empty: Subst).tailRecM {
-      case (Nil, subst) =>
-        Right(Right(subst))
-      case (EqualKind(l, r, pos) :: tail, substSoFar) =>
-        unify(l, r, pos).map { subst =>
-          Left((tail.map(subst(_)), substSoFar |+| subst))
-        }
+  def solve(env: Environment[Meta.Typed], constraints: List[KindConstraint]): State = {
+    constraints.foldLeft(State.empty) {
+      case (currentState, nextConstraint) =>
+        val EqualKind(l, r, pos) = currentState.subst(nextConstraint)
+        val newState = unify(env, l, r, pos)
+        currentState |+| newState
     }
   }
 
-  def kindcheck(data: Data[Meta.Typed], env: Environment[Meta.Typed]): Infer[(Environment[Meta.Typed], Subst)] = {
-    for {
-      csts <- gather(data, env)
+  def kindcheck(data: Data[Meta.Typed], env: Environment[Meta.Typed]): State = {
+    val gatherState = gather(env, data)
+    val solveState = solve(env, gatherState.constraints)
 
-      subst <- solve(csts)
+    val updatedKinds = data.meta.typ.bound
+      .map(tv => tv.name -> solveState.subst(tv.kind))
+      .toMap.updated(data.name, solveState.subst(data.kind))
 
-      updatedEnv = data.meta.typ.bound
-        .map(tv => tv.name -> subst(tv.kind))
-        .toMap.updated(data.name, subst(data.kind))
+    val updatedEnv = env
+      .withKinds(updatedKinds)
+      .substituteKinds(solveState.subst.subst)
 
-    } yield (env.withKinds(updatedEnv), subst)
+    solveState.withEnv(updatedEnv)
   }
 }

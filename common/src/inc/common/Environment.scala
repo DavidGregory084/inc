@@ -78,6 +78,27 @@ case class Environment[A](
     val untypedMembers = members.view.mapValues { _.map(_.forgetType) }.toMap
     Environment(valueNames, typeNames, types, kinds, untypedMembers)
   }
+
+  def substituteTypes(subst: Map[TypeVariable, Type])(implicit to: A =:= Meta.Typed): Environment[A] = {
+    val from = to.flip
+    copy(
+      types = types.view.mapValues(_.substitute(subst)).toMap,
+      members = members.view.mapValues(_.map(meta => from(meta.substitute(subst)))).toMap)
+  }
+
+  def substituteKinds(subst: Map[KindVariable, Kind])(implicit to: A =:= Meta.Typed): Environment[A] = {
+    val from = to.flip
+    copy(
+      types = types.view.mapValues(_.substituteKinds(subst)).toMap,
+      members = members.view.mapValues(_.map(meta => from(meta.substituteKinds(subst)))).toMap)
+  }
+
+  def defaultKinds(implicit to: A =:= Meta.Typed): Environment[A] = {
+    val from = to.flip
+    copy(
+      types = types.view.mapValues(_.defaultKinds).toMap,
+      members = members.view.mapValues(_.map(meta => from(meta.defaultKinds))).toMap)
+  }
 }
 
 object Environment {

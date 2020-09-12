@@ -36,6 +36,9 @@ object Printer {
     case TypeApply(typ, params, _) =>
       print(typ) + Doc.intercalate(Doc.char(',') + Doc.space, params.map(print))
         .tightBracketBy(Doc.char('['), Doc.char(']'))
+
+    case ErrorType =>
+      Doc.text("<error>")
   }
 
   def print(kind: Kind): Doc = kind match {
@@ -75,9 +78,30 @@ object Printer {
   def print[A](expr: TypeExpr[A]): Doc = expr match {
     case TypeApplyExpr(typ, args, _) if args.isEmpty =>
       print(typ)
+
+    case TypeExpr.Function(args) =>
+      val withParens = args.headOption match {
+        case Some(fn @ TypeExpr.Function(_)) =>
+          print(fn).tightBracketBy(Doc.char('('), Doc.char(')'))
+        case Some(other) =>
+          print(other)
+        case None =>
+          Doc.empty
+      }
+
+      val argDocs =
+        if (args.length == 2)
+          withParens
+        else
+          Doc.intercalate(Doc.char(',') + Doc.space, args.init.map(print(_)))
+            .tightBracketBy(Doc.char('('), Doc.char(')'))
+
+      argDocs & Doc.text("->") & print(args.last)
+
     case TypeApplyExpr(typ, args, _) =>
       print(typ) + Doc.intercalate(Doc.char(',') + Doc.space, args.map(print(_)))
         .tightBracketBy(Doc.char('['), Doc.char(']'))
+
     case TypeConstructorExpr(name, _) =>
       Doc.text(name)
   }

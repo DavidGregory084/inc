@@ -7,7 +7,11 @@ import scala.{ Option, Some, None }
 import scala.=:=
 import scala.collection.immutable.Map
 
-final case class Param[A](name: String, ascribedAs: Option[TypeExpr[A]], meta: A) {
+final case class Param[A](
+  name: String,
+  ascribedAs: Option[TypeExpr[A]],
+  meta: A
+) extends SyntaxTree[A] {
   def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= Meta.Typed) = {
     if (subst.isEmpty)
       this

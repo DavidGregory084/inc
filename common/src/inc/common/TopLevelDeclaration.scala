@@ -3,11 +3,11 @@ package inc.common
 import cats.Functor
 import cats.syntax.functor._
 import java.lang.{ Exception, String }
-import scala.{ Product, Serializable, Some }
+import scala.Some
 import scala.=:=
 import scala.collection.immutable.{ List, Map }
 
-sealed abstract class TopLevelDeclaration[A] extends Product with Serializable {
+sealed abstract class TopLevelDeclaration[A] extends SyntaxTree[A] {
   def name: String
 
   def meta: A
