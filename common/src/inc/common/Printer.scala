@@ -4,24 +4,23 @@ import org.typelevel.paiges._
 import scala.{ =:=, Boolean, Some, None, StringContext }
 
 object Printer {
+  private val White = Style.Ansi.Fg.White
+  private val Yellow = Style.Ansi.Fg.Yellow
+  private val Blue = Style.Ansi.Fg.Blue
+
   def annotate(doc: Doc, typ: Type, annotated: Boolean): Doc = {
-    // if (annotated) {
-    //   val Blue = Style.Ansi.Fg.Blue
-    //   val Yellow = Style.Ansi.Fg.Yellow
-    //   val leftParen = Doc.char('(').style(Yellow)
-    //   val rightParen = Doc.char(')').style(Yellow)
-    //   val colon = Doc.char(':')
-    //   val annotation = (colon & print(typ.kind)).style(Yellow)
-    //   (doc.style(Blue) + annotation)
-    //     .tightBracketBy(leftParen, rightParen)
-    // } else doc
-    doc.style(Style.Ansi.Fg.Blue)
+    if (annotated) {
+      val leftParen = Doc.char('(').style(Yellow)
+      val rightParen = Doc.char(')').style(Yellow)
+      val colon = Doc.char(':')
+      val annotation = (colon & print(typ.kind)).style(Yellow)
+      (doc + annotation).tightBracketBy(leftParen, rightParen)
+    } else doc
   }
 
   def annotate[A](doc: Doc, tree: SyntaxTree[A], annotated: Boolean)
     (implicit eqv: A =:= Meta.Typed): Doc = {
     if (annotated) {
-      val Blue = Style.Ansi.Fg.Blue
       val leftParen = Doc.char('(').style(Blue)
       val rightParen = Doc.char(')').style(Blue)
       val colon = Doc.char(':').style(Blue)
@@ -57,11 +56,11 @@ object Printer {
   def print(typ: Type, annotated: Boolean): Doc = {
     val typDoc = typ match {
       case NamedTypeVariable(n, _) =>
-        Doc.text(n)
+        Doc.text(n).style(Blue)
       case InferredTypeVariable(i, _) =>
-        Doc.text("T" + i.toString)
+        Doc.text("T" + i.toString).style(Blue)
       case TypeConstructor(nm, _) =>
-        Doc.text(nm)
+        Doc.text(nm).style(Blue)
       case TypeApply(typ, params, _) if params.isEmpty =>
         print(typ, annotated)
       case Type.Function(params) =>
@@ -361,7 +360,18 @@ object Printer {
       if (imps.isEmpty) decls
       else imps + Doc.lineOr(Doc.char(';') + Doc.space) + decls
 
-    prefix + Doc.hardLine +
+    val bullet = Doc.char('*').style(White)
+
+    val key =
+      if (annotated)
+        Doc.text("Key: ").style(White) + Doc.hardLine +
+          (bullet & Doc.text("Unstyled:") & Doc.text("original code")).indent(2) + Doc.hardLine +
+          (bullet & (Doc.text("Blue:") & Doc.text("inferred types")).style(Blue)).indent(2) + Doc.hardLine +
+          (bullet & (Doc.text("Yellow:") & Doc.text("inferred kinds")).style(Yellow)).indent(2) + (Doc.hardLine * 2)
+      else
+        Doc.empty
+
+    key + prefix + Doc.hardLine +
       body.indent(2) + Doc.hardLine +
       suffix
   }

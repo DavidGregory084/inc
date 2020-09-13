@@ -39,11 +39,11 @@ object Solve {
     }
   }
 
-  def bind(env: Environment[Meta.Typed], tyVar: TypeVariable, typ: Type, pos: Pos): State =
+  def bind(env: Environment[Meta.Typed], tyVar: TypeVariable, typ: Type, pos: Pos): State = {
     typ match {
       case t @ InferredTypeVariable(_, _) if tyVar == t =>
         State.empty
-      case t @ NamedTypeVariable(_, _) if tyVar == t =>
+      case t @ NamedTypeVariable(_, _) if tyVar.name == t.name =>
         State.empty
       case t if tyVar.occursIn(t) =>
         State.empty.withError(TypeError.typeOccursCheck(pos, tyVar, typ))
@@ -56,6 +56,7 @@ object Solve {
       case _ =>
         State.empty.withSubst(Substitution(Map(tyVar -> typ)))
     }
+  }
 
   def unify(env: Environment[Meta.Typed], left: Type, right: Type, pos: Pos): State = {
     def go(left: Type, right: Type): State = {
@@ -97,7 +98,7 @@ object Solve {
 
   def solve(env: Environment[Meta.Typed], constraints: List[TypeConstraint]): State = {
     constraints.foldLeft(State.init(env)) {
-      // Ignore constraints arising from type errors
+      // Ignore constraints arising from errors
       case (currentState, nextConstraint) if nextConstraint.containsError =>
         currentState
       case (currentState, nextConstraint) =>

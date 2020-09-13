@@ -5,6 +5,7 @@ import cats.implicits._
 import munit.Assertions
 import org.scalacheck._
 import org.scalacheck.cats.implicits._
+import scala.util.Random
 
 trait Generators { self: Assertions =>
   type Env = Environment[Meta.Typed]
@@ -278,10 +279,9 @@ trait Generators { self: Assertions =>
   }
 
   def matchGen(env: Env): Gen[Expr[Meta.Typed]] = {
-    matchIdGen(env)
-    // Gen.oneOf(
-    //   matchIdGen(env),
-    //   matchConstrGen(env))
+    Gen.oneOf(
+      matchIdGen(env),
+      matchConstrGen(env))
   }
 
   def exprGen(env: Env): Gen[Expr[Meta.Typed]] = {
@@ -417,6 +417,9 @@ trait Generators { self: Assertions =>
       modName = ModuleName(pkg, name)
       emptyMod = Module(pkg, name, List.empty, List.empty, Meta.Typed(modName, TypeScheme(Type.Module), Pos.Empty))
       mod <- declsGen(emptyMod)
+      // TODO: Implement dependency analysis for bindings
+      // shuffledMod = mod.copy(declarations = Random.shuffle(mod.declarations))
+      // } yield shuffledMod
     } yield mod
   }
 }

@@ -3,6 +3,7 @@ package inc.typechecker
 import cats.data.Chain
 import cats.Monoid
 import cats.syntax.monoid._
+import cats.syntax.foldable._
 import inc.common._
 import scala.Predef.{ ???, ArrowAssoc }
 import scala.{ Some, None, StringContext }
@@ -58,10 +59,12 @@ object Gather {
     env: Environment[Meta.Typed]
   ): (TypeConstructorExpr[Meta.Typed], State) = typExpr match {
     case TypeConstructorExpr(name, meta) =>
-      env.types.get(name).map { typ =>
-        val checkedTypExpr = TypeConstructorExpr(name, meta.withType(typ))
+      env.types.get(name).map { envTyp =>
+        val instTyp = envTyp.instantiate
+        val checkedTypExpr = TypeConstructorExpr(name, meta.withSimpleType(instTyp))
         (checkedTypExpr, State.empty)
       }.getOrElse {
+        // Name resolution should prevent us from getting here
         val checkedTypExpr = TypeConstructorExpr(name, meta.withSimpleType(ErrorType))
         val typeError = TypeError.generic(meta.pos, s"Reference to undefined type: ${name}")
         (checkedTypExpr, State.empty.withError(typeError))
@@ -77,12 +80,9 @@ object Gather {
       gather(tyCon, env)
 
     case TypeApplyExpr(tyCon @ TypeConstructorExpr("->", _), tpArgs, meta) =>
-      val initialArgState = (Chain.empty[TypeExpr[Meta.Typed]], State.init(env))
-      val (checkedArgs, argsState) = tpArgs.foldLeft(initialArgState) {
-        case (state @ (_, stateSoFar), nextArg) =>
-          val (arg, argState) = gather(nextArg, stateSoFar.env)
-          val newState = (Chain.one(arg), argState)
-          state |+| newState
+      val (checkedArgs, argsState) = tpArgs.foldMap { nextArg =>
+        val (arg, argState) = gather(nextArg, env)
+        (Chain.one(arg), argState)
       }
 
       val tyArgTypes = checkedArgs.map(_.meta.typ.typ).toList
@@ -99,12 +99,9 @@ object Gather {
     case TypeApplyExpr(typ, args, meta) =>
       val (checkedTyp, typState) = gather(typ, env)
 
-      val initialArgState = (Chain.empty[TypeExpr[Meta.Typed]], State.init(env))
-      val (checkedArgs, argsState) = args.foldLeft(initialArgState) {
-        case (state @ (_, stateSoFar), nextArg) =>
-          val (arg, argState) = gather(nextArg, stateSoFar.env)
-          val newState = (Chain.one(arg), argState)
-          state |+| newState
+      val (checkedArgs, argsState) = args.foldMap { nextArg =>
+        val (arg, argState) = gather(nextArg, env)
+        (Chain.one(arg), argState)
       }
 
       val tyArgTypes = checkedArgs.map(_.meta.typ.typ)
@@ -143,7 +140,7 @@ object Gather {
   def gather(
     pattern: Pattern[Meta.Untyped],
     env: Environment[Meta.Typed]
-  ): (Pattern[Meta.Typed], State) = pattern match {
+  ): (Pattern[Meta.Typed], Environment[Meta.Typed], State) = pattern match {
     case IdentPattern(name, meta) =>
       val tv = TypeScheme(TypeVariable())
 
@@ -154,10 +151,65 @@ object Gather {
 
       val updatedEnv = env.withType(name, tv)
 
-      (checkedPattern, State.empty.withEnv(updatedEnv))
+      (checkedPattern, updatedEnv, State.empty)
 
     case ConstrPattern(name, alias, patterns, meta) =>
-      ???
+      val constrName @ ConstrName(_, _, _, _) = env.valueNames(name)
+      val members = env.members(constrName)
+      val Type.Function(constrTpArgs) = env.types(name).instantiate
+      val dataType = constrTpArgs.last
+
+      val (checkedPatterns, patsEnv, patsState) = patterns.foldMap {
+        case FieldPattern(fieldName, None, fieldMeta) =>
+          val fieldType = for {
+            member <- members.find(_.name == fieldMeta.name)
+            Type.Function(memberTpArgs) = member.typ.instantiate
+          } yield memberTpArgs.last
+
+          val checkedFieldPat = Chain.one(FieldPattern(
+            name = fieldName,
+            pattern = None,
+            meta = fieldMeta.withSimpleType(fieldType.get)
+          ))
+
+          (checkedFieldPat, env.withType(fieldName, TypeScheme(fieldType.get)), State.empty)
+
+        case FieldPattern(fieldName, Some(innerPat), fieldMeta) =>
+          val fieldType = for {
+            member <- members.find(_.name == fieldMeta.name)
+            Type.Function(memberTpArgs) = member.typ.instantiate
+          } yield memberTpArgs.last
+
+          val (checkedInnerPat, innerPatEnv, innerPatState) = gather(innerPat, env)
+
+          val patType = checkedInnerPat.meta.typ.typ
+          val patTypeCst = EqualType(patType, fieldType.get, fieldMeta.pos)
+
+          val checkedFieldPat = Chain.one(FieldPattern(
+            name = fieldName,
+            pattern = Some(checkedInnerPat),
+            meta = meta.withSimpleType(fieldType.get)
+          ))
+
+          val newState = innerPatState.withConstraint(patTypeCst)
+
+          (checkedFieldPat, innerPatEnv, newState)
+      }
+
+      val updatedEnv = alias.map { a =>
+        patsEnv.withType(a, TypeScheme(dataType))
+      }.getOrElse {
+        patsEnv
+      }
+
+      val checkedConstrPat = ConstrPattern(
+        name = name,
+        alias = alias,
+        patterns = checkedPatterns.toList,
+        meta = meta.withSimpleType(dataType)
+      )
+
+      (checkedConstrPat, updatedEnv, patsState)
   }
 
   def gather(
@@ -165,8 +217,8 @@ object Gather {
     env: Environment[Meta.Typed]
   ): (MatchCase[Meta.Typed], State) = matchCase match {
     case MatchCase(pattern, resultExpr, meta) =>
-      val (checkedPat, patState) = gather(pattern, env)
-      val (checkedExpr, exprState) = gather(resultExpr, patState.env)
+      val (checkedPat, patEnv, patState) = gather(pattern, env)
+      val (checkedExpr, exprState) = gather(resultExpr, patEnv)
 
       val checkedCase = MatchCase(
         checkedPat,
@@ -211,6 +263,7 @@ object Gather {
         val checkedRef = ref.copy(meta = meta.withSimpleType(instTyp))
         (checkedRef, State.empty)
       }.getOrElse {
+        // Name resolution should prevent us from getting here
         val checkedRef = ref.copy(meta = meta.withSimpleType(ErrorType))
         val typeError = TypeError.generic(meta.pos, s"Reference to undefined symbol: ${ref.fullName}")
         (checkedRef, State.empty.withError(typeError))
@@ -264,12 +317,9 @@ object Gather {
       (checkedExpr, newState)
 
     case Lambda(params, body, meta) =>
-      val initialState = (Chain.empty[Param[Meta.Typed]], State.init(env))
-      val (checkedParams, paramsState) = params.foldLeft(initialState) {
-        case (state @ (_, stateSoFar), nextParam) =>
-          val (checkedParam, paramState) = gather(nextParam, stateSoFar.env)
-          val newState = (Chain.one(checkedParam), paramState)
-          state |+| newState
+      val (checkedParams, paramsState) = params.foldMap { nextParam =>
+        val (checkedParam, paramState) = gather(nextParam, env)
+        (Chain.one(checkedParam), paramState)
       }
 
       val paramMappings = checkedParams.toList.map(p => p.name -> p.meta.typ)
@@ -291,12 +341,9 @@ object Gather {
 
       val (checkedFn, fnState) = gather(fn, env)
 
-      val initialArgState = (Chain.empty[Expr[Meta.Typed]], State.init(env))
-      val (checkedArgs, argsState) = args.foldLeft(initialArgState) {
-        case (state @ (_, stateSoFar), nextArg) =>
-          val (arg, argState) = gather(nextArg, stateSoFar.env)
-          val newState = (Chain.one(arg), argState)
-          state |+| newState
+      val (checkedArgs, argsState) = args.foldMap { nextArg =>
+        val (arg, argState) = gather(nextArg, env)
+        (Chain.one(arg), argState)
       }
 
       val declaredType = checkedFn.meta.typ.typ
@@ -320,12 +367,9 @@ object Gather {
 
       val (checkedExpr, exprState) = gather(matchExpr, env)
 
-      val initialCaseState = (Chain.empty[MatchCase[Meta.Typed]], State.init(env))
-      val (checkedCases, casesState) = cases.foldLeft(initialCaseState) {
-        case (state @ (_, stateSoFar), nextCase) =>
-          val (cse, caseState) = gather(nextCase, stateSoFar.env)
-          val newState = (Chain.one(cse), caseState)
-          state |+| newState
+      val (checkedCases, casesState) = cases.foldMap { nextCase =>
+        val (cse, caseState) = gather(nextCase, env)
+        (Chain.one(cse), caseState)
       }
 
       val casesCsts = checkedCases.toList.flatMap { cse =>
@@ -355,8 +399,6 @@ object Gather {
     env: Environment[Meta.Typed]
   ): (Chain[DataConstructor[Meta.Typed]], State) = constr match {
     case constr @ DataConstructor(name, params, meta) =>
-      val initialState = (Chain.empty[Param[Meta.Typed]], State.init(env))
-
       val envMemberTypes = env
         .members(constr.meta.name)
         .map { meta =>
@@ -364,15 +406,13 @@ object Gather {
           meta.name -> tpArgs.last
         }.toMap
 
-      val (checkedParams, paramsState) = params.foldLeft(initialState) {
-        case (state @ (_, stateSoFar), nextParam) =>
-          val (checkedParam, paramState) = gather(nextParam, stateSoFar.env)
-          val paramName = checkedParam.meta.name
-          val paramType = checkedParam.meta.typ.typ
-          // Emit a constraint that the type from our initial environment matches the ascription
-          val paramAscribedCst = EqualType(paramType, envMemberTypes(paramName), checkedParam.meta.pos)
-          val newState = (Chain.one(checkedParam), paramState.withConstraint(paramAscribedCst))
-          state |+| newState
+      val (checkedParams, paramsState) = params.foldMap { nextParam =>
+        val (checkedParam, paramState) = gather(nextParam, env)
+        val paramName = checkedParam.meta.name
+        val paramType = checkedParam.meta.typ.typ
+        // Emit a constraint that the type from our initial environment matches the ascription
+        val paramAscribedCst = EqualType(paramType, envMemberTypes(paramName), checkedParam.meta.pos)
+        (Chain.one(checkedParam), paramState.withConstraint(paramAscribedCst))
       }
 
       val paramTypes = checkedParams.toList.map(_.meta.typ.typ)
@@ -391,7 +431,9 @@ object Gather {
         meta = meta.withType(funType)
       )
 
-      (Chain.one(checkedConstr), paramsState.withConstraint(envTypeCst))
+      val newState = paramsState.withConstraint(envTypeCst)
+
+      (Chain.one(checkedConstr), newState)
   }
 
   def gather(
@@ -433,22 +475,25 @@ object Gather {
       (checkedLet, newState)
 
     case data @ Data(name, typeParams, cases, meta) =>
-      val tyVars = typeParams.map(tyParam => TypeVariable.named(tyParam.name))
+      val tyVarMapping = typeParams.map(tyParam => tyParam.name -> TypeVariable(KindVariable()))
+      val tyVarTypes = tyVarMapping.map { case (nm, tv) => nm -> TypeScheme(tv) }
+      val tyVarKinds = tyVarMapping.map { case (nm, tv) => nm -> tv.kind }
+      val tyVars = tyVarMapping.map { case (_, tv) => tv }
       val dataConType = TypeConstructor(name, KindVariable())
-      val dataType = TypeScheme(tyVars, TypeApply(dataConType, tyVars, Atomic))
+      val dataAppType = if (tyVars.isEmpty) dataConType else TypeApply(dataConType, tyVars, Atomic)
+      val dataType = TypeScheme(List.empty, dataConType)
 
-      val initialArgState = (Chain.empty[TypeConstructorExpr[Meta.Typed]], State.init(env))
-      val (checkedTyParams, tyParamState) = typeParams.foldLeft(initialArgState) {
-        case (state @ (_, stateSoFar), nextParam) =>
-          val (param, paramState) = gather(nextParam, stateSoFar.env)
-          val newState = (Chain.one(param), paramState)
-          state |+| newState
+      val dataTypeEnv = env
+        .withType(name, dataType)
+        .withTypes(tyVarTypes)
+
+      val (checkedTyParams, tyParamState) = typeParams.foldMap { nextParam =>
+        val (param, paramState) = gather(nextParam, dataTypeEnv)
+        (Chain.one(param), paramState)
       }
 
-      val initialCaseState = (Chain.empty[DataConstructor[Meta.Typed]], State.init(env))
-      val (checkedCases, casesState) = cases.foldLeft(initialCaseState) {
-        case (state @ (_, stateSoFar), nextCase) =>
-          state |+| gather(nextCase, dataType, stateSoFar.env)
+      val (checkedCases, casesState) = cases.foldMap { nextCase =>
+        gather(nextCase, TypeScheme(tyVars, dataAppType), dataTypeEnv)
       }
 
       val checkedData = Chain.one(data.copy(
@@ -457,9 +502,35 @@ object Gather {
         meta = meta.withType(dataType)
       ))
 
-      val newState = (tyParamState |+| casesState)
+      val constrNames = checkedCases.toList.map(_.meta.name)
 
-      (checkedData, newState)
+      val constrMembers = checkedCases.toList.map { cse =>
+        cse.meta.name -> cse.params.map { param =>
+          val accessorFunType = Type.Function(List(dataAppType), param.meta.typ.typ)
+          val accessorTypeScheme = TypeScheme(tyVars, accessorFunType)
+          param.meta.copy(typ = accessorTypeScheme)
+        }
+      }
+
+      val envWithoutMembers = env.copy(
+        members = env.members.removedAll(meta.name :: constrNames)
+      )
+
+      val envWithDataMembers = envWithoutMembers
+        .withMembers(meta.name, checkedCases.toList.map(_.meta))
+        .withType(name, dataType)
+        .withTypes(checkedCases.map { cse => cse.name -> cse.meta.typ }.toList)
+        .withKinds(tyVarKinds)
+
+      val envWithConstrMembers = constrMembers.foldLeft(envWithDataMembers) {
+        case (envSoFar, (name, members)) =>
+          envSoFar.withMembers(name, members)
+      }
+
+      val newState = (tyParamState |+| casesState)
+        .withEnv(envWithConstrMembers)
+
+      (checkedData, newState.withEnv(envWithConstrMembers))
   }
 
   def initialPass(
@@ -477,14 +548,15 @@ object Gather {
         envSoFar.withType(name, TypeScheme(TypeVariable()))
 
       case (envSoFar, Data(name, typeParams, cases, meta)) =>
-        val tyVars = typeParams.map(tyParam => TypeVariable.named(tyParam.name))
+        val tyVars = typeParams.map(_ => TypeVariable(KindVariable()))
         val dataConType = TypeConstructor(name, KindVariable())
-        val dataType = TypeScheme(tyVars, TypeApply(dataConType, tyVars, Atomic))
+        val dataAppType = if (tyVars.isEmpty) dataConType else TypeApply(dataConType, tyVars, Atomic)
+        val dataType = TypeScheme(List.empty, dataConType)
 
         val constrTypes = cases.map {
           case DataConstructor(constrName, params, _) =>
             val paramTypes = params.map(_ => TypeVariable())
-            val constrType = TypeScheme(tyVars, Type.Function(paramTypes, dataType.typ))
+            val constrType = TypeScheme(tyVars, Type.Function(paramTypes, dataAppType))
             constrName -> constrType
         }.toMap
 
@@ -497,7 +569,7 @@ object Gather {
           case DataConstructor(_, params, constrMeta) =>
             params.map {
               case Param(_, _, paramMeta) =>
-                val accessorFunType = Type.Function(List(dataType.typ), TypeVariable())
+                val accessorFunType = Type.Function(List(dataAppType), TypeVariable())
                 val accessorTypeScheme = TypeScheme(tyVars, accessorFunType)
                 constrMeta.name -> paramMeta.withType(accessorTypeScheme)
             }
@@ -542,11 +614,10 @@ object Gather {
     val updatedMod = module.copy(
       declarations = decls.toList,
       meta = module.meta.withSimpleType(Type.Module)
-    ).substituteKinds(kindSubst.subst).defaultKinds
+    ).substituteKinds(kindSubst.subst)
 
     val updatedState = declState
       .substituteKinds(kindSubst)
-      .defaultKinds
       .withErrors(kindErrors)
       .withEnv(kindEnv)
 

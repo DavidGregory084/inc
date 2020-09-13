@@ -18,12 +18,15 @@ object Typechecker {
 
     // Apply the substition from the constraint solution to the module
     val solvedMod = subst(typedMod)
+    // Default any unsolved kind variables to kind *
+      .defaultKinds
 
-    val typeErrors = gatherErrors ++ solveErrors
+    val typeErrors = (gatherErrors ++ solveErrors).toList.distinct
 
     Either.cond(
       typeErrors.isEmpty,
       solvedMod,
-      typeErrors.toList)
+      typeErrors
+    )
   }
 }

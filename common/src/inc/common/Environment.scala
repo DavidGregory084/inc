@@ -1,5 +1,6 @@
 package inc.common
 
+import cats.Monoid
 import java.lang.String
 import scala.{ =:=, Boolean, Nothing }
 import scala.collection.Iterable
@@ -120,4 +121,9 @@ object Environment {
 
   def empty[A] =
     Empty.asInstanceOf[Environment[A]]
+
+  implicit def environmentMonoid[A]: Monoid[Environment[A]] = new Monoid[Environment[A]] {
+    def empty: Environment[A] = Environment.empty
+    def combine(l: Environment[A], r: Environment[A]): Environment[A] = l ++ r
+  }
 }

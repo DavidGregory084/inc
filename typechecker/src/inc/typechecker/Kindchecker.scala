@@ -44,14 +44,7 @@ object Kindchecker {
   def gather(env: Environment[Meta.Typed], expr: TypeExpr[Meta.Typed]): List[KindConstraint] =
     expr match {
       case tyApp @ TypeApplyExpr(appliedTyp, args, meta) =>
-        val typKind =
-          if (appliedTyp.meta.typ.bound.isEmpty) {
-            appliedTyp.meta.typ.typ.kind
-          } else {
-            val TypeApply(TypeConstructor(_, tyConKind), _, _) = appliedTyp.meta.typ.typ
-            tyConKind
-          }
-
+        val typKind = appliedTyp.meta.typ.typ.kind
         val resultKind = tyApp.meta.typ.typ.kind
 
         val tpCsts = gather(env, appliedTyp)
@@ -60,25 +53,24 @@ object Kindchecker {
         val tparamKinds = args.map(_.meta.typ.typ.kind)
         val appliedKind = Parameterized(tparamKinds, resultKind)
 
-        val appCst = List(EqualKind(typKind, appliedKind, meta.pos))
+        val appCst =
+          if (typKind != appliedKind)
+            List(EqualKind(typKind, appliedKind, meta.pos))
+          else
+            List.empty
 
         tpCsts ++ tparamCsts ++ appCst
 
       case TypeConstructorExpr(name, meta) =>
-        val typKind =
-          if (meta.typ.bound.isEmpty) {
-            meta.typ.typ.kind
-          } else {
-            val TypeApply(TypeConstructor(_, tyConKind), _, _) = meta.typ.typ
-            tyConKind
-          }
-
+        val typKind = meta.typ.typ.kind
         val envKind = env.kinds.getOrElse(name, typKind)
 
-        if (typKind != envKind)
+        val conCst = if (typKind != envKind)
           List(EqualKind(typKind, envKind, meta.pos))
         else
           List.empty
+
+        conCst
     }
 
   def gather(env: Environment[Meta.Typed], constr: DataConstructor[Meta.Typed]): State =
@@ -96,22 +88,14 @@ object Kindchecker {
 
   def gather(env: Environment[Meta.Typed], data: Data[Meta.Typed]): State =
     data match {
-      case Data(_, tparams, cases, meta) =>
+      case Data(_, _, cases, meta) =>
         val dataKind = data.kind
 
-        val inferredKind =
-          if (tparams.isEmpty) {
-            meta.typ.typ.kind
-          } else {
-            val TypeApply(TypeConstructor(_, tyConKind), _, _) = meta.typ.typ
-            tyConKind
-          }
-
         val parentConstraint =
-          if (inferredKind == dataKind)
+          if (meta.typ.typ.kind == dataKind)
             List.empty
           else
-            List(EqualKind(inferredKind, dataKind, meta.pos))
+            List(EqualKind(meta.typ.typ.kind, dataKind, meta.pos))
 
         val constrState = cases.foldLeft(State.empty) {
           case (stateSoFar, nextConstr) =>
@@ -173,16 +157,12 @@ object Kindchecker {
 
   def kindcheck(data: Data[Meta.Typed], env: Environment[Meta.Typed]): State = {
     val gatherState = gather(env, data)
+
     val solveState = solve(env, gatherState.constraints)
 
-    val updatedKinds = data.meta.typ.bound
-      .map(tv => tv.name -> solveState.subst(tv.kind))
-      .toMap.updated(data.name, solveState.subst(data.kind))
-
     val updatedEnv = env
-      .withKinds(updatedKinds)
+      .withKind(data.name, solveState.subst(data.kind))
       .substituteKinds(solveState.subst.subst)
-      .defaultKinds
 
     solveState.withEnv(updatedEnv)
   }
