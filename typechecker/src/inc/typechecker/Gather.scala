@@ -5,7 +5,7 @@ import cats.Monoid
 import cats.syntax.monoid._
 import cats.syntax.foldable._
 import inc.common._
-import scala.Predef.{ ???, ArrowAssoc }
+import scala.Predef.ArrowAssoc
 import scala.{ Some, None, StringContext }
 import scala.collection.immutable.List
 

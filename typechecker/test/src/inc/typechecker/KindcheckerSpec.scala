@@ -19,11 +19,7 @@ class KindcheckerSpec extends FunSuite {
   }
 
   def mkData(name: String, typeParams: List[TypeVariable], kind: Option[Kind] = None)(mkCases: Data[Meta.Typed] => List[DataConstructor[Meta.Typed]]) = {
-    val typ =
-      if (typeParams.isEmpty)
-        TypeScheme(List.empty, TypeConstructor(name, kind.getOrElse(KindVariable())))
-      else
-        TypeScheme(typeParams, TypeApply(TypeConstructor(name, kind.getOrElse(KindVariable())), typeParams, kind.map(_ => `*`).getOrElse(KindVariable())))
+    val typ = TypeScheme(List.empty, TypeConstructor(name, kind.getOrElse(KindVariable())))
 
     val data = Data(name, typeParams.map(_.toExpr), List.empty, Meta.Typed(LocalName(name), typ, Pos.Empty))
 
@@ -57,7 +53,7 @@ class KindcheckerSpec extends FunSuite {
   }
 
   test("Kindchecker should infer * -> * for a List-like data type") {
-    val tyVar = TypeVariable.named("A")
+    val tyVar = TypeVariable(KindVariable())
     val listTy = TypeApply(TypeConstructor("List", KindVariable()), List(tyVar), KindVariable())
 
     val data = mkData("List", List(tyVar)) { data =>
@@ -72,7 +68,7 @@ class KindcheckerSpec extends FunSuite {
 
     val solveState = Kindchecker.kindcheck(data, Environment.empty[Meta.Typed])
 
-    val expectedTyVar = TypeVariable.named("A", kind = `*`)
+    val expectedTyVar = InferredTypeVariable(tyVar.id, kind = `*`)
     val expectedListTy = TypeApply(TypeConstructor("List", `* -> *`), List(expectedTyVar), `*`)
     val expectedData = mkData("List", List(expectedTyVar), Some(`* -> *`)) { data =>
       List(
@@ -89,7 +85,7 @@ class KindcheckerSpec extends FunSuite {
   }
 
   test("Kindchecker should infer (* -> *) -> * for a Fix-like data type") {
-    val tyVar = TypeVariable.named("F")
+    val tyVar = TypeVariable(KindVariable())
     val fixTy = TypeApply(TypeConstructor("Fix", KindVariable()), List(tyVar), KindVariable())
     val unfixTy = TypeApply(tyVar, List(fixTy), `*`)
 
@@ -99,7 +95,7 @@ class KindcheckerSpec extends FunSuite {
 
     val solveState = Kindchecker.kindcheck(data, Environment.empty[Meta.Typed])
 
-    val expectedTyVar = TypeVariable.named("F", kind = `* -> *`)
+    val expectedTyVar = InferredTypeVariable(tyVar.id, kind = `* -> *`)
     val expectedFixTy = TypeApply(TypeConstructor("Fix", `(* -> *) -> *`), List(expectedTyVar), `*`)
 
     val expectedUnfixTy = TypeApply(expectedTyVar, List(expectedFixTy), `*`)
@@ -114,7 +110,7 @@ class KindcheckerSpec extends FunSuite {
   }
 
   test("Kindchecker should enable use of data types from other modules") {
-    val tyVar = TypeVariable.named("A")
+    val tyVar = TypeVariable(KindVariable())
     val listTy = TypeApply(TypeConstructor("List", KindVariable()), List(tyVar), KindVariable())
 
     val data = mkData("NonEmptyList", List(tyVar)) { data =>
@@ -129,7 +125,7 @@ class KindcheckerSpec extends FunSuite {
     val env = Environment.empty[Meta.Typed].withKind("List", `* -> *`)
     val solveState = Kindchecker.kindcheck(data, env)
 
-    val expectedTyVar = TypeVariable.named("A", kind = `*`)
+    val expectedTyVar = InferredTypeVariable(tyVar.id, kind = `*`)
     val expectedListTy = TypeApply(TypeConstructor("List", `* -> *`), List(expectedTyVar), `*`)
     val expectedData = mkData("NonEmptyList", List(expectedTyVar), Some(`* -> *`)) { data =>
       List(
@@ -147,7 +143,7 @@ class KindcheckerSpec extends FunSuite {
   }
 
   test("Kindchecker should return an error when data types from other modules are applied incorrectly") {
-    val tyVar = TypeVariable.named("A")
+    val tyVar = TypeVariable(KindVariable())
     val listTy = TypeConstructor("List", KindVariable())
 
     val data = mkData("NonEmptyList", List(tyVar)) { data =>

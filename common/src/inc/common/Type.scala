@@ -266,7 +266,7 @@ object TypeVariable {
   val nextId = new AtomicInteger(1)
   def named(name: String, kind: Kind = KindVariable()) =
     NamedTypeVariable(name, kind)
-  def apply(kind: Kind = Atomic): TypeVariable =
+  def apply(kind: Kind = Atomic): InferredTypeVariable =
     InferredTypeVariable(nextId.getAndIncrement, kind)
   def fromProto(tyVar: proto.TypeVariable) = tyVar.tyVar match {
     case proto.TypeVariable.TyVar.Named(proto.NamedTypeVariable(name, kind, _)) =>
