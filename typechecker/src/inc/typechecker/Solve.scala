@@ -27,9 +27,15 @@ object Solve {
     val empty = State(Environment.empty, Substitution.empty, Chain.empty)
     def init(env: Environment[Meta.Typed]) = State(env, Substitution.empty, Chain.empty)
     implicit def monoidForSolveState: Monoid[State] = new Monoid[State] {
-      def empty: State = State.init(Environment.empty)
+      val empty: State =
+        State.empty
       def combine(l: State, r: State): State =
-        State(l.env ++ r.env, l.subst |+| r.subst, l.errors ++ r.errors)
+        if (l.eq(State.empty))
+          r
+        else if (r.eq(State.empty))
+          l
+        else
+          State(l.env ++ r.env, l.subst |+| r.subst, l.errors ++ r.errors)
     }
   }
 

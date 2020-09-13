@@ -192,7 +192,7 @@ trait Generators { self: Assertions =>
 
   def idPatGen(expr: Expr[Meta.Typed], env: Env): Gen[MatchCase[Meta.Typed]] = {
     for {
-      name <- nameGen.suchThat(!collides(env, _))
+      name <- nameGen.suchThat(!valueCollides(env, _))
 
       idPatMeta = Meta.Typed(LocalName(name), expr.meta.typ, Pos.Empty)
 
@@ -235,7 +235,7 @@ trait Generators { self: Assertions =>
         .withValueNames(chosenParams.map(p => (p.name.shortName, p.name)))
         .withTypes(chosenParams.map(p => (p.name.shortName, p.typ)))
 
-      alias <- nameGen.suchThat(!collides(patEnv, _))
+      alias <- nameGen.suchThat(!valueCollides(patEnv, _))
 
       useAlias <- Arbitrary.arbitrary[Boolean]
 
@@ -278,9 +278,10 @@ trait Generators { self: Assertions =>
   }
 
   def matchGen(env: Env): Gen[Expr[Meta.Typed]] = {
-    Gen.oneOf(
-      matchIdGen(env),
-      matchConstrGen(env))
+    matchIdGen(env)
+    // Gen.oneOf(
+    //   matchIdGen(env),
+    //   matchConstrGen(env))
   }
 
   def exprGen(env: Env): Gen[Expr[Meta.Typed]] = {
@@ -308,18 +309,22 @@ trait Generators { self: Assertions =>
   def letGen(modName: ModuleName, env: Env) =
     for {
       // Make sure we don't generate duplicate names
-      name <- nameGen.suchThat(!collides(env, _))
+      name <- nameGen.suchThat(!valueCollides(env, _))
       expr <- exprGen(env)
     } yield Let(name, expr, Meta.Typed(MemberName(modName.pkg, modName.mod, name), expr.meta.typ, Pos.Empty))
 
   def constructorGen(dataName: DataName, dataType: TypeScheme, env: Env) =
     for {
-      name <- nameGen.suchThat(nm => nm != dataName.name && !collides(env, nm))
+      name <- nameGen.suchThat { nm =>
+        nm != dataName.name &&
+          !valueCollides(env, nm) &&
+          !typeCollides(env, nm)
+      }
 
       numArgs <- Gen.choose(1, 4)
 
       pNms <- Gen.listOfN(
-        numArgs, nameGen.suchThat(nm => nm != dataName.name && !collides(env, nm))
+        numArgs, nameGen.suchThat(nm => nm != dataName.name && !valueCollides(env, nm))
       ).suchThat(vs =>  vs.distinct.length == vs.length)
 
       pTps <- Gen.listOfN(numArgs, Gen.oneOf(
@@ -342,15 +347,23 @@ trait Generators { self: Assertions =>
 
     } yield DataConstructor(name, params, Meta.Typed(ConstrName(dataName.pkg, dataName.mod, dataName.name, name), typeScheme, Pos.Empty))
 
-  def collides(env: Env, name: String): Boolean = {
+  def valueCollides(env: Env, name: String): Boolean = {
     env.valueNames.values
+      .map(_.shortName.toUpperCase).toList
+      .contains(name.toUpperCase)
+  }
+
+  def typeCollides(env: Env, name: String): Boolean = {
+    env.typeNames.values
       .map(_.shortName.toUpperCase).toList
       .contains(name.toUpperCase)
   }
 
   def dataGen(modName: ModuleName, env: Env) =
     for {
-      name <- nameGen.suchThat(!collides(env, _))
+      name <- nameGen.suchThat { nm =>
+        !valueCollides(env, nm) && !typeCollides(env, nm)
+      }
 
       numConstrs <- Gen.choose(1, 4)
 
@@ -373,7 +386,7 @@ trait Generators { self: Assertions =>
     StateT.modifyF[Gen, (Module[Meta.Typed], Int)] {
       case (mod, remaining) =>
         val env = mod.typeEnvironment
-        val declGens = List(letGen(modName, env)/*, dataGen(modName, env)*/)
+        val declGens = List(letGen(modName, env), dataGen(modName, env))
         Gen.oneOf(declGens).flatMap { declGen =>
           declGen.map { decl =>
             val updatedMod = mod.copy(declarations = mod.declarations :+ decl)

@@ -178,7 +178,7 @@ class CodegenSpec extends ScalaCheckSuite with Generators {
           }
         } catch {
           case e: Throwable =>
-            println(Printer.print(mod).render(80))
+            println(Printer.print(mod, true).render(80))
             throw e
         }
       }

@@ -281,12 +281,16 @@ object Resolver {
           case (env, DataConstructor(name, _, pos)) =>
             if (env.valueNames.contains(name))
               ResolverError.alreadyDefined(pos, name, env.valueNames(name))
+            else if (env.typeNames.contains(name))
+              ResolverError.alreadyDefined(pos, name, env.typeNames(name))
             else
               Right(env.withValueName(name, ConstrName(module.pkg, module.name, dataNm, name)))
         }
 
         if (outerEnv.typeNames.contains(dataNm))
           ResolverError.alreadyDefined(dataPos, dataNm, outerEnv.typeNames(dataNm))
+        else if (outerEnv.valueNames.contains(dataNm))
+          ResolverError.alreadyDefined(dataPos, dataNm, outerEnv.valueNames(dataNm))
         else constrEnv.map { env =>
           val dataMembers = for {
             DataConstructor(name, params, pos) <- cases

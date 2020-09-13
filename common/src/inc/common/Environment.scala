@@ -1,9 +1,9 @@
 package inc.common
 
 import java.lang.String
-import scala.{ Boolean, =:= }
+import scala.{ =:=, Boolean, Nothing }
 import scala.collection.Iterable
-import scala.collection.immutable.{List, Map}
+import scala.collection.immutable.{ List, Map }
 import scala.Predef.ArrowAssoc
 
 case class Environment[A](
@@ -55,6 +55,10 @@ case class Environment[A](
   }
 
   def ++(env: Environment[A]) = {
+    if (this.eq(Environment.Empty))
+      env
+    else if (env.eq(Environment.Empty))
+      this
     Environment(
       valueNames ++ env.valueNames,
       typeNames ++ env.typeNames,
@@ -102,9 +106,9 @@ case class Environment[A](
 }
 
 object Environment {
-  def empty[A] = Environment[A](
-    typeNames = Type.builtInTypes
-      .map(tp => tp.name -> LocalName(tp.name))
+  private val Empty = Environment[Nothing](
+    typeNames = Type.builtIns
+      .map(tp => tp -> LocalName(tp))
       .toMap,
     types = Type.builtInTypes
       .map(tp => tp.name -> TypeScheme(tp))
@@ -113,4 +117,7 @@ object Environment {
       .map(tp => tp.name -> tp.kind)
       .toMap
   )
+
+  def empty[A] =
+    Empty.asInstanceOf[Environment[A]]
 }

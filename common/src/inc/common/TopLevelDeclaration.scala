@@ -124,7 +124,7 @@ final case class DataConstructor[A](
   name: String,
   params: List[Param[A]],
   meta: A
-) {
+) extends SyntaxTree[A] {
   def toProto(implicit eqv: A =:= Meta.Typed): proto.DataConstructor = {
     val nameWithType = Some(eqv(meta).toProto)
     proto.DataConstructor(name, params.map(_.toProto), nameWithType)

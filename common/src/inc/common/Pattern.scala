@@ -36,7 +36,7 @@ sealed abstract class Pattern[A] extends SyntaxTree[A] {
 
 case class IdentPattern[A](name: String, meta: A) extends Pattern[A]
 
-case class FieldPattern[A](name: String, pattern: Option[Pattern[A]], meta: A) {
+case class FieldPattern[A](name: String, pattern: Option[Pattern[A]], meta: A) extends SyntaxTree[A] {
   def boundVariables(implicit eqv: A =:= Meta.Typed): Set[Name] =
     pattern.toList.flatMap(_.boundVariables).toSet
   def toProto(implicit eqv: A =:= Meta.Typed): proto.FieldPattern = {

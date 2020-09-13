@@ -29,9 +29,15 @@ object Kindchecker {
     val empty = State(Environment.empty, Substitution.empty, Chain.empty, List.empty)
     def init(env: Environment[Meta.Typed]) = State(env, Substitution.empty, Chain.empty, List.empty)
     implicit def monoidForSolveState: Monoid[State] = new Monoid[State] {
-      def empty: State = State.empty
+      def empty: State =
+        State.empty
       def combine(l: State, r: State): State =
-        State(l.env ++ r.env, l.subst |+| r.subst, l.errors ++ r.errors, l.constraints ++ r.constraints)
+        if (l.eq(State.empty))
+          r
+        else if (r.eq(State.empty))
+          l
+        else
+          State(l.env ++ r.env, l.subst |+| r.subst, l.errors ++ r.errors, l.constraints ++ r.constraints)
     }
   }
 
@@ -176,6 +182,7 @@ object Kindchecker {
     val updatedEnv = env
       .withKinds(updatedKinds)
       .substituteKinds(solveState.subst.subst)
+      .defaultKinds
 
     solveState.withEnv(updatedEnv)
   }

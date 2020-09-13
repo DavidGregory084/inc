@@ -8,8 +8,8 @@ sealed abstract class TypeError(private val position: Pos) extends Error(positio
 
 case class TypeUnificationError(position: Pos, left: Type, right: Type)(implicit file: sourcecode.File, line: sourcecode.Line) extends TypeError(position) {
   val message: String = {
-    val leftStr = Printer.print(left).render(80)
-    val rightStr = Printer.print(right).render(80)
+    val leftStr = Printer.print(left, annotated = false).render(80)
+    val rightStr = Printer.print(right, annotated = false).render(80)
     val msg = s"${Red(leftStr)} does not unify with ${Red(rightStr)}"
     Error.formatMessage(file, line, msg)
   }
@@ -17,8 +17,8 @@ case class TypeUnificationError(position: Pos, left: Type, right: Type)(implicit
 
 case class TypeOccursCheck(position: Pos, tyVar: TypeVariable, typ: Type)(implicit file: sourcecode.File, line: sourcecode.Line) extends TypeError(position) {
   val message: String = {
-    val typStr = Printer.print(typ).render(80)
-    val tyVarStr = Printer.print(tyVar).render(80)
+    val typStr = Printer.print(typ, annotated = false).render(80)
+    val tyVarStr = Printer.print(tyVar, annotated = false).render(80)
     val msg = s"Infinite expansion while unifying type variable ${Red(tyVarStr)} with type ${Red(typStr)}"
     Error.formatMessage(file, line, msg)
   }
@@ -26,8 +26,8 @@ case class TypeOccursCheck(position: Pos, tyVar: TypeVariable, typ: Type)(implic
 
 case class TypeApplicationError(position: Pos, left: Type, right: Type)(implicit file: sourcecode.File, line: sourcecode.Line) extends TypeError(position) {
   val message: String = {
-    val leftStr = Printer.print(left).render(80)
-    val rightStr = Printer.print(right).render(80)
+    val leftStr = Printer.print(left, annotated = false).render(80)
+    val rightStr = Printer.print(right, annotated = false).render(80)
     val msg = s"${Red(leftStr)} does not unify with ${Red(rightStr)}: ${leftStr} has arity ${left.kind.arity}; ${rightStr} has arity ${right.kind.arity}"
     Error.formatMessage(file, line, msg)
   }

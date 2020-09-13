@@ -158,7 +158,6 @@ sealed abstract class Type extends Product with Serializable {
 
 object Type {
   val primitives = Set("Int", "Long", "Float", "Double", "Boolean", "Char")
-  val builtIns = primitives ++ Set("->", "String", "Module", "Unit")
 
   val Int = TypeConstructor("Int", Atomic)
   val Long = TypeConstructor("Long", Atomic)
@@ -171,6 +170,7 @@ object Type {
   val Unit = TypeConstructor("Unit", Atomic)
 
   val builtInTypes = Set(Int, Long, Float, Double, Boolean, Char, String, Module, Unit)
+  val builtIns = builtInTypes.map(_.name) + "->"
 
   def isFunction(typ: Type) = typ match {
     case Type.Function(_) =>
