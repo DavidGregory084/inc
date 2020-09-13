@@ -309,7 +309,9 @@ trait Generators { self: Assertions =>
   def letGen(modName: ModuleName, env: Env) =
     for {
       // Make sure we don't generate duplicate names
-      name <- nameGen.suchThat(!valueCollides(env, _))
+      name <- nameGen.suchThat { nm =>
+        !valueCollides(env, nm) && !typeCollides(env, nm)
+      }
       expr <- exprGen(env)
     } yield Let(name, expr, Meta.Typed(MemberName(modName.pkg, modName.mod, name), expr.meta.typ, Pos.Empty))
 
@@ -418,8 +420,7 @@ trait Generators { self: Assertions =>
       emptyMod = Module(pkg, name, List.empty, List.empty, Meta.Typed(modName, TypeScheme(Type.Module), Pos.Empty))
       mod <- declsGen(emptyMod)
       // TODO: Implement dependency analysis for bindings
-      // shuffledMod = mod.copy(declarations = Random.shuffle(mod.declarations))
-      // } yield shuffledMod
-    } yield mod
+      shuffledMod = mod.copy(declarations = Random.shuffle(mod.declarations))
+    } yield shuffledMod
   }
 }

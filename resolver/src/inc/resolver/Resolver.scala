@@ -270,6 +270,8 @@ object Resolver {
       case (env, Let(name, _, pos)) =>
         if (env.valueNames.contains(name))
           ResolverError.alreadyDefined(pos, name, env.valueNames(name))
+        else if (env.typeNames.contains(name))
+          ResolverError.alreadyDefined(pos, name, env.typeNames(name))
         else
           Right(env.withValueName(name, MemberName(module.pkg, module.name, name)))
 
