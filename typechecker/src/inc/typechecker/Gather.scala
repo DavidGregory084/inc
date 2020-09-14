@@ -156,14 +156,24 @@ object Gather {
     case ConstrPattern(name, alias, patterns, meta) =>
       val constrName @ ConstrName(_, _, _, _) = env.valueNames(name)
       val members = env.members(constrName)
-      val Type.Function(constrTpArgs) = env.types(name).instantiate
+      val envConstrType = env.types(name)
+
+      // We need to keep this substitution
+      val instantiationSubst =
+        envConstrType.instantiateSubst
+
+      // We want to use it to instantiate our constructor type
+      val Type.Function(constrTpArgs) =
+        envConstrType.typ.substitute(instantiationSubst.subst)
+
       val dataType = constrTpArgs.last
 
       val (checkedPatterns, patsEnv, patsState) = patterns.foldMap {
         case FieldPattern(fieldName, None, fieldMeta) =>
           val fieldType = for {
             member <- members.find(_.name == fieldMeta.name)
-            Type.Function(memberTpArgs) = member.typ.instantiate
+            // And we need to use the same substitution for our patterns too
+            Type.Function(memberTpArgs) = member.typ.typ.substitute(instantiationSubst.subst)
           } yield memberTpArgs.last
 
           val checkedFieldPat = Chain.one(FieldPattern(
@@ -177,7 +187,7 @@ object Gather {
         case FieldPattern(fieldName, Some(innerPat), fieldMeta) =>
           val fieldType = for {
             member <- members.find(_.name == fieldMeta.name)
-            Type.Function(memberTpArgs) = member.typ.instantiate
+            Type.Function(memberTpArgs) = member.typ.typ.substitute(instantiationSubst.subst)
           } yield memberTpArgs.last
 
           val (checkedInnerPat, innerPatEnv, innerPatState) = gather(innerPat, env)

@@ -40,6 +40,14 @@ case class TypeScheme(bound: List[TypeVariable], typ: Type) {
   def prefixed(prefix: String) =
     copy(typ = typ.prefixed(prefix))
 
+  def instantiateSubst: Substitution[TypeVariable, Type] =
+    if (bound.isEmpty)
+      Substitution.empty
+    else {
+      val freshVars = bound.map(b => TypeVariable(b.kind))
+      Substitution(bound.zip(freshVars).toMap)
+    }
+
   def instantiate: Type =
     if (bound.isEmpty)
       typ
@@ -55,8 +63,14 @@ object TypeScheme {
 
   def generalize(env: Environment[_], typ: Type): TypeScheme = {
     val freeInEnv = env.types.values.flatMap(_.typ.freeTypeVariables).toSet
-    val bound = typ.freeTypeVariables diff freeInEnv
+
+    val bound = (typ.freeTypeVariables diff freeInEnv).toList.distinctBy {
+      case InferredTypeVariable(id, _) => id.toString
+      case NamedTypeVariable(name, _) => name
+    }
+
     val scheme = TypeScheme(bound.toList, typ)
+
     scheme
   }
 

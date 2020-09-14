@@ -10,38 +10,45 @@ import scala.Predef.wrapRefArray
 sealed abstract class Expr[A] extends SyntaxTree[A] {
   def meta: A
 
-  def capturedVariables(implicit eqv: A =:= Meta.Typed): Set[Reference[A]] = this match {
-    case LiteralInt(_, _) => Set.empty
-    case LiteralLong(_, _) => Set.empty
-    case LiteralFloat(_, _) => Set.empty
-    case LiteralDouble(_, _) => Set.empty
-    case LiteralBoolean(_, _) => Set.empty
-    case LiteralString(_, _) => Set.empty
-    case LiteralChar(_, _) => Set.empty
-    case LiteralUnit(_) => Set.empty
-    case ref @ Reference(_, _, _) =>
-      Set(ref)
-    case If(cond, thenExpr, elseExpr, _) =>
-      cond.capturedVariables ++
-        thenExpr.capturedVariables ++
-        elseExpr.capturedVariables
-    case Lambda(params, body, _) =>
-      val lambdaParams = params.map(_.meta.name)
-      body.capturedVariables.filterNot { captured =>
-        lambdaParams.contains(captured.meta.name)
-      }
-    case Apply(fn, args, _) =>
-      fn.capturedVariables ++
-        args.flatMap(_.capturedVariables)
-    case Ascription(expr, _, _) =>
-      expr.capturedVariables
-    case Match(matchExpr, cases, _) =>
-      matchExpr.capturedVariables ++ cases.flatMap {
-        case MatchCase(pattern, resultExpr, _) =>
-          resultExpr.capturedVariables.filterNot { captured =>
-            pattern.boundVariables.contains(captured.meta.name)
-          }
-      }
+  def capturedVariables(implicit eqv: A =:= Meta.Typed): Set[Reference[A]] = {
+    val captured = this match {
+      case LiteralInt(_, _) => Set.empty
+      case LiteralLong(_, _) => Set.empty
+      case LiteralFloat(_, _) => Set.empty
+      case LiteralDouble(_, _) => Set.empty
+      case LiteralBoolean(_, _) => Set.empty
+      case LiteralString(_, _) => Set.empty
+      case LiteralChar(_, _) => Set.empty
+      case LiteralUnit(_) => Set.empty
+      case ref @ Reference(_, _, _) =>
+        Set(ref)
+      case If(cond, thenExpr, elseExpr, _) =>
+        cond.capturedVariables ++
+          thenExpr.capturedVariables ++
+          elseExpr.capturedVariables
+      case Lambda(params, body, _) =>
+        val lambdaParams = params.map(_.meta.name)
+        body.capturedVariables.filterNot { captured =>
+          lambdaParams.contains(captured.meta.name)
+        }
+      case Apply(fn, args, _) =>
+        fn.capturedVariables ++
+          args.flatMap(_.capturedVariables)
+      case Ascription(expr, _, _) =>
+        expr.capturedVariables
+      case Match(matchExpr, cases, _) =>
+        matchExpr.capturedVariables ++ cases.flatMap {
+          case MatchCase(pattern, resultExpr, _) =>
+            resultExpr.capturedVariables.filterNot { captured =>
+              pattern.boundVariables.contains(captured.meta.name)
+            }
+        }
+    }
+
+    captured
+      .toList
+      .distinctBy(_.name)
+      .toSet
   }
 
   def replace(mapping: Map[Name, Reference[A]])(implicit to: A =:= Meta.Typed): Expr[A] = this match {
