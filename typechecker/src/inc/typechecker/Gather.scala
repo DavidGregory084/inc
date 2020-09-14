@@ -398,7 +398,7 @@ object Gather {
     dataType: TypeScheme,
     env: Environment[Meta.Typed]
   ): (Chain[DataConstructor[Meta.Typed]], State) = constr match {
-    case constr @ DataConstructor(name, params, meta) =>
+    case constr @ DataConstructor(_, params, meta) =>
       val envMemberTypes = env
         .members(constr.meta.name)
         .map { meta =>
@@ -422,18 +422,12 @@ object Gather {
         Type.Function(paramTypes, dataType.typ)
       )
 
-      // Emit a constraint that the type from our initial environment matches the inferred type
-      val envConstrType = env.types(name)
-      val envTypeCst = EqualType(envConstrType.typ, funType.typ, meta.pos)
-
       val checkedConstr = constr.copy(
         params = checkedParams.toList,
         meta = meta.withType(funType)
       )
 
-      val newState = paramsState.withConstraint(envTypeCst)
-
-      (Chain.one(checkedConstr), newState)
+      (Chain.one(checkedConstr), paramsState)
   }
 
   def gather(
