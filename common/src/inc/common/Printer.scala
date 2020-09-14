@@ -31,7 +31,7 @@ object Printer {
 
   def print(constraint: TypeConstraint): Doc = constraint match {
     case EqualType(l, r, _) =>
-      print(l, false) + Doc.text(" ~ ") + print(r, false)
+      print(l, true) + Doc.text(" ~ ") + print(r, true)
   }
 
   def print(constraint: KindConstraint): Doc = constraint match {
@@ -42,7 +42,7 @@ object Printer {
   def printTypeSubst(subst: Substitution[TypeVariable, Type]): Doc = {
     Doc.intercalate(Doc.hardLine, subst.subst.map {
       case (tv, typ) =>
-        print(tv, false) + Doc.text(" \u21a6 ") + print(typ, false)
+        print(tv, true) + Doc.text(" \u21a6 ") + print(typ, true)
     })
   }
 

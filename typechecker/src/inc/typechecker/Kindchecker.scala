@@ -29,7 +29,7 @@ object Kindchecker {
     val empty = State(Environment.empty, Substitution.empty, Chain.empty, List.empty)
     def init(env: Environment[Meta.Typed]) = State(env, Substitution.empty, Chain.empty, List.empty)
     implicit def monoidForSolveState: Monoid[State] = new Monoid[State] {
-      def empty: State =
+      val empty: State =
         State.empty
       def combine(l: State, r: State): State =
         if (l.eq(State.empty))

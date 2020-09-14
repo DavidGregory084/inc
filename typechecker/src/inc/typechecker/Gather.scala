@@ -42,7 +42,7 @@ object Gather {
     val empty = State(Environment.empty, Chain.empty, List.empty)
     def init(env: Environment[Meta.Typed]) = State(env, Chain.empty, List.empty)
     implicit def monoidForGatherState: Monoid[State] = new Monoid[State] {
-      def empty: State =
+      val empty: State =
         State.empty
       def combine(l: State, r: State): State =
         if (l.eq(State.empty))
@@ -182,7 +182,9 @@ object Gather {
             meta = fieldMeta.withSimpleType(fieldType.get)
           ))
 
-          (checkedFieldPat, env.withType(fieldName, TypeScheme(fieldType.get)), State.empty)
+          val updatedEnv = env.withType(fieldName, TypeScheme(fieldType.get))
+
+          (checkedFieldPat, updatedEnv, State.empty)
 
         case FieldPattern(fieldName, Some(innerPat), fieldMeta) =>
           val fieldType = for {
@@ -206,7 +208,7 @@ object Gather {
           (checkedFieldPat, innerPatEnv, newState)
       }
 
-      val updatedEnv = alias.map { a =>
+      val updatedEnv = env ++ alias.map { a =>
         patsEnv.withType(a, TypeScheme(dataType))
       }.getOrElse {
         patsEnv
@@ -275,7 +277,7 @@ object Gather {
       }.getOrElse {
         // Name resolution should prevent us from getting here
         val checkedRef = ref.copy(meta = meta.withSimpleType(ErrorType))
-        val typeError = TypeError.generic(meta.pos, s"Reference to undefined symbol: ${ref.fullName}")
+        val typeError = TypeError.generic(meta.pos, s"Reference to undefined symbol: '${ref.fullName}'")
         (checkedRef, State.empty.withError(typeError))
       }
 
@@ -471,7 +473,7 @@ object Gather {
         .withType(name, exprType)
 
       val newState = State.empty
-        .withConstraints(exprState.constraints)
+        .withConstraints(exprState.constraints.map(subst(_)))
         .withErrors(exprState.errors)
         .withErrors(solveErrors)
         .withEnv(updatedEnv)
@@ -610,9 +612,8 @@ object Gather {
 
     val Kindchecker.State(kindEnv, kindSubst, kindErrors, _) = decls
       .collect { case data @ Data(_, _, _, _) => data }
-      .foldLeft(Kindchecker.State.init(declState.env)) {
-        case (state, data) =>
-          Kindchecker.kindcheck(data, state.env)
+      .foldMap { data =>
+        Kindchecker.kindcheck(data, declState.env)
       }
 
     val updatedMod = module.copy(

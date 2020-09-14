@@ -2,9 +2,14 @@ package inc.common
 
 import scala.collection.immutable.{ List, Map }
 import cats.kernel.Monoid
-import scala.AnyVal
+import scala.{ =:=, AnyVal }
+import scala.Predef.ArrowAssoc
 
-case class Substitution[A, B](subst: Map[A, B]) extends AnyVal
+case class Substitution[A, B](subst: Map[A, B]) extends AnyVal {
+  def defaultKinds(implicit eqvA: A =:= TypeVariable, eqvB: B =:= Type): Substitution[A, B] = {
+    Substitution(subst.map { case (tv, t) =>  eqvA.flip(tv.defaultKinds) -> eqvB.flip(t.defaultKinds) })
+  }
+}
 
 object Substitution {
   def empty[A, B]: Substitution[A, B] =

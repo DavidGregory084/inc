@@ -16,10 +16,12 @@ object Typechecker {
     val Solve.State(_, subst, solveErrors) =
       Solve.solve(env, constraints.toList)
 
+    // Ensure any unsolved kind variables are defaulted to *
+    val defaultedMod = typedMod.defaultKinds
+    val defaultedSubst = subst.defaultKinds
+
     // Apply the substition from the constraint solution to the module
-    val solvedMod = subst(typedMod)
-    // Default any unsolved kind variables to kind *
-      .defaultKinds
+    val solvedMod = defaultedSubst.apply(defaultedMod)
 
     val typeErrors = (gatherErrors ++ solveErrors).toList.distinct
 

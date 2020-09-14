@@ -39,7 +39,7 @@ sealed abstract class TopLevelDeclaration[A] extends SyntaxTree[A] {
         case let @ Let(_, binding, _) =>
           let.copy(
             binding = binding.substitute(subst),
-            meta = from(typedMeta.substitute(subst)))
+            meta = typedMeta)
       }
     }
 
@@ -47,15 +47,15 @@ sealed abstract class TopLevelDeclaration[A] extends SyntaxTree[A] {
     val from = to.flip
     val typedMeta = from(meta.substituteKinds(subst))
     this match {
-      case data @ Data(_, typeParams, cases, _) =>
+      case data @ Data(_, _, _, _) =>
         data.copy(
-          typeParams = typeParams.map(_.substituteKinds(subst)),
-          cases = cases.map(_.substituteKinds(subst)),
-          meta = from(typedMeta.substituteKinds(subst)))
+          typeParams = data.typeParams.map(_.substituteKinds(subst)),
+          cases = data.cases.map(_.substituteKinds(subst)),
+          meta = typedMeta)
       case let @ Let(_, binding, _) =>
         let.copy(
           binding = binding.substituteKinds(subst),
-          meta = from(typedMeta.substituteKinds(subst)))
+          meta = typedMeta)
     }
   }
 
@@ -63,15 +63,15 @@ sealed abstract class TopLevelDeclaration[A] extends SyntaxTree[A] {
     val from = to.flip
     val typedMeta = from(meta.defaultKinds)
     this match {
-      case data @ Data(_, typeParams, cases, _) =>
+      case data @ Data(_, _, _, _) =>
         data.copy(
-          typeParams = typeParams.map(_.defaultKinds),
-          cases = cases.map(_.defaultKinds),
-          meta = from(typedMeta))
+          typeParams = data.typeParams.map(_.defaultKinds),
+          cases = data.cases.map(_.defaultKinds),
+          meta = typedMeta)
       case let @ Let(_, binding, _) =>
         let.copy(
           binding = binding.defaultKinds,
-          meta = from(typedMeta))
+          meta = typedMeta)
     }
   }
 }

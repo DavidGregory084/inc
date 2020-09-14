@@ -244,6 +244,13 @@ sealed abstract class TypeVariable extends Type {
       tv.copy(kind = kind.substitute(subst))
   }
 
+  override def defaultKinds: TypeVariable = this match {
+    case tv @ NamedTypeVariable(_, _) =>
+      tv.copy(kind = kind.default)
+    case tv @ InferredTypeVariable(_, _) =>
+      tv.copy(kind = kind.default)
+  }
+
   override def toExpr: TypeConstructorExpr[Meta.Typed] = this match {
     case InferredTypeVariable(id, _) =>
       TypeConstructorExpr(
