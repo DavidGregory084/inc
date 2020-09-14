@@ -463,15 +463,11 @@ object Gather {
         meta = meta.withType(exprType)
       ))
 
-      // Emit a constraint that the type from our initial environment matches the inferred type
-      val envTypeCst = EqualType(exprType.instantiate, env.types(name).typ, meta.pos)
-
       val updatedEnv = solvedEnv
         .withType(name, exprType)
 
       val newState = State.empty
         .withConstraints(exprState.constraints)
-        .withConstraint(envTypeCst)
         .withErrors(exprState.errors)
         .withErrors(solveErrors)
         .withEnv(updatedEnv)
@@ -602,8 +598,10 @@ object Gather {
   ): (Module[Meta.Typed], State) = {
     val topLevelEnv = initialPass(module, importedEnv)
 
-    val (decls, declState) = module.declarations.foldMap { nextDecl =>
-      gather(nextDecl, topLevelEnv)
+    val initialDeclState = (Chain.empty[TopLevelDeclaration[Meta.Typed]], State.init(topLevelEnv))
+    val (decls, declState) = module.declarations.foldLeft(initialDeclState) {
+      case (state @ (_, stateSoFar), nextDecl) =>
+        state |+| gather(nextDecl, stateSoFar.env)
     }
 
     val Kindchecker.State(kindEnv, kindSubst, kindErrors, _) = decls
