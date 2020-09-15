@@ -3,10 +3,10 @@ package inc.common
 import cats.Functor
 import cats.syntax.functor._
 import java.lang.{ Exception, String }
-import scala.{ Boolean, Product, Serializable, Option, Some, None, =:= }
+import scala.{ Boolean, Option, Some, None, =:= }
 import scala.collection.immutable.{ List, Set }
 
-sealed abstract class Pattern[A] extends Product with Serializable {
+sealed abstract class Pattern[A] extends SyntaxTree[A] {
   def meta: A
 
   def isIrrefutable: Boolean = this match {
@@ -36,7 +36,7 @@ sealed abstract class Pattern[A] extends Product with Serializable {
 
 case class IdentPattern[A](name: String, meta: A) extends Pattern[A]
 
-case class FieldPattern[A](name: String, pattern: Option[Pattern[A]], meta: A) {
+case class FieldPattern[A](name: String, pattern: Option[Pattern[A]], meta: A) extends SyntaxTree[A] {
   def boundVariables(implicit eqv: A =:= Meta.Typed): Set[Name] =
     pattern.toList.flatMap(_.boundVariables).toSet
   def toProto(implicit eqv: A =:= Meta.Typed): proto.FieldPattern = {

@@ -1,360 +1,631 @@
 package inc.typechecker
 
-import inc.common._
-
 import cats.data.Chain
-import cats.instances.either._
-import cats.instances.list._
-import cats.syntax.either._
+import cats.Monoid
+import cats.syntax.monoid._
 import cats.syntax.foldable._
-import cats.syntax.functor._
-import scala.{ Some, None, Right, StringContext }
-import scala.collection.immutable.{ List, Map }
+import inc.common._
 import scala.Predef.ArrowAssoc
-import com.typesafe.scalalogging.LazyLogging
+import scala.{ Some, None, StringContext }
+import scala.collection.immutable.List
 
-object Gather extends LazyLogging {
-
-  def withTypeScheme(expr: Expr[Meta.Untyped], typ: TypeScheme): Infer[(Expr[Meta.Typed], List[Constraint])] = {
-    val exprWithType = expr.map(_.withType(typ))
-    Right((exprWithType, List.empty))
+object Gather {
+  case class State(
+    env: Environment[Meta.Typed],
+    errors: Chain[TypeError],
+    constraints: List[TypeConstraint]
+  ) {
+    def withEnv(newEnv: Environment[Meta.Typed]) =
+      copy(env = newEnv)
+    def withError(newError: TypeError) =
+      copy(errors = errors :+ newError)
+    def withErrors(newErrors: Chain[TypeError]) =
+      copy(errors = errors ++ newErrors)
+    def withConstraint(newConstraint: TypeConstraint) =
+      copy(constraints = constraints ++ List(newConstraint))
+    def withConstraints(newConstraints: List[TypeConstraint]) =
+      copy(constraints = constraints ++ newConstraints)
+    def substituteTypes(subst: Substitution[TypeVariable, Type]): State =
+      copy(
+        env = env.substituteTypes(subst.subst),
+        constraints = constraints.map(_.substitute(subst.subst)))
+    def substituteKinds(subst: Substitution[KindVariable, Kind]): State =
+      copy(
+        env = env.substituteKinds(subst.subst),
+        constraints = constraints.map(_.substituteKinds(subst.subst)))
+    def defaultKinds: State =
+      copy(
+        env = env.defaultKinds,
+        constraints = constraints.map(_.defaultKinds))
+  }
+  object State {
+    val empty = State(Environment.empty, Chain.empty, List.empty)
+    def init(env: Environment[Meta.Typed]) = State(env, Chain.empty, List.empty)
+    implicit def monoidForGatherState: Monoid[State] = new Monoid[State] {
+      val empty: State =
+        State.empty
+      def combine(l: State, r: State): State =
+        if (l.eq(State.empty))
+          r
+        else if (r.eq(State.empty))
+          l
+        else
+          State(l.env ++ r.env, l.errors ++ r.errors, l.constraints ++ r.constraints)
+    }
   }
 
-  def withSimpleType(expr: Expr[Meta.Untyped], typ: Type): Infer[(Expr[Meta.Typed], List[Constraint])] =
-    withTypeScheme(expr, TypeScheme(typ))
+  def gather(
+    typExpr: TypeConstructorExpr[Meta.Untyped],
+    env: Environment[Meta.Typed]
+  ): (TypeConstructorExpr[Meta.Typed], State) = typExpr match {
+    case TypeConstructorExpr(name, meta) =>
+      env.types.get(name).map { envTyp =>
+        val instTyp = envTyp.instantiate
+        val checkedTypExpr = TypeConstructorExpr(name, meta.withSimpleType(instTyp))
+        (checkedTypExpr, State.empty)
+      }.getOrElse {
+        // Name resolution should prevent us from getting here
+        val checkedTypExpr = TypeConstructorExpr(name, meta.withSimpleType(ErrorType))
+        val typeError = TypeError.generic(meta.pos, s"Reference to undefined type: ${name}")
+        (checkedTypExpr, State.empty.withError(typeError))
+      }
+  }
+
+  def gather(
+    typExpr: TypeExpr[Meta.Untyped],
+    env: Environment[Meta.Typed]
+  ): (TypeExpr[Meta.Typed], State) = typExpr match {
+
+    case tyCon @ TypeConstructorExpr(_, _) =>
+      gather(tyCon, env)
+
+    case TypeApplyExpr(tyCon @ TypeConstructorExpr("->", _), tpArgs, meta) =>
+      val (checkedArgs, argsState) = tpArgs.foldMap { nextArg =>
+        val (arg, argState) = gather(nextArg, env)
+        (Chain.one(arg), argState)
+      }
+
+      val tyArgTypes = checkedArgs.map(_.meta.typ.typ).toList
+      val tyAppType = Type.Function(tyArgTypes.init, tyArgTypes.last)
+
+      val checkedTypeExpr = TypeApplyExpr(
+        typ = tyCon.copy(meta = tyCon.meta.withSimpleType(tyAppType.typ)),
+        args = checkedArgs.toList,
+        meta = meta.withSimpleType(tyAppType)
+      )
+
+      (checkedTypeExpr, argsState)
+
+    case TypeApplyExpr(typ, args, meta) =>
+      val (checkedTyp, typState) = gather(typ, env)
+
+      val (checkedArgs, argsState) = args.foldMap { nextArg =>
+        val (arg, argState) = gather(nextArg, env)
+        (Chain.one(arg), argState)
+      }
+
+      val tyArgTypes = checkedArgs.map(_.meta.typ.typ)
+      val tyAppType = TypeApply(checkedTyp.meta.typ.typ, tyArgTypes.toList, Atomic)
+
+      val checkedTypeExpr = TypeApplyExpr(
+        typ = checkedTyp,
+        args = checkedArgs.toList,
+        meta = meta.withSimpleType(tyAppType)
+      )
+
+      (checkedTypeExpr, typState |+| argsState)
+  }
+
+  def gather(
+    param: Param[Meta.Untyped],
+    env: Environment[Meta.Typed]
+  ): (Param[Meta.Typed], State) = param match {
+    case Param(_, Some(ascribedAs), meta) =>
+      val (asc, ascState) = gather(ascribedAs, env)
+
+      val checkedParam = param.copy(
+        ascribedAs = Some(asc),
+        meta = meta.withType(asc.meta.typ))
+
+      (checkedParam, ascState)
+
+    case Param(_, None, meta) =>
+      val checkedParam = param.copy(
+        ascribedAs = None,
+        meta = meta.withSimpleType(TypeVariable()))
+
+      (checkedParam, State.empty)
+  }
 
   def gather(
     pattern: Pattern[Meta.Untyped],
     env: Environment[Meta.Typed]
-  ): Infer[(Pattern[Meta.Typed], Environment[Meta.Typed], List[Constraint])] = pattern match {
+  ): (Pattern[Meta.Typed], Environment[Meta.Typed], State) = pattern match {
     case IdentPattern(name, meta) =>
-      val tv = TypeVariable()
-      Right((IdentPattern(name, meta.withSimpleType(tv)), env.withType(name, TypeScheme(tv)), List.empty))
+      val tv = TypeScheme(TypeVariable())
+
+      val checkedPattern = IdentPattern(
+        name,
+        meta.withType(tv)
+      )
+
+      val updatedEnv = env.withType(name, tv)
+
+      (checkedPattern, updatedEnv, State.empty)
 
     case ConstrPattern(name, alias, patterns, meta) =>
-      val constrName @ ConstrName(_, _, _, _) = env.names(name)
-      val Type.Function(constrTpArgs) = env.types(constrName.shortName).instantiate
-      val dataType = constrTpArgs.last
+      val constrName @ ConstrName(_, _, _, _) = env.valueNames(name)
       val members = env.members(constrName)
+      val envConstrType = env.types(name)
 
-      val initialResult = (Chain.empty[FieldPattern[Meta.Typed]], env, List.empty[Constraint])
+      // We need to keep this substitution
+      val instantiationSubst =
+        envConstrType.instantiateSubst
 
-      val typedPatterns = patterns.foldM(initialResult) {
-        case ((typedSoFar, envSoFar, cstsSoFar), FieldPattern(field, None, fieldMeta)) =>
+      // We want to use it to instantiate our constructor type
+      val Type.Function(constrTpArgs) =
+        envConstrType.typ.substitute(instantiationSubst.subst)
+
+      val dataType = constrTpArgs.last
+
+      val (checkedPatterns, patsEnv, patsState) = patterns.foldMap {
+        case FieldPattern(fieldName, None, fieldMeta) =>
           val fieldType = for {
             member <- members.find(_.name == fieldMeta.name)
-            Type.Function(memberTpArgs) = member.typ.instantiate
+            // And we need to use the same substitution for our patterns too
+            Type.Function(memberTpArgs) = member.typ.typ.substitute(instantiationSubst.subst)
           } yield memberTpArgs.last
 
-          val typedFieldPat = FieldPattern(field, None, fieldMeta.withSimpleType(fieldType.get))
+          val checkedFieldPat = Chain.one(FieldPattern(
+            name = fieldName,
+            pattern = None,
+            meta = fieldMeta.withSimpleType(fieldType.get)
+          ))
 
-          Right((typedSoFar :+ typedFieldPat, envSoFar.withType(field, TypeScheme(fieldType.get)), cstsSoFar))
+          val updatedEnv = env.withType(fieldName, TypeScheme(fieldType.get))
 
-        case ((typedSoFar, envSoFar, cstsSoFar), FieldPattern(field, Some(nextPat), fieldMeta)) =>
-           gather(nextPat, envSoFar).map {
-             case (typedPat, patEnv, patCst) =>
-               val fieldType = for {
-                 member <- members.find(_.name == fieldMeta.name)
-                 Type.Function(memberTpArgs) = member.typ.instantiate
-               } yield memberTpArgs.last
+          (checkedFieldPat, updatedEnv, State.empty)
 
-               val fieldTypeCst = List(Equal(typedPat.meta.typ.typ, fieldType.get, meta.pos))
+        case FieldPattern(fieldName, Some(innerPat), fieldMeta) =>
+          val fieldType = for {
+            member <- members.find(_.name == fieldMeta.name)
+            Type.Function(memberTpArgs) = member.typ.typ.substitute(instantiationSubst.subst)
+          } yield memberTpArgs.last
 
-               val typedFieldPat = FieldPattern(field, Some(typedPat), fieldMeta.withSimpleType(fieldType.get))
+          val (checkedInnerPat, innerPatEnv, innerPatState) = gather(innerPat, env)
 
-               (typedSoFar :+ typedFieldPat, envSoFar ++ patEnv, cstsSoFar ++ patCst ++ fieldTypeCst)
-          }
+          val patType = checkedInnerPat.meta.typ.typ
+          val patTypeCst = EqualType(patType, fieldType.get, fieldMeta.pos)
+
+          val checkedFieldPat = Chain.one(FieldPattern(
+            name = fieldName,
+            pattern = Some(checkedInnerPat),
+            meta = meta.withSimpleType(fieldType.get)
+          ))
+
+          val newState = innerPatState.withConstraint(patTypeCst)
+
+          (checkedFieldPat, innerPatEnv, newState)
       }
 
-      typedPatterns.map {
-        case (patterns, patEnv, patCsts) =>
-          val constrEnv = alias.map { a => patEnv.withType(a, TypeScheme(dataType)) }.getOrElse(patEnv)
-          (ConstrPattern(name, alias, patterns.toList, meta.withSimpleType(dataType)), constrEnv, patCsts)
+      val updatedEnv = env ++ alias.map { a =>
+        patsEnv.withType(a, TypeScheme(dataType))
+      }.getOrElse {
+        patsEnv
       }
+
+      val checkedConstrPat = ConstrPattern(
+        name = name,
+        alias = alias,
+        patterns = checkedPatterns.toList,
+        meta = meta.withSimpleType(dataType)
+      )
+
+      (checkedConstrPat, updatedEnv, patsState)
   }
 
   def gather(
     matchCase: MatchCase[Meta.Untyped],
     env: Environment[Meta.Typed]
-  ): Infer[(MatchCase[Meta.Typed], List[Constraint])] = matchCase match {
+  ): (MatchCase[Meta.Typed], State) = matchCase match {
     case MatchCase(pattern, resultExpr, meta) =>
-      for {
-        (p, patEnv, pCsts) <- gather(pattern, env)
-        (r, rCsts) <- gather(resultExpr, patEnv)
-        checked = MatchCase(p, r, meta.withType(r.meta.typ))
-      } yield (checked, pCsts ++ rCsts)
+      val (checkedPat, patEnv, patState) = gather(pattern, env)
+      val (checkedExpr, exprState) = gather(resultExpr, patEnv)
+
+      val checkedCase = MatchCase(
+        checkedPat,
+        checkedExpr,
+        meta.withType(checkedExpr.meta.typ)
+      )
+
+      (checkedCase, patState |+| exprState)
   }
 
   def gather(
     expr: Expr[Meta.Untyped],
     env: Environment[Meta.Typed]
-  ): Infer[(Expr[Meta.Typed], List[Constraint])] =
-    expr match {
-      case int @ LiteralInt(_, _) =>
-        withSimpleType(int, Type.Int)
+  ): (Expr[Meta.Typed], State) = expr match {
+    case int @ LiteralInt(_, _) =>
+      (int.copy(meta = int.meta.withSimpleType(Type.Int)), State.empty)
 
-      case long @ LiteralLong(_, _) =>
-        withSimpleType(long, Type.Long)
+    case long @ LiteralLong(_, _) =>
+      (long.copy(meta = long.meta.withSimpleType(Type.Long)), State.empty)
 
-      case float @ LiteralFloat(_, _) =>
-        withSimpleType(float, Type.Float)
+    case float @ LiteralFloat(_, _) =>
+      (float.copy(meta = float.meta.withSimpleType(Type.Float)), State.empty)
 
-      case double @ LiteralDouble(_, _) =>
-        withSimpleType(double, Type.Double)
+    case double @ LiteralDouble(_, _) =>
+      (double.copy(meta = double.meta.withSimpleType(Type.Double)), State.empty)
 
-      case bool @ LiteralBoolean(_, _) =>
-        withSimpleType(bool, Type.Boolean)
+    case boolean @ LiteralBoolean(_, _) =>
+      (boolean.copy(meta = boolean.meta.withSimpleType(Type.Boolean)), State.empty)
 
-      case char @ LiteralChar(_, _) =>
-        withSimpleType(char, Type.Char)
+    case char @ LiteralChar(_, _) =>
+      (char.copy(meta = char.meta.withSimpleType(Type.Char)), State.empty)
 
-      case str @ LiteralString(_, _) =>
-        withSimpleType(str, Type.String)
+    case string @ LiteralString(_, _) =>
+      (string.copy(meta = string.meta.withSimpleType(Type.String)), State.empty)
 
-      case unit @ LiteralUnit(_) =>
-        withSimpleType(unit, Type.Unit)
+    case unit @ LiteralUnit(_) =>
+      (unit.copy(meta = unit.meta.withSimpleType(Type.Unit)), State.empty)
 
-      case ref @ Reference(_, name, meta)  =>
-        env.types.get(ref.fullName).map { refTyp =>
-          val instTyp = refTyp.instantiate
-          Right((expr.map(_.withSimpleType(instTyp)), List.empty))
-        }.getOrElse(TypeError.generic(meta.pos, s"Reference to undefined symbol: $name"))
+    case ref @ Reference(_, _, meta) =>
+      env.types.get(ref.fullName).map { refTyp =>
+        val instTyp = refTyp.instantiate
+        val checkedRef = ref.copy(meta = meta.withSimpleType(instTyp))
+        (checkedRef, State.empty)
+      }.getOrElse {
+        // Name resolution should prevent us from getting here
+        val checkedRef = ref.copy(meta = meta.withSimpleType(ErrorType))
+        val typeError = TypeError.generic(meta.pos, s"Reference to undefined symbol: '${ref.fullName}'")
+        (checkedRef, State.empty.withError(typeError))
+      }
 
-      case If(cond, thenExpr, elseExpr, meta) =>
-        for {
-          // Gather constraints from the condition
-          (c, condCst) <- gather(cond, env)
+    case Ascription(expr, ascribedAs, meta) =>
+      val (checkedExpr, exprState) = gather(expr, env)
 
-          Meta.Typed(_, condType, _) = c.meta
+      val exprType = checkedExpr.meta.typ.typ
 
-          // Gather constraints from the then expression
-          (t, thenCst) <- gather(thenExpr, env)
+      val (checkedTyExp, tyExpState) = gather(ascribedAs, env)
 
-          Meta.Typed(_, thenType, _) = t.meta
+      val ascribedType = checkedTyExp.meta.typ.typ
 
-          // Gather constraints from the else expression
-          (e, elseCst) <- gather(elseExpr, env)
+      val ascriptionCst =
+        // Unless we know the ascription is correct
+        if (exprType == ascribedType)
+          List.empty
+        // Emit a constraint that the expression's type must match the ascription
+        else
+          List(EqualType(exprType, ascribedType, meta.pos))
 
-          Meta.Typed(_, elseType, _) = e.meta
+      val checkedAsc = Ascription(
+        checkedExpr,
+        checkedTyExp,
+        meta.withSimpleType(ascribedType)
+      )
 
-          // Emit a constraint that the condition must be Boolean
-          condBoolean = List(Equal(condType.typ, Type.Boolean, meta.pos))
+      val newState = (exprState |+| tyExpState).withConstraints(ascriptionCst)
 
-          // Emit a constraint that the then expression and the
-          // else expression must have the same type
-          thenElseEqual = List(Equal(thenType.typ, elseType.typ, meta.pos))
+      (checkedAsc, newState)
 
-          expr = If(c, t, e, meta.withType(thenType))
+    case If(cond, thenExpr, elseExpr, meta) =>
+      val (c, cState) = gather(cond, env)
+      val Meta.Typed(_, condType, condPos) = c.meta
 
-          constraints = condCst ++ thenCst ++ elseCst ++ condBoolean ++ thenElseEqual
+      val (t, tState) = gather(thenExpr, env)
+      val Meta.Typed(_, thenType, _) = t.meta
 
-        } yield (expr, constraints)
+      val (e, eState) = gather(elseExpr, env)
+      val Meta.Typed(_, elseType, _) = e.meta
 
-      case Lambda(params, body, meta) =>
-        val typedParams = params.map {
-          case Param(name, ascribedAs @ Some(typeScheme), meta) =>
-            Param(name, ascribedAs, meta.withType(typeScheme))
-          case Param(name, None, meta) =>
-            Param(name, None, meta.withSimpleType(TypeVariable()))
-        }
+      val condBoolean = EqualType(condType.typ, Type.Boolean, condPos)
+      val thenElseEqual = EqualType(thenType.typ, elseType.typ, meta.pos)
 
-        val paramMappings = typedParams.map(p => p.name -> p.meta.typ)
+      val checkedExpr = If(c, t, e, meta.withType(thenType))
+      val constraints = List(condBoolean, thenElseEqual)
 
-        for {
-          // Gather constraints from the body with the params in scope
-          (body, bodyCst) <- gather(body, env.withTypes(paramMappings))
+      val newState = (cState |+| tState |+| eState).withConstraints(constraints)
 
-          bodyTp = body.meta.typ.typ
+      (checkedExpr, newState)
 
-          // Create a new function type
-          funTp = Type.Function(typedParams.map(_.meta.typ.typ), bodyTp)
+    case Lambda(params, body, meta) =>
+      val (checkedParams, paramsState) = params.foldMap { nextParam =>
+        val (checkedParam, paramState) = gather(nextParam, env)
+        (Chain.one(checkedParam), paramState)
+      }
 
-          expr = Lambda(typedParams, body, meta.withSimpleType(funTp))
+      val paramMappings = checkedParams.toList.map(p => p.name -> p.meta.typ)
+      val paramTypes = checkedParams.toList.map(_.meta.typ.typ)
 
-        } yield (expr, bodyCst)
+      val (checkedBody, bodyState) = gather(body, env.withTypes(paramMappings))
+      val Meta.Typed(_, bodyType, _) = checkedBody.meta
 
-      case Ascription(expr, ascribedAs, meta) =>
-        for {
-          (e, exprCst) <- gather(expr, env)
+      val funType = Type.Function(paramTypes, bodyType.typ)
 
-          ascriptionCst =
-            // Unless we know the ascription is correct
-            if (e.meta.typ.typ == ascribedAs.typ)
-              List.empty
-            // Emit a constraint that the expression's type must match the ascription
-            else
-              List(Equal(e.meta.typ.typ, ascribedAs.typ, meta.pos))
+      val expr = Lambda(checkedParams.toList, checkedBody, meta.withSimpleType(funType))
 
-          constraints = exprCst ++ ascriptionCst
+      val newState = (paramsState |+| bodyState)
 
-          ascription = Ascription(e, ascribedAs, e.meta)
+      (expr, newState)
 
-        } yield (ascription, constraints)
+    case Apply(fn, args, meta) =>
+      val tv = TypeVariable()
 
-      case Apply(fn, args, meta) =>
-        val tv = TypeVariable()
+      val (checkedFn, fnState) = gather(fn, env)
 
-        for {
-          // Gather constraints from the function expression
-          (f, fnCst) <- gather(fn, env)
+      val (checkedArgs, argsState) = args.foldMap { nextArg =>
+        val (arg, argState) = gather(nextArg, env)
+        (Chain.one(arg), argState)
+      }
 
-          initialResult = (Chain.empty[Expr[Meta.Typed]], List.empty[Constraint])
+      val declaredType = checkedFn.meta.typ.typ
+      val argTypes = checkedArgs.toList.map(_.meta.typ.typ)
+      val appliedType = Type.Function(argTypes, tv)
 
-          // Gather constraints from the arg expressions
-          (as, argCsts) <- args.zipWithIndex.foldM(initialResult) {
-            case ((typedSoFar, cstsSoFar), (nextArg, _)) =>
-              for {
-                (typedArg, argCst) <- gather(nextArg, env)
-              } yield (typedSoFar :+ typedArg, cstsSoFar ++ argCst)
-          }
+      val declEqualsAppCst = EqualType(declaredType, appliedType, meta.pos)
 
-          argsList = as.toList
+      val checkedExpr = Apply(
+        checkedFn,
+        checkedArgs.toList,
+        meta.withSimpleType(tv)
+      )
 
-          argTps = argsList.map(_.meta.typ.typ)
+      val newState = (fnState |+| argsState).withConstraint(declEqualsAppCst)
 
-          // Create a new function type of the applied argument types and the inferred return type
-          appliedTp = Type.Function(argTps.toList, tv)
+      (checkedExpr, newState)
 
-          fnTp = f.meta.typ.typ
+    case Match(matchExpr, cases, meta) =>
+      val tv = TypeVariable()
 
-          // Emit a constraint that the declared function type must match the way it has been applied
-          declEqualsAppCst = List(Equal(fnTp, appliedTp, meta.pos))
+      val (checkedExpr, exprState) = gather(matchExpr, env)
 
-          expr = Apply(f, argsList, meta.withType(TypeScheme(tv)))
+      val (checkedCases, casesState) = cases.foldMap { nextCase =>
+        val (cse, caseState) = gather(nextCase, env)
+        (Chain.one(cse), caseState)
+      }
 
-        } yield (expr, fnCst ++ argCsts ++ declEqualsAppCst)
+      val casesCsts = checkedCases.toList.flatMap { cse =>
+        List(
+          // All cases should have the same result
+          EqualType(tv, cse.meta.typ.typ, cse.meta.pos),
+          // All case patterns should have the same type as the matched expr
+          EqualType(checkedExpr.meta.typ.typ, cse.pattern.meta.typ.typ, cse.meta.pos)
+        )
+      }
 
-      case Match(matchExpr, cases, meta) =>
-        val tv = TypeVariable()
+      val checkedMatch = Match(
+        checkedExpr,
+        checkedCases.toList,
+        meta.withSimpleType(tv)
+      )
 
-        for  {
-          (e, exprCsts) <- gather(matchExpr, env)
+      val newState = (exprState |+| casesState)
+        .withConstraints(casesCsts)
 
-          initialResult = (Chain.empty[MatchCase[Meta.Typed]], List.empty[Constraint])
+      (checkedMatch, newState)
+  }
 
-          (cs, caseCsts) <- cases.zipWithIndex.foldM(initialResult) {
-            case ((typedSoFar, cstsSoFar), (nextCase, _)) =>
-              for {
-                (typedCase, caseCst) <- gather(nextCase, env)
-              } yield (typedSoFar :+ typedCase, cstsSoFar ++ caseCst)
-          }
+  def gather(
+    constr: DataConstructor[Meta.Untyped],
+    dataType: TypeScheme,
+    env: Environment[Meta.Typed]
+  ): (Chain[DataConstructor[Meta.Typed]], State) = constr match {
+    case constr @ DataConstructor(_, params, meta) =>
+      val envMemberTypes = env
+        .members(constr.meta.name)
+        .map { meta =>
+          val Type.Function(tpArgs) = meta.typ.typ
+          meta.name -> tpArgs.last
+        }.toMap
 
-          matchExprCasesCst = cs.toList.map(c => Equal(e.meta.typ.typ, c.pattern.meta.typ.typ, c.pattern.meta.pos))
+      val (checkedParams, paramsState) = params.foldMap { nextParam =>
+        val (checkedParam, paramState) = gather(nextParam, env)
+        val paramName = checkedParam.meta.name
+        val paramType = checkedParam.meta.typ.typ
+        // Emit a constraint that the type from our initial environment matches the ascription
+        val paramAscribedCst = EqualType(paramType, envMemberTypes(paramName), checkedParam.meta.pos)
+        (Chain.one(checkedParam), paramState.withConstraint(paramAscribedCst))
+      }
 
-          sameResultTypeCst = cs.toList.map(c => Equal(tv, c.meta.typ.typ, c.meta.pos))
+      val paramTypes = checkedParams.toList.map(_.meta.typ.typ)
 
-          checkedMatch = Match(e, cs.toList, meta.withType(TypeScheme(tv)))
+      val funType = TypeScheme(
+        dataType.bound,
+        Type.Function(paramTypes, dataType.typ)
+      )
 
-        } yield (checkedMatch, exprCsts ++ caseCsts ++ matchExprCasesCst ++ sameResultTypeCst)
-    }
+      val checkedConstr = constr.copy(
+        params = checkedParams.toList,
+        meta = meta.withType(funType)
+      )
+
+      (Chain.one(checkedConstr), paramsState)
+  }
 
   def gather(
     decl: TopLevelDeclaration[Meta.Untyped],
     env: Environment[Meta.Typed]
-  ): Infer[(TopLevelDeclaration[Meta.Typed], Environment[Meta.Typed], List[Constraint])] =
-    decl match {
-      case let @ Let(_, expr, meta) =>
-        for {
-          (checkedExpr, constraints) <- gather(expr, env)
+  ): (Chain[TopLevelDeclaration[Meta.Typed]], State) = decl match {
+    case let @ Let(name, expr, meta) =>
+      val (checkedExpr, exprState) = gather(expr, env)
 
-          // We have to solve the constraints under a `let` before we generalize
-          subst <- Solve.solve(constraints)
+      // We have to solve the constraints under a `let` before we generalize it
+      val Solve.State(_, subst, solveErrors) = Solve.solve(env, exprState.constraints)
 
-          // Otherwise, the constraint substitution could not be applied to any bound type variables
-          solvedExpr = checkedExpr.substitute(subst)
-        } yield {
-            val eTp = solvedExpr.meta.typ.typ
-            val tp = TypeScheme.generalize(env, eTp)
-            val checkedLet = let.copy(binding = checkedExpr, meta = meta.withType(tp))
-            (checkedLet, env, constraints)
+      // Otherwise, the constraint substitution could not be applied to any bound type variables
+      val solvedExpr = subst(checkedExpr)
+
+      // Making sure to use the constraint solution...
+      val solvedEnv = env.substituteTypes(subst.subst)
+
+      // ...before generalizing our let binding
+      val exprType = TypeScheme.generalize(
+        solvedEnv,
+        solvedExpr.meta.typ.typ
+      )
+
+      val checkedLet = Chain.one(let.copy(
+        binding = solvedExpr,
+        meta = meta.withType(exprType)
+      ))
+
+      val updatedEnv = solvedEnv
+        .withType(name, exprType)
+
+      val newState = State.empty
+        .withConstraints(exprState.constraints.map(subst(_)))
+        .withErrors(exprState.errors)
+        .withErrors(solveErrors)
+        .withEnv(updatedEnv)
+
+      (checkedLet, newState)
+
+    case data @ Data(name, typeParams, cases, meta) =>
+      val tyVarMapping = typeParams.map(tyParam => tyParam.name -> TypeVariable(KindVariable()))
+      val tyVarTypes = tyVarMapping.map { case (nm, tv) => nm -> TypeScheme(tv) }
+      val tyVarKinds = tyVarMapping.map { case (nm, tv) => nm -> tv.kind }
+      val tyVars = tyVarMapping.map { case (_, tv) => tv }
+      val dataConType = TypeConstructor(name, KindVariable())
+      val dataAppType = if (tyVars.isEmpty) dataConType else TypeApply(dataConType, tyVars, Atomic)
+      val dataType = TypeScheme(List.empty, dataConType)
+
+      val dataTypeEnv = env
+        .withType(name, dataType)
+        .withTypes(tyVarTypes)
+
+      val (checkedTyParams, tyParamState) = typeParams.foldMap { nextParam =>
+        val (param, paramState) = gather(nextParam, dataTypeEnv)
+        (Chain.one(param), paramState)
+      }
+
+      val (checkedCases, casesState) = cases.foldMap { nextCase =>
+        gather(nextCase, TypeScheme(tyVars, dataAppType), dataTypeEnv)
+      }
+
+      val checkedData = Chain.one(data.copy(
+        typeParams = checkedTyParams.toList,
+        cases = checkedCases.toList,
+        meta = meta.withType(dataType)
+      ))
+
+      val constrNames = checkedCases.toList.map(_.meta.name)
+
+      val constrMembers = checkedCases.toList.map { cse =>
+        cse.meta.name -> cse.params.map { param =>
+          val accessorFunType = Type.Function(List(dataAppType), param.meta.typ.typ)
+          val accessorTypeScheme = TypeScheme(tyVars, accessorFunType)
+          param.meta.copy(typ = accessorTypeScheme)
         }
-      case data @ Data(_, _, _, _) =>
-        (data.withAscribedTypes, env, List.empty).asRight
-    }
+      }
+
+      val envWithoutMembers = env.copy(
+        members = env.members.removedAll(meta.name :: constrNames)
+      )
+
+      val envWithDataMembers = envWithoutMembers
+        .withMembers(meta.name, checkedCases.toList.map(_.meta))
+        .withType(name, dataType)
+        .withTypes(checkedCases.map { cse => cse.name -> cse.meta.typ }.toList)
+        .withKinds(tyVarKinds)
+
+      val envWithConstrMembers = constrMembers.foldLeft(envWithDataMembers) {
+        case (envSoFar, (name, members)) =>
+          envSoFar.withMembers(name, members)
+      }
+
+      val newState = (tyParamState |+| casesState)
+        .withEnv(envWithConstrMembers)
+
+      (checkedData, newState.withEnv(envWithConstrMembers))
+  }
 
   def initialPass(
     module: Module[Meta.Untyped],
-    decls: List[TopLevelDeclaration[Meta.Untyped]],
     importedEnv: Environment[Meta.Typed]
-  ): Infer[(Environment[Meta.Typed], Map[KindVariable, Kind])] = {
+  ): Environment[Meta.Typed] = {
+    val symbolTable = module.symbolTable
 
-    val initialEnv = importedEnv.withNames(module.symbolTable.names)
+    val initialEnv = importedEnv
+      .withValueNames(symbolTable.valueNames)
+      .withTypeNames(symbolTable.typeNames)
 
-    decls.foldM((initialEnv, Map.empty[KindVariable, Kind])) {
+    val finalEnv = module.declarations.foldLeft(initialEnv) {
+      case (envSoFar, Let(name, _, _)) =>
+        envSoFar.withType(name, TypeScheme(TypeVariable()))
 
-      case ((env, subst), Let(name, _, _)) =>
-        (env.withType(name, TypeScheme(List.empty, TypeVariable())), subst).asRight
+      case (envSoFar, Data(name, typeParams, cases, meta)) =>
+        val tyVars = typeParams.map(_ => TypeVariable(KindVariable()))
+        val dataConType = TypeConstructor(name, KindVariable())
+        val dataAppType = if (tyVars.isEmpty) dataConType else TypeApply(dataConType, tyVars, Atomic)
+        val dataType = TypeScheme(List.empty, dataConType)
 
-      case ((env, subst), data @ Data(_, tparams, cases, dataMeta)) =>
-        val dataTypes = cases.map {
-          case DataConstructor(caseName, params, returnTyp, _) =>
-            val paramTypes = params.map(_.ascribedAs.get.typ)
-            val typeScheme = TypeScheme(tparams, Type.Function(paramTypes, returnTyp.typ))
-            caseName -> typeScheme
+        val constrTypes = cases.map {
+          case DataConstructor(constrName, params, _) =>
+            val paramTypes = params.map(_ => TypeVariable())
+            val constrType = TypeScheme(tyVars, Type.Function(paramTypes, dataAppType))
+            constrName -> constrType
         }.toMap
 
-        val dataMembers = for {
-          DataConstructor(caseName, params, _, caseMeta) <- cases
-          dataMember = dataMeta.name -> caseMeta.withType(dataTypes(caseName))
-        } yield dataMember
+        val dataMembers = cases.map {
+          case DataConstructor(constrName, _, constrMeta) =>
+            meta.name -> constrMeta.withType(constrTypes(constrName))
+        }
 
-        val constrMembers = for {
-          DataConstructor(_, params, returnTyp, constrMeta) <- cases
-          Param(_, ascribedAs, paramMeta) <- params
-          fnType = TypeScheme(tparams, Type.Function(List(returnTyp.typ), ascribedAs.get.typ))
-          constrMember = constrMeta.name -> paramMeta.withType(fnType)
-        } yield constrMember
+        val constrMembers = cases.flatMap {
+          case DataConstructor(_, params, constrMeta) =>
+            params.map {
+              case Param(_, _, paramMeta) =>
+                val accessorFunType = Type.Function(List(dataAppType), TypeVariable())
+                val accessorTypeScheme = TypeScheme(tyVars, accessorFunType)
+                constrMeta.name -> paramMeta.withType(accessorTypeScheme)
+            }
+        }
 
-        val emptyConstrs = for {
-          DataConstructor(name, params, _, constrMeta) <- cases
-          if params.isEmpty
-        } yield constrMeta.name -> List.empty[Meta.Typed]
+        val emptyConstructors = cases
+          .filter(_.params.isEmpty)
+          .map(constr => constr.meta.name -> List.empty[Meta.Typed])
 
         val allMembers = dataMembers ++ constrMembers
 
-        val groupedMembers = allMembers.groupMap(_._1)(_._2) ++ emptyConstrs
+        val groupedMembers = allMembers.groupMap(_._1)(_._2) ++ emptyConstructors
 
-        val updatedEnv = env
-          .withTypes(dataTypes)
-          .copy(members = env.members ++ groupedMembers)
-
-        Kindchecker.kindcheck(data.withAscribedTypes, updatedEnv).map {
-          case (kindedEnv, updatedSubst) =>
-            (kindedEnv, subst ++ updatedSubst)
-        }
-
+        envSoFar
+          .withType(name, dataType)
+          .withTypes(constrTypes)
+          .copy(members = envSoFar.members ++ groupedMembers)
     }
+
+    finalEnv
   }
 
   def gather(
     module: Module[Meta.Untyped],
     importedEnv: Environment[Meta.Typed]
-  ): Infer[(Module[Meta.Typed], List[Constraint])] = {
-    initialPass(module, module.declarations, importedEnv).flatMap {
-      case (initialEnv, kindSubst) =>
-        val emptyRes = (Chain.empty[TopLevelDeclaration[Meta.Typed]], initialEnv, List.empty[Constraint])
+  ): (Module[Meta.Typed], State) = {
+    val topLevelEnv = initialPass(module, importedEnv)
 
-        val constraintsFromDecls = module.declarations.foldM(emptyRes) {
-          case ((checkedSoFar, envSoFar, constraintsSoFar), nextDecl) =>
-            for {
-              (checkedDecl, updatedEnv, constraints) <- gather(nextDecl, envSoFar)
-              envWithDecl = updatedEnv.withType(checkedDecl.name, checkedDecl.meta.typ)
-            } yield (checkedSoFar :+ checkedDecl, envWithDecl, constraintsSoFar ++ constraints)
-        }
-
-        constraintsFromDecls.map {
-          case (checked, _, constraints) =>
-
-            val constraintsWithKinds =
-              constraints.map(_.substituteKinds(kindSubst).defaultKinds)
-
-            val modWithKinds = module.copy(
-              declarations = checked.toList,
-              meta = module.meta.withSimpleType(Type.Module)
-            ).substituteKinds(kindSubst).defaultKinds
-
-            (modWithKinds, constraintsWithKinds)
-        }
+    val initialDeclState = (Chain.empty[TopLevelDeclaration[Meta.Typed]], State.init(topLevelEnv))
+    val (decls, declState) = module.declarations.foldLeft(initialDeclState) {
+      case (state @ (_, stateSoFar), nextDecl) =>
+        state |+| gather(nextDecl, stateSoFar.env)
     }
+
+    val Kindchecker.State(kindEnv, kindSubst, kindErrors, _) = decls
+      .collect { case data @ Data(_, _, _, _) => data }
+      .foldMap { data =>
+        Kindchecker.kindcheck(data, declState.env)
+      }
+
+    val updatedMod = module.copy(
+      declarations = decls.toList,
+      meta = module.meta.withSimpleType(Type.Module)
+    ).substituteKinds(kindSubst.subst)
+
+    val updatedState = declState
+      .substituteKinds(kindSubst)
+      .withErrors(kindErrors)
+      .withEnv(kindEnv)
+
+    (updatedMod, updatedState)
   }
 }

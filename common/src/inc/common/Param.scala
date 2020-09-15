@@ -1,12 +1,17 @@
 package inc.common
 
 import cats.Functor
-import java.lang.{ Exception, String }
-import scala.{ Option, Some }
+import cats.syntax.functor._
+import java.lang.String
+import scala.{ Option, Some, None }
 import scala.=:=
 import scala.collection.immutable.Map
 
-final case class Param[A](name: String, ascribedAs: Option[TypeScheme], meta: A) {
+final case class Param[A](
+  name: String,
+  ascribedAs: Option[TypeExpr[A]],
+  meta: A
+) extends SyntaxTree[A] {
   def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= Meta.Typed) = {
     if (subst.isEmpty)
       this
@@ -32,22 +37,34 @@ final case class Param[A](name: String, ascribedAs: Option[TypeScheme], meta: A)
       meta = from(namePosType.substituteKinds(subst)))
   }
 
-  def withAscribedType(implicit eqv: A =:= Meta.Untyped): Param[Meta.Typed] =
-    ascribedAs.map(asc => copy(meta = meta.withType(asc)))
-      .getOrElse(throw new Exception("Called withAscribedType on a param with no ascription"))
-
   def toProto(implicit eqv: A =:= Meta.Typed): proto.Param = {
     val nameWithType = Some(eqv(meta).toProto)
-    proto.Param(name, ascribedAs.map(_.toProto), nameWithType)
+    proto.Param(name, ascribedAs.map(_.toProto).getOrElse(proto.TypeExpr.Empty), nameWithType)
   }
 }
 
 object Param {
-  def fromProto(param: proto.Param): Param[Meta.Typed] =
-    Param(param.name, param.ascribedAs.map(TypeScheme.fromProto), Meta.fromProto(param.getNameWithType))
+  def fromProto(param: proto.Param): Param[Meta.Typed] = param match {
+    case proto.Param(name, proto.TypeExpr.Empty, _, _) =>
+      Param(name, None, Meta.fromProto(param.getNameWithType))
+    case proto.Param(name, ascribedAs, _, _) =>
+      Param(name, Some(TypeExpr.fromProto(ascribedAs)), Meta.fromProto(param.getNameWithType))
+  }
 
   implicit val paramFunctor: Functor[Param] = new Functor[Param] {
     def map[A, B](pa: Param[A])(f: A => B): Param[B] =
-      pa.copy(meta = f(pa.meta))
+      pa.copy(
+        ascribedAs = pa.ascribedAs.map(_.map(f)),
+        meta = f(pa.meta))
+  }
+
+  implicit val paramSubstitutableTypes: Substitutable[TypeVariable, Type, Param[Meta.Typed]] = new Substitutable[TypeVariable, Type, Param[Meta.Typed]] {
+    def substitute(param: Param[Meta.Typed], subst: Substitution[TypeVariable, Type]): Param[Meta.Typed] =
+      param.substitute(subst.subst)
+  }
+
+  implicit val paramSubstitutableKinds: Substitutable[KindVariable, Kind, Param[Meta.Typed]] = new Substitutable[KindVariable, Kind, Param[Meta.Typed]] {
+    def substitute(param: Param[Meta.Typed], subst: Substitution[KindVariable, Kind]): Param[Meta.Typed] =
+      param.substituteKinds(subst.subst)
   }
 }

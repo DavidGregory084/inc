@@ -99,7 +99,7 @@ class TypecheckerSpec extends FunSuite {
 
     assertEquals(
       Typechecker.typecheck(mod2, noImports),
-      TypeError.typeUnification(Pos.Empty, Type.Int, Type.Boolean)
+      Left(List(TypeError.typeUnification(Pos.Empty, Type.Int, Type.Boolean)))
     )
   }
 
@@ -119,7 +119,7 @@ class TypecheckerSpec extends FunSuite {
 
     assertEquals(
       Typechecker.typecheck(mod2, noImports),
-      TypeError.typeUnification(Pos.Empty, Type.Int, Type.Double)
+      Left(List(TypeError.typeUnification(Pos.Empty, Type.Int, Type.Double)))
     )
   }
 

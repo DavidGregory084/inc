@@ -3,11 +3,8 @@ package inc.main
 import inc.common._
 import inc.codegen.Codegen
 import cats.data.{ Chain, OptionT, Validated }
-import cats.instances.either._
-import cats.instances.list._
 import cats.syntax.either._
 import cats.syntax.traverse._
-import com.typesafe.scalalogging.LazyLogging
 import java.lang.{ ClassLoader, String }
 import java.io.{ ByteArrayOutputStream, File, InputStream, OutputStream }
 import java.nio.file.Paths
@@ -16,7 +13,7 @@ import scala.{ Array, Byte, Either, Option, Unit }
 import scala.collection.immutable.List
 import scala.Predef.{ ArrowAssoc, wrapRefArray }
 
-object Classpath extends LazyLogging {
+object Classpath {
   def parseUrls(classpath: String): Compile[Array[URL]] = {
     val urlStrings = classpath.split(File.pathSeparator)
 

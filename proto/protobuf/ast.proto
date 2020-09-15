@@ -143,6 +143,24 @@ message NameWithType {
   TypeScheme type = 2;
 }
 
+message TypeConstructorExpr {
+  string name = 1;
+  NameWithType nameWithType = 2;
+}
+
+message TypeApplyExpr {
+  TypeExpr typ = 1;
+  repeated TypeExpr args = 2;
+  NameWithType nameWithType = 3;
+}
+
+message TypeExpr {
+  oneof sealed_value {
+    TypeConstructorExpr tyCon = 1;
+    TypeApplyExpr tyApp = 3;
+  }
+}
+
 message Reference {
   string name = 1;
   NameWithType nameWithType = 2;
@@ -196,7 +214,7 @@ message If {
 
 message Param {
   string name = 1;
-  TypeScheme ascribedAs = 2;
+  TypeExpr ascribedAs = 2;
   NameWithType nameWithType = 3;
 }
 
@@ -214,7 +232,7 @@ message Apply {
 
 message Ascription {
   Expr expr = 1;
-  TypeScheme ascribedAs = 2;
+  TypeExpr ascribedAs = 2;
   NameWithType nameWithType = 3;
 }
 
@@ -258,13 +276,12 @@ message Let {
 message DataConstructor {
   string name = 1;
   repeated Param params = 2;
-  TypeScheme returnType = 3;
-  NameWithType nameWithType = 4;
+  NameWithType nameWithType = 3;
 }
 
 message Data {
   string name = 1;
-  repeated TypeVariable typeParams = 2;
+  repeated TypeConstructorExpr typeParams = 2;
   repeated DataConstructor cases = 3;
   NameWithType nameWithType = 4;
 }

@@ -174,64 +174,64 @@ object Asm {
 
   def boxedAsmType(classEnv: ClassEnvironment, typ: Type): AsmType = {
     typ match {
-      case TypeConstructor("Int", _, _) =>
+      case TypeConstructor("Int", _) =>
         AsmType.getType(classOf[java.lang.Integer])
-      case TypeConstructor("Long", _, _) =>
+      case TypeConstructor("Long", _) =>
         AsmType.getType(classOf[java.lang.Long])
-      case TypeConstructor("Float", _, _) =>
+      case TypeConstructor("Float", _) =>
         AsmType.getType(classOf[java.lang.Float])
-      case TypeConstructor("Double", _, _) =>
+      case TypeConstructor("Double", _) =>
         AsmType.getType(classOf[java.lang.Double])
-      case TypeConstructor("Boolean", _, _) =>
+      case TypeConstructor("Boolean", _) =>
         AsmType.getType(classOf[java.lang.Boolean])
-      case TypeConstructor("Char", _, _) =>
+      case TypeConstructor("Char", _) =>
         AsmType.getType(classOf[java.lang.Character])
-      case TypeConstructor("String", _, _) =>
+      case TypeConstructor("String", _) =>
         AsmType.getType(classOf[String])
-      case TypeConstructor("Unit", _, _) =>
+      case TypeConstructor("Unit", _) =>
         AsmType.getType(classOf[IncUnit])
       case Type.Function(params) =>
         AsmType.getType(functionClass(params.length - 1))
-      case TypeApply(typ, _, _, _) =>
+      case TypeApply(typ, _, _) =>
         boxedAsmType(classEnv, typ)
-      case TypeConstructor(name, _, _) =>
-        val intName = internalName(classEnv.typeEnvironment.names(name))
-        AsmType.getObjectType(intName)
-      case InferredTypeVariable(_, _, _) =>
+      case TypeConstructor(name, _) =>
+        val tcName = internalName(classEnv.typeEnvironment.typeNames(name))
+        AsmType.getObjectType(tcName)
+      case InferredTypeVariable(_, _) =>
         AsmType.getType(classOf[Object])
-      case NamedTypeVariable(_, _, _) =>
+      case NamedTypeVariable(_, _) =>
         AsmType.getType(classOf[Object])
     }
   }
 
   def asmType(classEnv: ClassEnvironment, typ: Type): AsmType = {
     typ match {
-      case TypeConstructor("Int", _, _) =>
+      case TypeConstructor("Int", _) =>
         AsmType.INT_TYPE
-      case TypeConstructor("Long", _, _) =>
+      case TypeConstructor("Long", _) =>
         AsmType.LONG_TYPE
-      case TypeConstructor("Float", _, _) =>
+      case TypeConstructor("Float", _) =>
         AsmType.FLOAT_TYPE
-      case TypeConstructor("Double", _, _) =>
+      case TypeConstructor("Double", _) =>
         AsmType.DOUBLE_TYPE
-      case TypeConstructor("Boolean", _, _) =>
+      case TypeConstructor("Boolean", _) =>
         AsmType.BOOLEAN_TYPE
-      case TypeConstructor("Char", _, _) =>
+      case TypeConstructor("Char", _) =>
         AsmType.CHAR_TYPE
-      case TypeConstructor("String", _, _) =>
+      case TypeConstructor("String", _) =>
         AsmType.getType(classOf[String])
-      case TypeConstructor("Unit", _, _) =>
+      case TypeConstructor("Unit", _) =>
         AsmType.getType(classOf[IncUnit])
       case Type.Function(params) =>
         AsmType.getType(functionClass(params.length - 1))
-      case TypeApply(typ, _, _, _) =>
+      case TypeApply(typ, _, _) =>
         asmType(classEnv, typ)
-      case TypeConstructor(name, _, _) =>
-        val tcName = internalName(classEnv.typeEnvironment.names(name))
+      case TypeConstructor(name, _) =>
+        val tcName = internalName(classEnv.typeEnvironment.typeNames(name))
         AsmType.getObjectType(tcName)
-      case InferredTypeVariable(_, _, _) =>
+      case InferredTypeVariable(_, _) =>
         AsmType.getType(classOf[Object])
-      case NamedTypeVariable(_, _, _) =>
+      case NamedTypeVariable(_, _) =>
         AsmType.getType(classOf[Object])
     }
   }

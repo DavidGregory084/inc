@@ -235,12 +235,12 @@ class MainSpec extends ScalaCheckSuite with Generators {
     }
   }
 
-  property("Main should compile arbitrary well-typed modules"){ 
+  property("Main should compile arbitrary well-typed modules"){
     withTmpDir { dir =>
       val modGen = arbitraryModule.arbitrary.map(_.copy(pkg = List("Test", "Main")))
       forAll(modGen) { generatedMod =>
         val config = Configuration.test.copy(classpath = dir.toUri.toURL.toString)
-        val mod = Printer.print(generatedMod).render(80)
+        val mod = Printer.print(generatedMod, annotated = false).render(80)
         try {
           val result = Main.compileModule(dir, s"${generatedMod.name}.inc", config, mod).value.fold(
             errs => fail(s"""Compilation failed with errors ${errs.mkString(", ")}"""),
@@ -249,7 +249,8 @@ class MainSpec extends ScalaCheckSuite with Generators {
           assert(loadClassFrom(dir, "Test.Main." + result.get.head.toFile.toScala.nameWithoutExtension) != null)
         } catch {
           case e: Throwable =>
-            println(NL + mod)
+            println(NL + Printer.print(generatedMod, annotated = false).render(80))
+            println(NL + Printer.print(generatedMod, annotated = true).render(80))
             e.printStackTrace
             throw e
         }

@@ -5,9 +5,6 @@ import cats.syntax.functor._
 import cats.syntax.foldable._
 import cats.syntax.traverse._
 import cats.syntax.parallel._
-import cats.instances.either._
-import cats.instances.list._
-import cats.instances.option._
 import inc.common._
 import inc.rts.{ Unit => IncUnit }
 import java.io.{ OutputStream, PrintWriter }
@@ -83,7 +80,7 @@ class Codegen(verifyCodegen: Boolean) {
       updatedEnv.asRight
 
     case ConstrPattern(name, alias, patterns, meta) =>
-      val constrName = classEnv.typeEnvironment.names(name)
+      val constrName = classEnv.typeEnvironment.valueNames(name)
       val constrType = AsmType.getObjectType(Asm.internalName(constrName))
 
       val aliasEnv = alias.map { _ =>

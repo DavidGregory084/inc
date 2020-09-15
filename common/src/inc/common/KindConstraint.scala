@@ -15,4 +15,12 @@ sealed abstract class KindConstraint extends Product with Serializable {
     }
 }
 
+object KindConstraint {
+  implicit val kindConstraintSubstitutableKinds: Substitutable[KindVariable, Kind, KindConstraint] =
+    new Substitutable[KindVariable, Kind, KindConstraint] {
+      def substitute(constr: KindConstraint, subst: Substitution[KindVariable, Kind]): KindConstraint =
+        constr.substitute(subst.subst)
+    }
+}
+
 case class EqualKind(l: Kind, r: Kind, pos: Pos) extends KindConstraint

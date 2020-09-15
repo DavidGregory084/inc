@@ -16,7 +16,7 @@ import java.nio.file.{Files, Path, Paths}
 import scala.{ Array, Boolean, Unit, Either }
 import scala.collection.immutable.List
 import scala.jdk.CollectionConverters._
-import scala.Predef.wrapRefArray
+import scala.Predef.{ println, wrapRefArray }
 
 object Main extends LazyLogging {
   def main(args: Array[String]): Unit = {
@@ -69,7 +69,7 @@ object Main extends LazyLogging {
 
     } yield out
   }
-  
+
   def compileModule(dest: Path, fileName: String, config: Configuration = Configuration.default, source: String): Compile[List[Path]] = {
     val beforeAll = System.nanoTime
 
@@ -84,7 +84,7 @@ object Main extends LazyLogging {
 
       resolved <- runPhase[Module[Meta.Untyped]](Phase.Resolver, fileName, config, _.printResolver, Resolver.resolve(mod, importedEnv.forgetMemberTypes))
 
-      checked <- runPhase[Module[Meta.Typed]](Phase.Typer, fileName, config, _.printTyper, Typechecker.typecheck(resolved, importedEnv))
+      checked <- runPhase[Module[Meta.Typed]](Phase.Typer, fileName, config, _.printTyper, Typechecker.typecheck(resolved, importedEnv), mod => println(Printer.print(mod, true).render(80)))
 
       classFiles <- runPhase[List[ClassFile]](Phase.Codegen, fileName, config, _.printCodegen, codegen.generate(checked, importedEnv), _.foreach(f => codegen.print(f.bytes)))
 

@@ -105,21 +105,21 @@ object JavaSignature {
     visitor: SignatureVisitor,
     typ: Type
   ): Unit = typ match {
-    case tv @ NamedTypeVariable(_, _, _) =>
+    case tv @ NamedTypeVariable(_, _) =>
       visitor.visitTypeVariable(tv.name)
 
-    case tv @ InferredTypeVariable(_, _, _) =>
+    case tv @ InferredTypeVariable(_, _) =>
       visitor.visitTypeVariable(tv.name)
 
-    case tc @ TypeConstructor(_, _, _) =>
+    case tc @ TypeConstructor(_, _) =>
       val tcType = Asm.boxedAsmType(classEnv, tc)
       visitor.visitClassType(tcType.getInternalName())
       visitor.visitEnd()
 
-    case TypeApply(tv @ NamedTypeVariable(_, _, _), _, _, _) =>
+    case TypeApply(tv @ NamedTypeVariable(_, _), _, _) =>
       visitor.visitTypeVariable(tv.name)
 
-    case TypeApply(tv @ InferredTypeVariable(_, _, _), _, _, _) =>
+    case TypeApply(tv @ InferredTypeVariable(_, _), _, _) =>
       visitor.visitTypeVariable(tv.name)
 
     case Type.Function(params) =>
@@ -134,7 +134,7 @@ object JavaSignature {
 
       visitor.visitEnd()
 
-    case TypeApply(tc, params, _, _) =>
+    case TypeApply(tc, params, _) =>
       val tcType = Asm.boxedAsmType(classEnv, tc)
 
       visitor.visitClassType(tcType.getInternalName())
@@ -158,39 +158,39 @@ object JavaSignature {
     visitor: SignatureVisitor,
     typ: Type
   ): Unit = typ match {
-    case tv @ NamedTypeVariable(_, _, _) =>
+    case tv @ NamedTypeVariable(_, _) =>
       visitor.visitTypeVariable(tv.name)
 
-    case tv @ InferredTypeVariable(_, _, _) =>
+    case tv @ InferredTypeVariable(_, _) =>
       visitor.visitTypeVariable(tv.name)
 
-    case TypeConstructor("Int", _, _) =>
+    case TypeConstructor("Int", _) =>
       visitor.visitBaseType(AsmType.INT_TYPE.getDescriptor().charAt(0))
 
-    case TypeConstructor("Long", _, _) =>
+    case TypeConstructor("Long", _) =>
       visitor.visitBaseType(AsmType.LONG_TYPE.getDescriptor().charAt(0))
 
-    case TypeConstructor("Float", _, _) =>
+    case TypeConstructor("Float", _) =>
       visitor.visitBaseType(AsmType.FLOAT_TYPE.getDescriptor().charAt(0))
 
-    case TypeConstructor("Double", _, _) =>
+    case TypeConstructor("Double", _) =>
       visitor.visitBaseType(AsmType.DOUBLE_TYPE.getDescriptor().charAt(0))
 
-    case TypeConstructor("Boolean", _, _) =>
+    case TypeConstructor("Boolean", _) =>
       visitor.visitBaseType(AsmType.BOOLEAN_TYPE.getDescriptor().charAt(0))
 
-    case TypeConstructor("Char", _, _) =>
+    case TypeConstructor("Char", _) =>
       visitor.visitBaseType(AsmType.CHAR_TYPE.getDescriptor().charAt(0))
 
-    case tc @ TypeConstructor(_, _, _) =>
+    case tc @ TypeConstructor(_, _) =>
       val tcType = Asm.asmType(classEnv, tc)
       visitor.visitClassType(tcType.getInternalName())
       visitor.visitEnd()
 
-    case TypeApply(tv @ NamedTypeVariable(_, _, _), _, _, _) =>
+    case TypeApply(tv @ NamedTypeVariable(_, _), _, _) =>
       visitor.visitTypeVariable(tv.name)
 
-    case TypeApply(tv @ InferredTypeVariable(_, _, _), _, _, _) =>
+    case TypeApply(tv @ InferredTypeVariable(_, _), _, _) =>
       visitor.visitTypeVariable(tv.name)
 
     case Type.Function(params) =>
@@ -205,7 +205,7 @@ object JavaSignature {
 
       visitor.visitEnd()
 
-    case TypeApply(tc, params, _, _) =>
+    case TypeApply(tc, params, _) =>
       val tcType = Asm.asmType(classEnv, tc)
 
       visitor.visitClassType(tcType.getInternalName())
