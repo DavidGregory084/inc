@@ -88,7 +88,7 @@ class MainSpec extends ScalaCheckSuite with Generators {
     }
   }
 
-  test("Main should compile a unit field"){ shouldCompileField("unit", "()", IncUnit.instance) }
+  test("Main should compile a unit field"){ shouldCompileField("unit", "()", IncUnit.INSTANCE) }
 
   test("Main should compile a variable reference") {
     withTmpDir { dir =>

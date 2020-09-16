@@ -79,7 +79,9 @@ trait ScalaSettingsModule extends TpolecatModule with PublishSettingsModule {
   }
 }
 
-object decompiled extends JavaModule
+object decompiled extends JavaModule {
+  def moduleDeps = Seq(rts)
+}
 
 object proto extends ScalaPBModule with ScalaSettingsModule {
   def scalaPBVersion = "0.10.7"

@@ -188,7 +188,7 @@ class Codegen(verifyCodegen: Boolean) {
     case LiteralUnit(_) =>
       // We use the GETSTATIC opcode to push the Unit singleton instance object onto the stack
       val unitType = AsmType.getType(classOf[IncUnit])
-      classEnv.methodWriter.getStatic(unitType, "instance", unitType)
+      classEnv.methodWriter.getStatic(unitType, "INSTANCE", unitType)
       classEnv.asRight
     case Ascription(ascribed, _, _) =>
       newExpr(classEnv, ascribed)
@@ -589,7 +589,7 @@ class Codegen(verifyCodegen: Boolean) {
         Asm.staticField(classEnv, let.name, AsmType.getType(classOf[String]), s)
       case LiteralUnit(_) =>
         val unitType = AsmType.getType(classOf[IncUnit])
-        Asm.staticFieldFrom(classEnv, let.name, unitType, unitType, "instance")
+        Asm.staticFieldFrom(classEnv, let.name, unitType, unitType, "INSTANCE")
       case Ascription(ascribed, _, _) =>
         newLetDeclaration(classEnv, let.copy(binding = ascribed))
       case ref @ Reference(_, _, meta) =>
