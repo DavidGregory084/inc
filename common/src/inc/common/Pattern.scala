@@ -4,7 +4,7 @@ import cats.Functor
 import cats.syntax.functor._
 import java.lang.{ Exception, String }
 import scala.{ Boolean, Option, Some, None, =:= }
-import scala.collection.immutable.{ List, Set }
+import scala.collection.immutable.{ List, Map, Set }
 
 sealed abstract class Pattern[A] extends SyntaxTree[A] {
   def meta: A
@@ -31,6 +31,29 @@ sealed abstract class Pattern[A] extends SyntaxTree[A] {
       val typedMeta = Some(eqv(meta).toProto)
       proto.ConstrPattern(name, alias.getOrElse(""), patterns.map(_.toProto), typedMeta)
   }
+
+  def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= Meta.Typed): Pattern[A] = {
+    if (subst.isEmpty)
+      this
+    else {
+      val from = to.flip.liftCo[Pattern]
+      from(this.map(_.substitute(subst)))
+    }
+  }
+
+  def substituteKinds(subst: Map[KindVariable, Kind])(implicit to: A =:= Meta.Typed): Pattern[A] = {
+    if (subst.isEmpty)
+      this
+    else {
+      val from = to.flip.liftCo[Pattern]
+      from(this.map(_.substituteKinds(subst)))
+    }
+  }
+
+  def defaultKinds(implicit to: A =:= Meta.Typed): Pattern[A] = {
+    val from = to.flip.liftCo[Pattern]
+    from(this.map(_.defaultKinds))
+  }
 }
 
 
@@ -39,9 +62,33 @@ case class IdentPattern[A](name: String, meta: A) extends Pattern[A]
 case class FieldPattern[A](name: String, pattern: Option[Pattern[A]], meta: A) extends SyntaxTree[A] {
   def boundVariables(implicit eqv: A =:= Meta.Typed): Set[Name] =
     pattern.toList.flatMap(_.boundVariables).toSet
+
   def toProto(implicit eqv: A =:= Meta.Typed): proto.FieldPattern = {
     val typedMeta = Some(eqv(meta).toProto)
     proto.FieldPattern(name, pattern.map(_.toProto).getOrElse(proto.Pattern.Empty), typedMeta)
+  }
+
+  def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= Meta.Typed): FieldPattern[A] = {
+    if (subst.isEmpty)
+      this
+    else {
+      val from = to.flip.liftCo[FieldPattern]
+      from(this.map(_.substitute(subst)))
+    }
+  }
+
+  def substituteKinds(subst: Map[KindVariable, Kind])(implicit to: A =:= Meta.Typed): FieldPattern[A] = {
+    if (subst.isEmpty)
+      this
+    else {
+      val from = to.flip.liftCo[FieldPattern]
+      from(this.map(_.substituteKinds(subst)))
+    }
+  }
+
+  def defaultKinds(implicit to: A =:= Meta.Typed): FieldPattern[A] = {
+    val from = to.flip.liftCo[FieldPattern]
+    from(this.map(_.defaultKinds))
   }
 }
 

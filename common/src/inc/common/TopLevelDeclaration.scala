@@ -27,52 +27,27 @@ sealed abstract class TopLevelDeclaration[A] extends SyntaxTree[A] {
         nameWithType)
   }
 
-  def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= Meta.Typed): TopLevelDeclaration[A] =
+  def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= Meta.Typed): TopLevelDeclaration[A] = {
     if (subst.isEmpty)
       this
     else {
-      val from = to.flip
-      val typedMeta = from(meta.substitute(subst))
-      this match {
-        case data @ Data(_, _, _, _) =>
-          data
-        case let @ Let(_, binding, _) =>
-          let.copy(
-            binding = binding.substitute(subst),
-            meta = typedMeta)
-      }
+      val from = to.flip.liftCo[TopLevelDeclaration]
+      from(this.map(_.substitute(subst)))
     }
+  }
 
   def substituteKinds(subst: Map[KindVariable, Kind])(implicit to: A =:= Meta.Typed): TopLevelDeclaration[A] = {
-    val from = to.flip
-    val typedMeta = from(meta.substituteKinds(subst))
-    this match {
-      case data @ Data(_, _, _, _) =>
-        data.copy(
-          typeParams = data.typeParams.map(_.substituteKinds(subst)),
-          cases = data.cases.map(_.substituteKinds(subst)),
-          meta = typedMeta)
-      case let @ Let(_, binding, _) =>
-        let.copy(
-          binding = binding.substituteKinds(subst),
-          meta = typedMeta)
+    if (subst.isEmpty)
+      this
+    else {
+      val from = to.flip.liftCo[TopLevelDeclaration]
+      from(this.map(_.substituteKinds(subst)))
     }
   }
 
   def defaultKinds(implicit to: A =:= Meta.Typed): TopLevelDeclaration[A] = {
-    val from = to.flip
-    val typedMeta = from(meta.defaultKinds)
-    this match {
-      case data @ Data(_, _, _, _) =>
-        data.copy(
-          typeParams = data.typeParams.map(_.defaultKinds),
-          cases = data.cases.map(_.defaultKinds),
-          meta = typedMeta)
-      case let @ Let(_, binding, _) =>
-        let.copy(
-          binding = binding.defaultKinds,
-          meta = typedMeta)
-    }
+    val from = to.flip.liftCo[TopLevelDeclaration]
+    from(this.map(_.defaultKinds))
   }
 }
 
@@ -102,7 +77,7 @@ object TopLevelDeclaration {
       case data @ Data(_, _, _, _) =>
         data.copy(
           typeParams = data.typeParams.map(_.map(f)),
-          cases = data.cases.map(c => c.copy(params = c.params.map(_.map(f)), meta = f(c.meta))),
+          cases = data.cases.map(_.map(f)),
           meta = f(data.meta))
     }
   }
@@ -130,20 +105,27 @@ final case class DataConstructor[A](
     proto.DataConstructor(name, params.map(_.toProto), nameWithType)
   }
 
-  def defaultKinds(implicit to: A =:= Meta.Typed): DataConstructor[A] = {
-    val from = to.flip
-    val namePosType = to(meta)
-    copy(
-      params = params.map(_.defaultKinds),
-      meta = from(namePosType.defaultKinds))
+  def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= Meta.Typed): DataConstructor[A] = {
+    if (subst.isEmpty)
+      this
+    else {
+      val from = to.flip.liftCo[DataConstructor]
+      from(this.map(_.substitute(subst)))
+    }
   }
 
   def substituteKinds(subst: Map[KindVariable, Kind])(implicit to: A =:= Meta.Typed): DataConstructor[A] = {
-    val from = to.flip
-    val namePosType = to(meta)
-    copy(
-      params = params.map(_.substituteKinds(subst)),
-      meta = from(namePosType.substituteKinds(subst)))
+    if (subst.isEmpty)
+      this
+    else {
+      val from = to.flip.liftCo[DataConstructor]
+      from(this.map(_.substituteKinds(subst)))
+    }
+  }
+
+  def defaultKinds(implicit to: A =:= Meta.Typed): DataConstructor[A] = {
+    val from = to.flip.liftCo[DataConstructor]
+    from(this.map(_.defaultKinds))
   }
 }
 
@@ -154,6 +136,13 @@ object DataConstructor {
         name,
         params.map(Param.fromProto).toList,
         Meta.fromProto(data.getNameWithType))
+  }
+
+  implicit val dataConstructorFunctor: Functor[DataConstructor] = new Functor[DataConstructor] {
+    def map[A, B](constr: DataConstructor[A])(f: A => B): DataConstructor[B] = constr match {
+      case data @ DataConstructor(_, params, meta) =>
+        data.copy(params = params.map(_.map(f)), meta = f(meta))
+    }
   }
 }
 

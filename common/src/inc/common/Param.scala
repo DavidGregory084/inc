@@ -12,29 +12,27 @@ final case class Param[A](
   ascribedAs: Option[TypeExpr[A]],
   meta: A
 ) extends SyntaxTree[A] {
-  def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= Meta.Typed) = {
+  def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= Meta.Typed): Param[A] = {
     if (subst.isEmpty)
       this
     else {
-      val from = to.flip
-      Param(name, ascribedAs, from(to(meta).substitute(subst)))
+      val from = to.flip.liftCo[Param]
+      from(this.map(_.substitute(subst)))
+    }
+  }
+
+  def substituteKinds(subst: Map[KindVariable, Kind])(implicit to: A =:= Meta.Typed): Param[A] = {
+    if (subst.isEmpty)
+      this
+    else {
+      val from = to.flip.liftCo[Param]
+      from(this.map(_.substituteKinds(subst)))
     }
   }
 
   def defaultKinds(implicit to: A =:= Meta.Typed): Param[A] = {
-    val from = to.flip
-    val namePosType = to(meta)
-    copy(
-      ascribedAs = ascribedAs.map(_.defaultKinds),
-      meta = from(namePosType.defaultKinds))
-  }
-
-  def substituteKinds(subst: Map[KindVariable, Kind])(implicit to: A =:= Meta.Typed): Param[A] = {
-    val from = to.flip
-    val namePosType = to(meta)
-    copy(
-      ascribedAs = ascribedAs.map(_.substituteKinds(subst)),
-      meta = from(namePosType.substituteKinds(subst)))
+    val from = to.flip.liftCo[Param]
+    from(this.map(_.defaultKinds))
   }
 
   def toProto(implicit eqv: A =:= Meta.Typed): proto.Param = {

@@ -2,6 +2,7 @@ package inc
 package common
 
 import cats.Functor
+import cats.syntax.functor._
 import java.lang.{ Exception, String }
 import scala.{ =:=, Option, Some, None }
 import scala.collection.immutable.{ List, Map }
@@ -17,48 +18,26 @@ sealed abstract class TypeExpr[A] extends SyntaxTree[A] {
   }
 
   def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= Meta.Typed): TypeExpr[A] = {
-    val from = to.flip
     if (subst.isEmpty)
       this
-    else
-      this match {
-        case tyCon @ TypeConstructorExpr(_, meta) =>
-          tyCon.copy(meta = from(meta.substitute(subst)))
-        case tyApp @ TypeApplyExpr(typ, args, meta) =>
-          tyApp.copy(
-            typ = typ.substitute(subst),
-            args.map(_.substitute(subst)),
-            meta = from(meta.substitute(subst)))
-      }
+    else {
+      val from = to.flip.liftCo[TypeExpr]
+      from(this.map(_.substitute(subst)))
+    }
   }
 
   def substituteKinds(subst: Map[KindVariable, Kind])(implicit to: A =:= Meta.Typed): TypeExpr[A] = {
-    val from = to.flip
     if (subst.isEmpty)
       this
-    else
-      this match {
-        case tyCon @ TypeConstructorExpr(_, meta) =>
-          tyCon.copy(meta = from(meta.substituteKinds(subst)))
-        case tyApp @ TypeApplyExpr(typ, args, meta) =>
-          tyApp.copy(
-            typ = typ.substituteKinds(subst),
-            args = args.map(_.substituteKinds(subst)),
-            meta = from(meta.substituteKinds(subst)))
-      }
+    else {
+      val from = to.flip.liftCo[TypeExpr]
+      from(this.map(_.substituteKinds(subst)))
+    }
   }
 
   def defaultKinds(implicit to: A =:= Meta.Typed): TypeExpr[A] = {
-    val from = to.flip
-    this match {
-      case tyCon @ TypeConstructorExpr(_, meta) =>
-        tyCon.copy(meta = from(meta.defaultKinds))
-      case tyApp @ TypeApplyExpr(typ, args, meta) =>
-        tyApp.copy(
-          typ = typ.defaultKinds,
-          args = args.map(_.defaultKinds),
-          meta = from(meta.defaultKinds))
-    }
+    val from = to.flip.liftCo[TypeExpr]
+    from(this.map(_.defaultKinds))
   }
 }
 
@@ -102,11 +81,11 @@ case class TypeConstructorExpr[A](name: String, meta: A) extends TypeExpr[A] {
   override def toProto(implicit eqv: A =:= Meta.Typed): inc.common.proto.TypeConstructorExpr =
     proto.TypeConstructorExpr(name, Some(meta.toProto))
   override def substitute(subst: Map[TypeVariable,Type])(implicit to: A =:= Meta.Typed): TypeConstructorExpr[A] =
-    this.copy(meta = to.flip(meta.substitute(subst)))
+    to.flip.liftCo[TypeConstructorExpr](this.map(_.substitute(subst)))
   override def substituteKinds(subst: Map[KindVariable,Kind])(implicit to: A =:= Meta.Typed): TypeConstructorExpr[A] =
-    this.copy(meta = to.flip(meta.substituteKinds(subst)))
+    to.flip.liftCo[TypeConstructorExpr](this.map(_.substituteKinds(subst)))
   override def defaultKinds(implicit to: A =:= Meta.Typed): TypeConstructorExpr[A] =
-    this.copy(meta = to.flip(meta.defaultKinds))
+    to.flip.liftCo[TypeConstructorExpr](this.map(_.defaultKinds))
 }
 
 object TypeConstructorExpr {

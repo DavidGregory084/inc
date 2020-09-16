@@ -170,11 +170,8 @@ final case class Module[A](
     if (subst.isEmpty)
       this
     else {
-      val from = to.flip
-      val typedMeta = from(meta.substitute(subst))
-      copy(
-        declarations = declarations.map(_.substitute(subst)),
-        meta = typedMeta)
+      val from = to.flip.liftCo[Module]
+      from(this.map(_.substitute(subst)))
     }
   }
 
@@ -182,20 +179,14 @@ final case class Module[A](
     if (subst.isEmpty)
       this
     else {
-      val from = to.flip
-      val typedMeta = from(meta.substituteKinds(subst))
-      copy(
-        declarations = declarations.map(_.substituteKinds(subst)),
-        meta = typedMeta)
+      val from = to.flip.liftCo[Module]
+      from(this.map(_.substituteKinds(subst)))
     }
   }
 
   def defaultKinds(implicit to: A =:= Meta.Typed): Module[A] = {
-    val from = to.flip
-    val typedMeta = from(meta.defaultKinds)
-    copy(
-      declarations = declarations.map(_.defaultKinds),
-      meta = typedMeta)
+    val from = to.flip.liftCo[Module]
+    from(this.map(_.defaultKinds))
   }
 }
 

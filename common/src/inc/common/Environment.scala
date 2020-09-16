@@ -95,6 +95,7 @@ case class Environment[A](
     val from = to.flip
     copy(
       types = types.view.mapValues(_.substituteKinds(subst)).toMap,
+      kinds = kinds.view.mapValues(_.substitute(subst)).toMap,
       members = members.view.mapValues(_.map(meta => from(meta.substituteKinds(subst)))).toMap)
   }
 
@@ -102,6 +103,7 @@ case class Environment[A](
     val from = to.flip
     copy(
       types = types.view.mapValues(_.defaultKinds).toMap,
+      kinds = kinds.view.mapValues(_.default).toMap,
       members = members.view.mapValues(_.map(meta => from(meta.defaultKinds))).toMap)
   }
 }
