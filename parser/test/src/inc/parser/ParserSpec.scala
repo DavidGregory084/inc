@@ -3,8 +3,9 @@ package inc.parser
 import cats.implicits._
 import inc.common._
 import munit.ScalaCheckSuite
+import org.scalacheck.Prop._
 
-class ParserSpec extends ScalaCheckSuite {
+class ParserSpec extends ScalaCheckSuite with Generators {
 
   def parseModule(src: String): Module[Unit] =
     Parser.parse(src).fold(err => fail(err.head.message), identity).void
@@ -406,5 +407,19 @@ class ParserSpec extends ScalaCheckSuite {
         |""".trim.stripMargin),
       mod2
     )
+  }
+
+  override def scalaCheckTestParameters =
+    super.scalaCheckTestParameters
+      .withMinSuccessfulTests(1000)
+
+  property("Parser should round trip arbitrary modules") {
+    forAll { mod: Module[Meta.Typed] =>
+      val modString = Printer.print(mod, false).render(80)
+      assertEquals(
+        Parser.parse(modString).map(_.map(_ => Pos.Empty)),
+        mod.map(_ => Pos.Empty).asRight
+      )
+    }
   }
 }

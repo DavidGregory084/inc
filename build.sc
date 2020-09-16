@@ -112,7 +112,10 @@ object parser extends ScalaSettingsModule with ScoverageModule {
   def scoverageVersion = "1.4.1"
   def moduleDeps = Seq(common)
   def ivyDeps = Agg(ivy"com.lihaoyi::fastparse:2.3.0")
-  object test extends super.Test with ScoverageTests
+  object test extends super.Test with ScoverageTests {
+    override def moduleDeps =
+      super.moduleDeps :+ common.test
+  }
 }
 
 object resolver extends ScalaSettingsModule with ScoverageModule {
