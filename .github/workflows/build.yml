@@ -18,18 +18,28 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v2
- 
+
     - name: Set up JDK
       uses: actions/setup-java@v1
       with:
         java-version: ${{ matrix.java-version }}
+
+    - name: Cache dependencies
+      uses: actions/cache@v2
+      with:
+        path: |
+          ~/.coursier/cache/v1
+          ~/.cache/coursier/v1
+          ~/Library/Caches/Coursier/v1
+          ~/AppData/Local/Coursier/Cache/v1
+        key: ${{ runner.os }}-mill-coursier-cache-${{ hashFiles('build.sc') }}
 
     - name: Run tests
       run: |
         chmod +x ./mill
         ./mill _.test
         ./mill _.scoverage.xmlReport
-        
+
     - name: Upload coverage reports
       uses: codecov/codecov-action@v1
       env:
