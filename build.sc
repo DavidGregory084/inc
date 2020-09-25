@@ -121,13 +121,19 @@ object parser extends ScalaSettingsModule with ScoverageModule {
 object resolver extends ScalaSettingsModule with ScoverageModule {
   def scoverageVersion = "1.4.1"
   def moduleDeps = Seq(common)
-  object test extends super.Test with ScoverageTests
+  object test extends super.Test with ScoverageTests {
+    override def moduleDeps =
+      super.moduleDeps :+ common.test
+  }
 }
 
 object typechecker extends ScalaSettingsModule with ScoverageModule {
   def scoverageVersion = "1.4.1"
   def moduleDeps = Seq(common)
-  object test extends super.Test with ScoverageTests
+  object test extends super.Test with ScoverageTests {
+    override def moduleDeps =
+      super.moduleDeps :+ common.test
+  }
 }
 
 object codegen extends ScalaSettingsModule with ScoverageModule {
@@ -185,7 +191,7 @@ object main extends ScalaSettingsModule with ScoverageModule with BuildInfo {
           "--classfile",
           "--pg-conf", r8Conf.toString,
           "--output", outFile.toString,
-          "--lib", System.getProperty("java.home"), 
+          "--lib", System.getProperty("java.home"),
           assembly().path.toString
         ),
         workingDir = T.dest

@@ -300,7 +300,7 @@ trait Generators { self: Assertions =>
       if (env.valueNames.isEmpty)
         noRefExprGens
       else
-        noRefExprGens :+ referenceGen(env) /*:+ matchGen(env)*/
+        noRefExprGens :+ referenceGen(env) :+ matchGen(env)
 
     Gen.oneOf(exprGens)
       .flatMap(identity)

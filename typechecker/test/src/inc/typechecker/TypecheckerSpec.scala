@@ -1,9 +1,11 @@
 package inc.typechecker
 
+import cats.syntax.functor._
 import inc.common._
-import munit.FunSuite
+import munit.ScalaCheckSuite
+import org.scalacheck.Prop._
 
-class TypecheckerSpec extends FunSuite {
+class TypecheckerSpec extends ScalaCheckSuite with Generators {
   def mkModule(name: String, decls: List[TopLevelDeclaration[Meta.Untyped]]) = Module(
     pkg = List("Test", "Typechecker"),
     name = name,
@@ -191,5 +193,19 @@ class TypecheckerSpec extends FunSuite {
       err => assert(err.head.isInstanceOf[TypeOccursCheck]),
       _ => fail("Typechecking should fail as this code fails the occurs check")
     )
+  }
+
+  override def scalaCheckTestParameters =
+    super.scalaCheckTestParameters
+      .withMinSuccessfulTests(1000)
+
+  property("Typechecker should succeed for arbitrary well typed programs") {
+    forAll { expected: Module[Meta.Typed] =>
+      val erasedTypesMod = expected.map(_.forgetType)
+      Typechecker.typecheck(erasedTypesMod, Environment.empty[Meta.Typed]).fold(
+        errs => fail(s"""Typechecking failed with errors ${errs.mkString(", ")}"""),
+        _ => passed
+      )
+    }
   }
 }

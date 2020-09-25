@@ -1,9 +1,11 @@
 package inc.resolver
 
+import cats.syntax.functor._
 import inc.common._
-import munit.FunSuite
+import munit.ScalaCheckSuite
+import org.scalacheck.Prop._
 
-class ResolverSpec extends FunSuite {
+class ResolverSpec extends ScalaCheckSuite with Generators {
   def mkModule(name: String, decls: List[TopLevelDeclaration[Pos]]) = Module(
     pkg = List("Test", "Resolver"),
     name = name,
@@ -40,7 +42,7 @@ class ResolverSpec extends FunSuite {
     )
   }
 
-  test("Parser should return an error when there is a reference to a field which doesn't exist") {
+  test("Resolver should return an error when there is a reference to a field which doesn't exist") {
     val mod = mkModule("Ref", List(
       mkLet("int", mkInt(42)),
       mkLet("int2", mkRef("int3"))
@@ -51,7 +53,7 @@ class ResolverSpec extends FunSuite {
     )
   }
 
-  test("Parser should return an error when there is a field which is defined twice") {
+  test("Resolver should return an error when there is a field which is defined twice") {
     val mod = mkModule("Ref", List(
       mkLet("int", mkInt(42)),
       mkLet("int", mkInt(43))
@@ -60,5 +62,19 @@ class ResolverSpec extends FunSuite {
       identity,
       _ => fail("Resolution should fail as the field 'int' is defined twice")
     )
+  }
+
+  override def scalaCheckTestParameters =
+    super.scalaCheckTestParameters
+      .withMinSuccessfulTests(1000)
+
+  property("Resolver should succeed for arbitrary well formed programs") {
+    forAll { expected: Module[Meta.Typed] =>
+      val erasedNamesMod = expected.map(_ => Pos.Empty)
+      Resolver.resolve(erasedNamesMod, Environment.empty[Meta.Untyped]).fold(
+        errs => fail(s"""Name resolution failed with errors ${errs.mkString(", ")}"""),
+        _ => passed
+      )
+    }
   }
 }

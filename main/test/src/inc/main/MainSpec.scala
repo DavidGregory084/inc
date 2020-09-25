@@ -235,6 +235,10 @@ class MainSpec extends ScalaCheckSuite with Generators {
     }
   }
 
+  override def scalaCheckTestParameters =
+    super.scalaCheckTestParameters
+      .withMinSuccessfulTests(1000)
+
   property("Main should compile arbitrary well-typed modules"){
     withTmpDir { dir =>
       val modGen = arbitraryModule.arbitrary.map(_.copy(pkg = List("Test", "Main")))
