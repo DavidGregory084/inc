@@ -68,7 +68,7 @@ class ResolverSpec extends ScalaCheckSuite with Generators {
     super.scalaCheckTestParameters
       .withMinSuccessfulTests(1000)
 
-  property("Resolver should succeed for arbitrary well formed programs") {
+  property("Resolver should succeed for arbitrary well formed programs".ignore) {
     forAll { expected: Module[Meta.Typed] =>
       val erasedNamesMod = expected.map(_ => Pos.Empty)
       Resolver.resolve(erasedNamesMod, Environment.empty[Meta.Untyped]).fold(

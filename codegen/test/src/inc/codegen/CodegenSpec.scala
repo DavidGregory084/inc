@@ -132,7 +132,7 @@ class CodegenSpec extends ScalaCheckSuite with Generators {
     super.scalaCheckTestParameters
       .withMinSuccessfulTests(1000)
 
-  property("Codegen should round trip arbitrary module files") {
+  property("Codegen should round trip arbitrary module files".ignore) {
     forAll { mod: Module[Meta.Typed] =>
       withTmpDir { dir =>
         try {

@@ -199,7 +199,7 @@ class TypecheckerSpec extends ScalaCheckSuite with Generators {
     super.scalaCheckTestParameters
       .withMinSuccessfulTests(1000)
 
-  property("Typechecker should succeed for arbitrary well typed programs") {
+  property("Typechecker should succeed for arbitrary well typed programs".ignore) {
     forAll { expected: Module[Meta.Typed] =>
       val erasedTypesMod = expected.map(_.forgetType)
       Typechecker.typecheck(erasedTypesMod, Environment.empty[Meta.Typed]).fold(

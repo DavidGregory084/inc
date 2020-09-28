@@ -239,7 +239,7 @@ class MainSpec extends ScalaCheckSuite with Generators {
     super.scalaCheckTestParameters
       .withMinSuccessfulTests(1000)
 
-  property("Main should compile arbitrary well-typed modules"){
+  property("Main should compile arbitrary well-typed modules".ignore){
     withTmpDir { dir =>
       val modGen = arbitraryModule.arbitrary.map(_.copy(pkg = List("Test", "Main")))
       forAll(modGen) { generatedMod =>

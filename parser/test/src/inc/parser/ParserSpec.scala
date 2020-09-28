@@ -413,7 +413,7 @@ class ParserSpec extends ScalaCheckSuite with Generators {
     super.scalaCheckTestParameters
       .withMinSuccessfulTests(1000)
 
-  property("Parser should round trip arbitrary modules") {
+  property("Parser should round trip arbitrary modules".ignore) {
     forAll { mod: Module[Meta.Typed] =>
       val modString = Printer.print(mod, false).render(80)
       assertEquals(
