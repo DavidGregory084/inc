@@ -1,6 +1,5 @@
-@startuml(id=Compilation)
+@startuml
 title inc compiler - Dynamic
-caption Diagram of the compilation process
 
 skinparam {
   shadowing false
@@ -8,53 +7,62 @@ skinparam {
   defaultTextAlignment center
   wrapWidth 200
   maxMessageSize 100
+  PackageBorderColor<<group>> #cccccc
+  PackageFontColor<<group>> #cccccc
 }
 hide stereotype
-skinparam sequenceParticipant<<1>> {
-  BackgroundColor #08427b
-  FontColor #ffffff
-  BorderColor #052E56
-}
-skinparam sequenceParticipant<<6>> {
-  BackgroundColor #85bbf0
-  FontColor #000000
-  BorderColor #5D82A8
-  roundCorner 20
-}
-skinparam sequenceParticipant<<7>> {
-  BackgroundColor #85bbf0
-  FontColor #000000
-  BorderColor #5D82A8
-  roundCorner 20
-}
 skinparam sequenceParticipant<<8>> {
   BackgroundColor #85bbf0
   FontColor #000000
-  BorderColor #5D82A8
+  BorderColor #5d82a8
   roundCorner 20
 }
 skinparam sequenceParticipant<<9>> {
   BackgroundColor #85bbf0
   FontColor #000000
-  BorderColor #5D82A8
+  BorderColor #5d82a8
   roundCorner 20
 }
-skinparam sequenceParticipant<<10>> {
+skinparam sequenceParticipant<<5>> {
   BackgroundColor #85bbf0
   FontColor #000000
-  BorderColor #5D82A8
+  BorderColor #5d82a8
   roundCorner 20
 }
+skinparam sequenceParticipant<<6>> {
+  BackgroundColor #85bbf0
+  FontColor #000000
+  BorderColor #5d82a8
+  roundCorner 20
+}
+skinparam sequenceParticipant<<7>> {
+  BackgroundColor #85bbf0
+  FontColor #000000
+  BorderColor #5d82a8
+  roundCorner 20
+}
+skinparam sequenceParticipant<<1>> {
+  BackgroundColor #08427b
+  FontColor #ffffff
+  BorderColor #052e56
+}
+
 actor "User\n<size:10>[Person]</size>" as 1 <<1>> #08427b
-participant "/main\n<size:10>[Component]</size>" as 10 <<10>> #85bbf0
-participant "/parser\n<size:10>[Component]</size>" as 6 <<6>> #85bbf0
-participant "/resolver\n<size:10>[Component]</size>" as 7 <<7>> #85bbf0
-participant "/typechecker\n<size:10>[Component]</size>" as 8 <<8>> #85bbf0
-participant "/codegen\n<size:10>[Component]</size>" as 9 <<9>> #85bbf0
-1 -[#707070]> 10 : 1. Source files
-10 -[#707070]> 6 : 2. Source text
-6 -[#707070]> 7 : 3. Parsed syntax trees
-7 -[#707070]> 8 : 4. Resolved syntax trees
-8 -[#707070]> 9 : 5. Typechecked syntax trees
-10 <-[#707070]- 9 : 6. Compiled classfiles
+
+participant "/main\n<size:10>[Component]</size>" as 9 <<9>> #85bbf0
+
+participant "/parser\n<size:10>[Component]</size>" as 5 <<5>> #85bbf0
+
+participant "/resolver\n<size:10>[Component]</size>" as 6 <<6>> #85bbf0
+
+participant "/typechecker\n<size:10>[Component]</size>" as 7 <<7>> #85bbf0
+
+participant "/codegen\n<size:10>[Component]</size>" as 8 <<8>> #85bbf0
+
+1 -[#707070]> 9 : 1. Source files
+9 -[#707070]> 5 : 2. Source text
+5 -[#707070]> 6 : 3. Parsed syntax trees
+6 -[#707070]> 7 : 4. Resolved syntax trees
+7 -[#707070]> 8 : 5. Typechecked syntax trees
+9 <-[#707070]- 8 : 6. Compiled classfiles
 @enduml

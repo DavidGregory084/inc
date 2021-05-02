@@ -1,6 +1,5 @@
-@startuml(id=Structure)
+@startuml
 title inc language - inc compiler - Components
-caption Dependency structure of the project
 
 skinparam {
   shadowing false
@@ -8,74 +7,67 @@ skinparam {
   defaultTextAlignment center
   wrapWidth 200
   maxMessageSize 100
+  PackageBorderColor<<group>> #cccccc
+  PackageFontColor<<group>> #cccccc
 }
 hide stereotype
 top to bottom direction
-skinparam rectangle<<1>> {
-  BackgroundColor #08427b
-  FontColor #ffffff
-  BorderColor #052E56
+
+skinparam rectangle<<8>> {
+  BackgroundColor #85bbf0
+  FontColor #000000
+  BorderColor #5d82a8
+  roundCorner 20
 }
 skinparam rectangle<<4>> {
   BackgroundColor #85bbf0
   FontColor #000000
-  BorderColor #5D82A8
-  roundCorner 20
-}
-skinparam rectangle<<5>> {
-  BackgroundColor #85bbf0
-  FontColor #000000
-  BorderColor #5D82A8
-  roundCorner 20
-}
-skinparam rectangle<<6>> {
-  BackgroundColor #85bbf0
-  FontColor #000000
-  BorderColor #5D82A8
-  roundCorner 20
-}
-skinparam rectangle<<7>> {
-  BackgroundColor #85bbf0
-  FontColor #000000
-  BorderColor #5D82A8
-  roundCorner 20
-}
-skinparam rectangle<<8>> {
-  BackgroundColor #85bbf0
-  FontColor #000000
-  BorderColor #5D82A8
+  BorderColor #5d82a8
   roundCorner 20
 }
 skinparam rectangle<<9>> {
   BackgroundColor #85bbf0
   FontColor #000000
-  BorderColor #5D82A8
+  BorderColor #5d82a8
   roundCorner 20
 }
-skinparam rectangle<<10>> {
+skinparam rectangle<<5>> {
   BackgroundColor #85bbf0
   FontColor #000000
-  BorderColor #5D82A8
+  BorderColor #5d82a8
   roundCorner 20
 }
-rectangle "==User\n<size:10>[Person]</size>" <<1>> as 1
-package "inc compiler\n[Container]" {
-  rectangle "==/codegen\n<size:10>[Component]</size>\n\nGenerates JVM bytecode from syntax trees. Embeds a protobuf syntax tree as a class file attribute." <<9>> as 9
-  rectangle "==/common\n<size:10>[Component]</size>\n\nDeclares syntax tree definitions, protobuf serialization and common functions." <<5>> as 5
-  rectangle "==/main\n<size:10>[Component]</size>\n\nOrchestrates compilation using the other modules. Fetches imported modules from the classpath." <<10>> as 10
-  rectangle "==/parser\n<size:10>[Component]</size>\n\nParses a textual module into a syntax tree." <<6>> as 6
-  rectangle "==/proto\n<size:10>[Component]</size>\n\nDeclares protobuf definitions for the syntax trees." <<4>> as 4
-  rectangle "==/resolver\n<size:10>[Component]</size>\n\nResolves fully qualified names for each identifier in the syntax trees." <<7>> as 7
-  rectangle "==/typechecker\n<size:10>[Component]</size>\n\nInfers types for every declaration and expression in the syntax tree." <<8>> as 8
+skinparam rectangle<<6>> {
+  BackgroundColor #85bbf0
+  FontColor #000000
+  BorderColor #5d82a8
+  roundCorner 20
 }
-9 .[#707070].> 5 : ""
-5 .[#707070].> 4 : ""
-10 .[#707070].> 9 : ""
-10 .[#707070].> 6 : ""
-10 .[#707070].> 7 : ""
-10 .[#707070].> 8 : ""
-6 .[#707070].> 5 : ""
-7 .[#707070].> 5 : ""
-8 .[#707070].> 5 : ""
-1 .[#707070].> 10 : ""
+skinparam rectangle<<7>> {
+  BackgroundColor #85bbf0
+  FontColor #000000
+  BorderColor #5d82a8
+  roundCorner 20
+}
+
+package "inc compiler\n[Container]" <<3>> {
+  skinparam PackageBorderColor<<3>> #444444
+  skinparam PackageFontColor<<3>> #444444
+
+  rectangle "==/common\n<size:10>[Component]</size>\n\nDeclares syntax tree definitions, binary serialization and common functions." <<4>> as 4
+  rectangle "==/parser\n<size:10>[Component]</size>\n\nParses a textual module into a syntax tree." <<5>> as 5
+  rectangle "==/resolver\n<size:10>[Component]</size>\n\nResolves fully qualified names for each identifier in the syntax trees." <<6>> as 6
+  rectangle "==/typechecker\n<size:10>[Component]</size>\n\nInfers types for every declaration and expression in the syntax tree." <<7>> as 7
+  rectangle "==/codegen\n<size:10>[Component]</size>\n\nGenerates JVM bytecode from syntax trees. Embeds a binary syntax tree as a class file attribute." <<8>> as 8
+  rectangle "==/main\n<size:10>[Component]</size>\n\nOrchestrates compilation using the other modules. Fetches imported modules from the classpath." <<9>> as 9
+}
+
+9 .[#707070,thickness=2].> 5 : ""
+9 .[#707070,thickness=2].> 6 : ""
+9 .[#707070,thickness=2].> 7 : ""
+9 .[#707070,thickness=2].> 8 : ""
+5 .[#707070,thickness=2].> 4 : ""
+6 .[#707070,thickness=2].> 4 : ""
+7 .[#707070,thickness=2].> 4 : ""
+8 .[#707070,thickness=2].> 4 : ""
 @enduml
