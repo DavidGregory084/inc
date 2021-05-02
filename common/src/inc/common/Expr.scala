@@ -2,10 +2,12 @@ package inc.common
 
 import cats.Functor
 import cats.syntax.functor._
-import java.lang.{ Exception, String }
-import scala.{ =:=, Boolean, Char, Double, Float, Int, Long, Some, StringContext }
+import io.bullet.borer._
+import io.bullet.borer.derivation.ArrayBasedCodecs._
+import java.lang.String
+import scala.{ =:=, Boolean, Char, Double, Float, Int, Long }
 import scala.collection.immutable.{ List, Map, Set }
-import scala.Predef.wrapRefArray
+import scala.Predef.augmentString
 
 sealed abstract class Expr[A] extends SyntaxTree[A] {
   def meta: A
@@ -84,53 +86,6 @@ sealed abstract class Expr[A] extends SyntaxTree[A] {
         cases = cases.map(_.replace(mapping)))
   }
 
-  def toProto(implicit eqv: A =:= Meta.Typed): proto.Expr = this match {
-    case LiteralInt(i, meta) =>
-      val typedMeta = Some(eqv(meta).toProto)
-      proto.LiteralInt(i, typedMeta)
-    case LiteralLong(l, meta) =>
-      val typedMeta = Some(eqv(meta).toProto)
-      proto.LiteralLong(l, typedMeta)
-    case LiteralFloat(f, meta) =>
-      val typedMeta = Some(eqv(meta).toProto)
-      proto.LiteralFloat(f, typedMeta)
-    case LiteralDouble(d, meta) =>
-      val typedMeta = Some(eqv(meta).toProto)
-      proto.LiteralDouble(d, typedMeta)
-    case LiteralBoolean(b, meta) =>
-      val typedMeta = Some(eqv(meta).toProto)
-      proto.LiteralBoolean(b, typedMeta)
-    case LiteralString(s, meta) =>
-      val typedMeta = Some(eqv(meta).toProto)
-      proto.LiteralString(s, typedMeta)
-    case LiteralChar(c, meta) =>
-      val typedMeta = Some(eqv(meta).toProto)
-      proto.LiteralChar(c.toString, typedMeta)
-    case LiteralUnit(meta) =>
-      val typedMeta = Some(eqv(meta).toProto)
-      proto.LiteralUnit(typedMeta)
-    case Reference(mod, name, meta) =>
-      val typedMeta = Some(eqv(meta).toProto)
-      val modString = mod.mkString("/")
-      val fullName = if (mod.isEmpty) name else s"${modString}.${name}"
-      proto.Reference(fullName, typedMeta)
-    case If(cond, thenExpr, elseExpr, meta) =>
-      val typedMeta = Some(eqv(meta).toProto)
-      proto.If(cond.toProto, thenExpr.toProto, elseExpr.toProto, typedMeta)
-    case Lambda(params, body, meta) =>
-      val typedMeta = Some(eqv(meta).toProto)
-      proto.Lambda(params.map(_.toProto), body.toProto, typedMeta)
-    case Apply(fn, args, meta) =>
-      val typedMeta = Some(eqv(meta).toProto)
-      proto.Apply(fn.toProto, args.map(_.toProto), typedMeta)
-    case Ascription(expr, ascribedAs, meta) =>
-      val typedMeta = Some(eqv(meta).toProto)
-      proto.Ascription(expr.toProto, ascribedAs.toProto, typedMeta)
-    case Match(matchExpr, cases, meta) =>
-      val typedMeta = Some(eqv(meta).toProto)
-      proto.Match(matchExpr.toProto, cases.map(_.toProto), typedMeta)
-  }
-
   def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= Meta.Typed): Expr[A] = {
     if (subst.isEmpty)
       this
@@ -156,57 +111,6 @@ sealed abstract class Expr[A] extends SyntaxTree[A] {
 }
 
 object Expr {
-  def fromProto(expr: proto.Expr): Expr[Meta.Typed] = expr match {
-    case int @ proto.LiteralInt(i, _, _) =>
-      LiteralInt(i, Meta.fromProto(int.getNameWithType))
-    case long @ proto.LiteralLong(l, _, _) =>
-      LiteralLong(l, Meta.fromProto(long.getNameWithType))
-    case flt @ proto.LiteralFloat(f, _, _) =>
-      LiteralFloat(f, Meta.fromProto(flt.getNameWithType))
-    case dbl @ proto.LiteralDouble(d, _, _) =>
-      LiteralDouble(d, Meta.fromProto(dbl.getNameWithType))
-    case bool @ proto.LiteralBoolean(b, _, _) =>
-      LiteralBoolean(b, Meta.fromProto(bool.getNameWithType))
-    case str @ proto.LiteralString(s, _, _) =>
-      LiteralString(s, Meta.fromProto(str.getNameWithType))
-    case char @ proto.LiteralChar(c, _, _) =>
-      LiteralChar(c.charAt(0), Meta.fromProto(char.getNameWithType))
-    case unit @ proto.LiteralUnit(_, _) =>
-      LiteralUnit(Meta.fromProto(unit.getNameWithType))
-    case ref @ proto.Reference(nm, _, _) =>
-      val mod = nm.split("/").toList
-      val name = mod.last
-      Reference(mod.dropRight(1), name, Meta.fromProto(ref.getNameWithType))
-    case ifExpr @ proto.If(cond, thenExpr, elseExpr, _, _) =>
-      If(
-        Expr.fromProto(cond),
-        Expr.fromProto(thenExpr),
-        Expr.fromProto(elseExpr),
-        Meta.fromProto(ifExpr.getNameWithType))
-    case lambda @ proto.Lambda(params, body, _, _) =>
-      Lambda(
-        params.map(Param.fromProto).toList,
-        Expr.fromProto(body),
-        Meta.fromProto(lambda.getNameWithType))
-    case app @ proto.Apply(fn, args, _, _) =>
-      Apply(
-        Expr.fromProto(fn),
-        args.toList.map(Expr.fromProto),
-        Meta.fromProto(app.getNameWithType))
-    case asc @ proto.Ascription(_, _, _, _) =>
-      Ascription(
-        Expr.fromProto(asc.expr),
-        TypeExpr.fromProto(asc.ascribedAs),
-        Meta.fromProto(asc.getNameWithType))
-    case mat @ proto.Match(_, _, _, _) =>
-      Match(
-        Expr.fromProto(mat.matchExpr),
-        mat.cases.toList.map(MatchCase.fromProto),
-        Meta.fromProto(mat.getNameWithType))
-    case proto.Expr.Empty =>
-      throw new Exception("Empty Expr in protobuf")
-  }
-
   implicit val exprFunctor: Functor[Expr] = new Functor[Expr] {
     def map[A, B](ea: Expr[A])(f: A => B): Expr[B] = ea match {
       case int @ LiteralInt(_, _) =>
@@ -264,6 +168,8 @@ object Expr {
     def substitute(expr: Expr[Meta.Typed], subst: Substitution[KindVariable, Kind]): Expr[Meta.Typed] =
       expr.substituteKinds(subst.subst)
   }
+
+  implicit val exprCodec: Codec[Expr[Meta.Typed]] = deriveAllCodecs[Expr[Meta.Typed]]
 }
 
 final case class If[A](
@@ -321,18 +227,9 @@ final case class MatchCase[A](
     val from = to.flip.liftCo[MatchCase]
     from(this.map(_.defaultKinds))
   }
-
-  def toProto(implicit eqv: A =:= Meta.Typed): proto.MatchCase =
-    proto.MatchCase(pattern.toProto, resultExpr.toProto, Some(eqv(meta).toProto))
 }
 
 object MatchCase {
-  def fromProto(cse: proto.MatchCase): MatchCase[Meta.Typed] =
-    MatchCase(
-      Pattern.fromProto(cse.pattern),
-      Expr.fromProto(cse.resultExpr),
-      Meta.fromProto(cse.getNameWithType))
-
   implicit val matchCaseFunctor: Functor[MatchCase] = new Functor[MatchCase] {
     def map[A, B](ma: MatchCase[A])(f: A => B): MatchCase[B] = {
       ma.copy(
@@ -341,6 +238,8 @@ object MatchCase {
         meta = f(ma.meta))
     }
   }
+
+  implicit val matchCaseCodec: Codec[MatchCase[Meta.Typed]] = deriveCodec[MatchCase[Meta.Typed]]
 }
 
 final case class Match[A](

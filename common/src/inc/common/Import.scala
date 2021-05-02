@@ -1,8 +1,11 @@
 package inc.common
 
+import io.bullet.borer._
+import io.bullet.borer.derivation.ArrayBasedCodecs._
 import java.lang.String
-import scala.{ Some, None, Product, Serializable }
+import scala.{ Product, Serializable }
 import scala.collection.immutable.List
+import scala.Predef.augmentString
 
 sealed abstract class Import extends Product with Serializable {
   val pos: Pos
@@ -10,19 +13,10 @@ sealed abstract class Import extends Product with Serializable {
     case ImportModule(pkg, name, _) => pkg.mkString("/") + "/" + name
     case ImportSymbols(pkg, name, _, _) => pkg.mkString("/") + "/" + name
   }
-  def toProto: proto.Import = this match {
-    case ImportModule(pkg, name, _) => proto.Import(pkg, name)
-    case ImportSymbols(pkg, name, symbols, _) => proto.Import(pkg, name, Some(proto.Symbols(symbols)))
-  }
 }
 
 object Import {
-  def fromProto(imp: proto.Import): Import = imp.symbols match {
-    case Some(syms) =>
-      ImportSymbols(imp.pkg.toList, imp.name, syms.symbols.toList, Pos.Empty)
-    case None =>
-      ImportModule(imp.pkg.toList, imp.name, Pos.Empty)
-  }
+  implicit val importCodec: Codec[Import] = deriveAllCodecs[Import]
 }
 
 case class ImportModule(pkg: List[String], name: String, pos: Pos) extends Import

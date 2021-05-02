@@ -1,6 +1,8 @@
 package inc.common
 
-import scala.{ Product, Serializable, Some }
+import io.bullet.borer._
+import io.bullet.borer.derivation.ArrayBasedCodecs._
+import scala.{ Product, Serializable }
 import scala.collection.immutable.Map
 
 sealed abstract class Meta extends Product with Serializable {
@@ -19,11 +21,6 @@ object Meta {
   }
 
   case class Typed(name: Name, typ: TypeScheme, pos: Pos) extends Meta {
-    def toProto = proto.NameWithType(
-      name = name.toProto,
-      `type` = Some(typ.toProto)
-    )
-
     def forgetPos: Typed =
       copy(pos = Pos.Empty)
 
@@ -43,13 +40,6 @@ object Meta {
       copy(typ = typ.defaultKinds)
   }
 
-  def fromProto(nameWithType: proto.NameWithType): Typed =
-    Typed(
-      Name.fromProto(nameWithType.name),
-      TypeScheme.fromProto(nameWithType.getType),
-      Pos.Empty
-    )
-
   object Typed {
     implicit val typedMetaSubstitutableTypes: Substitutable[TypeVariable, Type, Typed] = new Substitutable[TypeVariable, Type, Typed] {
       def substitute(meta: Typed, subst: Substitution[TypeVariable,Type]): Typed =
@@ -59,5 +49,7 @@ object Meta {
       def substitute(meta: Typed, subst: Substitution[KindVariable, Kind]): Typed =
         meta.substituteKinds(subst.subst)
     }
+
+    implicit val typedCodec: Codec[Typed] = deriveCodec[Typed]
   }
 }

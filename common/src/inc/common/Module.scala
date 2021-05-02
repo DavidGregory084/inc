@@ -2,8 +2,9 @@ package inc.common
 
 import cats.Functor
 import cats.syntax.functor._
+import io.bullet.borer._
+import io.bullet.borer.derivation.ArrayBasedCodecs._
 import java.lang.String
-import scala.Some
 import scala.=:=
 import scala.collection.immutable.{ List, Map }
 import scala.Predef.ArrowAssoc
@@ -17,14 +18,6 @@ final case class Module[A](
 ) extends SyntaxTree[A] {
 
   override def toString = pprint.apply(this).toString()
-
-  def toProto(implicit eqv: A =:= Meta.Typed): proto.Module = proto.Module(
-    pkg = pkg,
-    name = name,
-    imports = imports.map(_.toProto),
-    declarations = declarations.map(_.toProto),
-    nameWithType = Some(eqv(meta).toProto)
-  )
 
   def fullName = (pkg :+ name).mkString("/")
 
@@ -191,13 +184,6 @@ final case class Module[A](
 }
 
 object Module {
-  def fromProto(mod: proto.Module): Module[Meta.Typed] = Module(
-    pkg = mod.pkg.toList,
-    name = mod.name,
-    imports = mod.imports.toList.map(Import.fromProto),
-    declarations = mod.declarations.toList.map(TopLevelDeclaration.fromProto),
-    meta = Meta.fromProto(mod.getNameWithType),
-  )
   implicit val moduleFunctor: Functor[Module] = new Functor[Module] {
     def map[A, B](ma: Module[A])(f: A => B): Module[B] = {
       ma.copy(
@@ -216,4 +202,6 @@ object Module {
     def substitute(mod: Module[Meta.Typed], subst: Substitution[KindVariable, Kind]): Module[Meta.Typed] =
       mod.substituteKinds(subst.subst)
   }
+
+  implicit val moduleCodec: Codec[Module[Meta.Typed]] = deriveCodec[Module[Meta.Typed]]
 }

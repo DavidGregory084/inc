@@ -16,12 +16,12 @@ import $ivy.`com.lihaoyi::mill-contrib-scalapblib:$MILL_VERSION`
 import mill.contrib.scalapblib._
 
 import $ivy.`com.lihaoyi::mill-contrib-buildinfo:$MILL_VERSION`
-import mill.contrib.BuildInfo
+import mill.contrib.buildinfo.BuildInfo
 
 import $ivy.`com.lihaoyi::mill-contrib-scoverage:$MILL_VERSION`
 import mill.contrib.scoverage.ScoverageModule
 
-import $ivy.`io.github.davidgregory084::mill-tpolecat:0.1.4`
+import $ivy.`io.github.davidgregory084::mill-tpolecat:0.2.0`
 import io.github.davidgregory084.TpolecatModule
 
 import $ivy.`com.github.tototoshi::scala-csv:1.3.6`
@@ -83,19 +83,12 @@ object decompiled extends JavaModule {
   def moduleDeps = Seq(rts)
 }
 
-object proto extends ScalaPBModule with ScalaSettingsModule {
-  def scalaPBVersion = "0.10.7"
-  def scalaPBFlatPackage = true
-  def scalaPBGrpc = false
-  def scalaPBLenses = false
-  def scalacOptions = T { super.scalacOptions().filterNot(Set("-Yno-imports")) }
-}
-
 object common extends ScalaSettingsModule with ScoverageModule {
   def scoverageVersion = "1.4.1"
-  def moduleDeps = Seq(proto)
   def ivyDeps = T {
     super.ivyDeps() ++ Agg(
+      ivy"io.bullet::borer-core:1.7.1",
+      ivy"io.bullet::borer-derivation:1.7.1",
       ivy"com.lihaoyi::pprint:${pprintVersion()}",
       ivy"com.lihaoyi::sourcecode:0.2.1",
       ivy"org.typelevel::cats-core:${catsVersion()}",
@@ -169,6 +162,10 @@ object main extends ScalaSettingsModule with ScoverageModule with BuildInfo {
     // PPrint definitely requires scala-reflect
     ivy"org.scala-lang:scala-reflect:${scalaVersion()}"
   )
+
+  def scalacOptions = T {
+    super.scalacOptions().filterNot(Set("-Yno-imports"))
+  }
 
   def buildInfoPackageName = Some("inc.main")
   def buildInfoObjectName = "Build"

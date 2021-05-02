@@ -2,8 +2,10 @@ package inc.common
 
 import cats.Functor
 import cats.syntax.functor._
+import io.bullet.borer._
+import io.bullet.borer.derivation.ArrayBasedCodecs._
 import java.lang.String
-import scala.{ Option, Some, None }
+import scala.Option
 import scala.=:=
 import scala.collection.immutable.Map
 
@@ -34,21 +36,9 @@ final case class Param[A](
     val from = to.flip.liftCo[Param]
     from(this.map(_.defaultKinds))
   }
-
-  def toProto(implicit eqv: A =:= Meta.Typed): proto.Param = {
-    val nameWithType = Some(eqv(meta).toProto)
-    proto.Param(name, ascribedAs.map(_.toProto).getOrElse(proto.TypeExpr.Empty), nameWithType)
-  }
 }
 
 object Param {
-  def fromProto(param: proto.Param): Param[Meta.Typed] = param match {
-    case proto.Param(name, proto.TypeExpr.Empty, _, _) =>
-      Param(name, None, Meta.fromProto(param.getNameWithType))
-    case proto.Param(name, ascribedAs, _, _) =>
-      Param(name, Some(TypeExpr.fromProto(ascribedAs)), Meta.fromProto(param.getNameWithType))
-  }
-
   implicit val paramFunctor: Functor[Param] = new Functor[Param] {
     def map[A, B](pa: Param[A])(f: A => B): Param[B] =
       pa.copy(
@@ -65,4 +55,6 @@ object Param {
     def substitute(param: Param[Meta.Typed], subst: Substitution[KindVariable, Kind]): Param[Meta.Typed] =
       param.substituteKinds(subst.subst)
   }
+
+  implicit val paramCodec: Codec[Param[Meta.Typed]] = deriveCodec[Param[Meta.Typed]]
 }

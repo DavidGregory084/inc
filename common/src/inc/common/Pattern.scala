@@ -2,9 +2,12 @@ package inc.common
 
 import cats.Functor
 import cats.syntax.functor._
-import java.lang.{ Exception, String }
-import scala.{ Boolean, Option, Some, None, =:= }
+import io.bullet.borer._
+import io.bullet.borer.derivation.ArrayBasedCodecs._
+import java.lang.String
+import scala.{ Boolean, Option, =:= }
 import scala.collection.immutable.{ List, Map, Set }
+import scala.Predef.augmentString
 
 sealed abstract class Pattern[A] extends SyntaxTree[A] {
   def meta: A
@@ -21,15 +24,6 @@ sealed abstract class Pattern[A] extends SyntaxTree[A] {
       Set(meta.name)
     case ConstrPattern(_, _, patterns, meta) =>
       (Set(meta.name) ++ patterns.flatMap(_.boundVariables)).filterNot(_ == NoName)
-  }
-
-  def toProto(implicit eqv: A =:= Meta.Typed): proto.Pattern = this match {
-    case IdentPattern(name, meta) =>
-      val typedMeta = Some(eqv(meta).toProto)
-      proto.IdentPattern(name, typedMeta)
-    case ConstrPattern(name, alias, patterns, meta) =>
-      val typedMeta = Some(eqv(meta).toProto)
-      proto.ConstrPattern(name, alias.getOrElse(""), patterns.map(_.toProto), typedMeta)
   }
 
   def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= Meta.Typed): Pattern[A] = {
@@ -63,11 +57,6 @@ case class FieldPattern[A](name: String, pattern: Option[Pattern[A]], meta: A) e
   def boundVariables(implicit eqv: A =:= Meta.Typed): Set[Name] =
     pattern.toList.flatMap(_.boundVariables).toSet
 
-  def toProto(implicit eqv: A =:= Meta.Typed): proto.FieldPattern = {
-    val typedMeta = Some(eqv(meta).toProto)
-    proto.FieldPattern(name, pattern.map(_.toProto).getOrElse(proto.Pattern.Empty), typedMeta)
-  }
-
   def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= Meta.Typed): FieldPattern[A] = {
     if (subst.isEmpty)
       this
@@ -99,33 +88,13 @@ object FieldPattern {
         FieldPattern(field, pattern.map(_.map(f)), f(meta))
     }
   }
-  def fromProto(pat: proto.FieldPattern): FieldPattern[Meta.Typed] = pat match {
-    case fld @ proto.FieldPattern(field, pattern, _, _) =>
-      pattern match {
-        case proto.Pattern.Empty =>
-          FieldPattern(field, None, Meta.fromProto(fld.getNameWithType))
-        case other =>
-          FieldPattern(field, Some(Pattern.fromProto(other)), Meta.fromProto(fld.getNameWithType))
-      }
-  }
+
+  implicit val fieldPatternCodec: Codec[FieldPattern[Meta.Typed]] = deriveCodec[FieldPattern[Meta.Typed]]
 }
 
 case class ConstrPattern[A](name: String, alias: Option[String], patterns: List[FieldPattern[A]], meta: A) extends Pattern[A]
 
 object Pattern {
-  def fromProto(pat: proto.Pattern): Pattern[Meta.Typed] = pat match {
-    case id @ proto.IdentPattern(name, _, _) =>
-      IdentPattern(name, Meta.fromProto(id.getNameWithType))
-    case constr @ proto.ConstrPattern(name, alias, patterns, _, _) =>
-      ConstrPattern(
-        name,
-        Option(alias).filterNot(_.isEmpty),
-        patterns.map(FieldPattern.fromProto).toList,
-        Meta.fromProto(constr.getNameWithType))
-    case proto.Pattern.Empty =>
-      throw new Exception("Empty Pattern in protobuf")
-  }
-
   implicit val patternFunctor: Functor[Pattern] = new Functor[Pattern] {
     def map[A, B](pa: Pattern[A])(f: A => B): Pattern[B] = pa match {
       case ident @ IdentPattern(_, _) =>
@@ -136,4 +105,6 @@ object Pattern {
           meta = f(constr.meta))
     }
   }
+
+  implicit val patternCodec: Codec[Pattern[Meta.Typed]] = deriveAllCodecs[Pattern[Meta.Typed]]
 }
