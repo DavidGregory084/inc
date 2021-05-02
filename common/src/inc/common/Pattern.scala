@@ -2,7 +2,7 @@ package inc.common
 
 import cats.Functor
 import cats.syntax.functor._
-import io.bullet.borer._
+import io.bullet.borer.Codec
 import io.bullet.borer.derivation.ArrayBasedCodecs._
 import java.lang.String
 import scala.{ Boolean, Option, =:= }

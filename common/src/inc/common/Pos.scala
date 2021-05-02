@@ -1,6 +1,6 @@
 package inc.common
 
-import io.bullet.borer._
+import io.bullet.borer.{Codec, Decoder, Encoder}
 import scala.Int
 
 case class Pos(from: Int, to: Int) {

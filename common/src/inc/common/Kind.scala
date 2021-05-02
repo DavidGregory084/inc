@@ -1,6 +1,6 @@
 package inc.common
 
-import io.bullet.borer._
+import io.bullet.borer.Codec
 import io.bullet.borer.derivation.ArrayBasedCodecs._
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.immutable.{ List, Map, Set }

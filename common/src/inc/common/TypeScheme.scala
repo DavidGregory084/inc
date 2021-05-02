@@ -1,6 +1,6 @@
 package inc.common
 
-import io.bullet.borer._
+import io.bullet.borer.{Codec, Decoder, Encoder}
 import io.bullet.borer.derivation.ArrayBasedCodecs._
 import java.lang.String
 import scala.collection.immutable.{ List, Map, Set, Vector }
