@@ -84,11 +84,12 @@ object decompiled extends JavaModule {
 }
 
 object common extends ScalaSettingsModule with ScoverageModule {
+  def borerVersion = T { "1.7.1" }
   def scoverageVersion = "1.4.1"
   def ivyDeps = T {
     super.ivyDeps() ++ Agg(
-      ivy"io.bullet::borer-core:1.7.1",
-      ivy"io.bullet::borer-derivation:1.7.1",
+      ivy"io.bullet::borer-core:${borerVersion()}",
+      ivy"io.bullet::borer-derivation:${borerVersion()}",
       ivy"com.lihaoyi::pprint:${pprintVersion()}",
       ivy"com.lihaoyi::sourcecode:0.2.1",
       ivy"org.typelevel::cats-core:${catsVersion()}",
