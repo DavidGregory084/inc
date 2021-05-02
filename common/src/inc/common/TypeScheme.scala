@@ -1,12 +1,11 @@
 package inc.common
 
+import io.bullet.borer.{Codec, Decoder, Encoder}
+import io.bullet.borer.derivation.ArrayBasedCodecs._
 import java.lang.String
 import scala.collection.immutable.{ List, Map, Set, Vector }
 
 case class TypeScheme(bound: List[TypeVariable], typ: Type) {
-  def toProto: proto.TypeScheme =
-    proto.TypeScheme(bound.map(tv => tv.toProto), typ.toProto)
-
   def toExpr: TypeExpr[Meta.Typed] =
     this.typ.toExpr match {
       case tyCon @ TypeConstructorExpr(_, meta @ Meta.Typed(_, typ, _)) =>
@@ -74,24 +73,6 @@ object TypeScheme {
     scheme
   }
 
-  def fromProto(typ: proto.TypeScheme) = typ match {
-    case proto.TypeScheme(bound, t, _) =>
-      // Instantiate the type scheme with fresh type variables for this compilation run
-      val typ = Type.fromProto(t)
-
-      val tyVars = bound.toList.map(TypeVariable.fromProto)
-
-      val (freshVars, subst) = tyVars.foldLeft((Vector.empty[TypeVariable], Map.empty[TypeVariable, Type])) {
-        case ((vars, subst), named @ NamedTypeVariable(_, _)) =>
-          (vars :+ named, subst)
-        case ((vars, subst), inferred @ InferredTypeVariable(_, kind)) =>
-          val freshVar = TypeVariable(kind)
-          (vars :+ freshVar, subst.updated(inferred, freshVar))
-      }
-
-      TypeScheme(freshVars.toList, typ.substitute(subst))
-  }
-
   implicit val typeSchemeSubstitutableTypes: Substitutable[TypeVariable, Type, TypeScheme] =
     new Substitutable[TypeVariable, Type, TypeScheme] {
       def substitute(scheme: TypeScheme, subst: Substitution[TypeVariable, Type]): TypeScheme =
@@ -103,4 +84,24 @@ object TypeScheme {
       def substitute(scheme: TypeScheme, subst: Substitution[KindVariable, Kind]): TypeScheme =
         scheme.substituteKinds(subst.subst)
     }
+
+  implicit val typeSchemeEncoder: Encoder[TypeScheme] = deriveEncoder[TypeScheme]
+
+  implicit val typeSchemeDecoder: Decoder[TypeScheme] = deriveDecoder[TypeScheme].map { scheme =>
+    // Instantiate the type scheme with fresh type variables for this compilation run
+    val typ = scheme.typ
+    val tyVars = scheme.bound
+
+    val (freshVars, subst) = tyVars.foldLeft((Vector.empty[TypeVariable], Map.empty[TypeVariable, Type])) {
+      case ((vars, subst), named @ NamedTypeVariable(_, _)) =>
+        (vars :+ named, subst)
+      case ((vars, subst), inferred @ InferredTypeVariable(_, kind)) =>
+        val freshVar = TypeVariable(kind)
+        (vars :+ freshVar, subst.updated(inferred, freshVar))
+    }
+
+    TypeScheme(freshVars.toList, typ.substitute(subst))
+  }
+
+  implicit val typeSchemeCodec: Codec[TypeScheme] = Codec(typeSchemeEncoder, typeSchemeDecoder)
 }

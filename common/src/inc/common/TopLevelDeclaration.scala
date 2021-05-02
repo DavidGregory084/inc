@@ -2,10 +2,12 @@ package inc.common
 
 import cats.Functor
 import cats.syntax.functor._
-import java.lang.{ Exception, String }
-import scala.Some
+import io.bullet.borer.Codec
+import io.bullet.borer.derivation.ArrayBasedCodecs._
+import java.lang.String
 import scala.=:=
 import scala.collection.immutable.{ List, Map }
+import scala.Predef.augmentString
 
 sealed abstract class TopLevelDeclaration[A] extends SyntaxTree[A] {
   def name: String
@@ -13,19 +15,6 @@ sealed abstract class TopLevelDeclaration[A] extends SyntaxTree[A] {
   def meta: A
 
   def members: List[A]
-
-  def toProto(implicit eqv: A =:= Meta.Typed): proto.TopLevelDeclaration = this match {
-    case Let(name, expr, meta) =>
-      val nameWithType = Some(eqv(meta).toProto)
-      proto.Let(name, expr.toProto, nameWithType)
-    case Data(name, tparams, cases, meta) =>
-      val nameWithType = Some(eqv(meta).toProto)
-      proto.Data(
-        name,
-        tparams.map(_.toProto),
-        cases.map(_.toProto),
-        nameWithType)
-  }
 
   def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= Meta.Typed): TopLevelDeclaration[A] = {
     if (subst.isEmpty)
@@ -52,22 +41,6 @@ sealed abstract class TopLevelDeclaration[A] extends SyntaxTree[A] {
 }
 
 object TopLevelDeclaration {
-  def fromProto(decl: proto.TopLevelDeclaration): TopLevelDeclaration[Meta.Typed] = decl match {
-    case let @ proto.Let(name, binding, _, _) =>
-      Let(
-        name,
-        Expr.fromProto(binding),
-        Meta.fromProto(let.getNameWithType))
-    case data @ proto.Data(name, tparams, cases, _, _) =>
-      Data(
-        name,
-        tparams.map(TypeConstructorExpr.fromProto).toList,
-        cases.map(DataConstructor.fromProto).toList,
-        Meta.fromProto(data.getNameWithType))
-    case proto.TopLevelDeclaration.Empty =>
-      throw new Exception("Empty TopLevelDeclaration in protobuf")
-  }
-
   implicit val topLevelDeclarationFunctor: Functor[TopLevelDeclaration] = new Functor[TopLevelDeclaration] {
     def map[A, B](ta: TopLevelDeclaration[A])(f: A => B): TopLevelDeclaration[B] = ta match {
       case let @ Let(_, _, _) =>
@@ -93,6 +66,8 @@ object TopLevelDeclaration {
       def substitute(decl: TopLevelDeclaration[Meta.Typed], subst: Substitution[KindVariable, Kind]): TopLevelDeclaration[Meta.Typed] =
         decl.substituteKinds(subst.subst)
     }
+
+  implicit val topLevelDeclarationCodec: Codec[TopLevelDeclaration[Meta.Typed]] = deriveCodec[TopLevelDeclaration[Meta.Typed]]
 }
 
 final case class DataConstructor[A](
@@ -100,11 +75,6 @@ final case class DataConstructor[A](
   params: List[Param[A]],
   meta: A
 ) extends SyntaxTree[A] {
-  def toProto(implicit eqv: A =:= Meta.Typed): proto.DataConstructor = {
-    val nameWithType = Some(eqv(meta).toProto)
-    proto.DataConstructor(name, params.map(_.toProto), nameWithType)
-  }
-
   def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= Meta.Typed): DataConstructor[A] = {
     if (subst.isEmpty)
       this
@@ -130,20 +100,14 @@ final case class DataConstructor[A](
 }
 
 object DataConstructor {
-  def fromProto(data: proto.DataConstructor): DataConstructor[Meta.Typed] = data match {
-    case data @ proto.DataConstructor(name, params, _, _) =>
-      DataConstructor(
-        name,
-        params.map(Param.fromProto).toList,
-        Meta.fromProto(data.getNameWithType))
-  }
-
   implicit val dataConstructorFunctor: Functor[DataConstructor] = new Functor[DataConstructor] {
     def map[A, B](constr: DataConstructor[A])(f: A => B): DataConstructor[B] = constr match {
       case data @ DataConstructor(_, params, meta) =>
         data.copy(params = params.map(_.map(f)), meta = f(meta))
     }
   }
+
+  implicit val dataConstructorCodec: Codec[DataConstructor[Meta.Typed]] = deriveCodec[DataConstructor[Meta.Typed]]
 }
 
 final case class Data[A](
@@ -162,10 +126,18 @@ final case class Data[A](
   def members = meta :: cases.map(_.meta)
 }
 
+object Data {
+  implicit val dataCodec: Codec[Data[Meta.Typed]] = deriveCodec[Data[Meta.Typed]]
+}
+
 final case class Let[A](
   name: String,
   binding: Expr[A],
   meta: A
 ) extends TopLevelDeclaration[A] {
   def members = List(meta)
+}
+
+object Let {
+  implicit val letCodec: Codec[Let[Meta.Typed]] = deriveCodec[Let[Meta.Typed]]
 }

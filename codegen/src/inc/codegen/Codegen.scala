@@ -5,6 +5,7 @@ import cats.syntax.functor._
 import cats.syntax.foldable._
 import cats.syntax.traverse._
 import cats.syntax.parallel._
+import io.bullet.borer.Cbor
 import inc.common._
 import inc.rts.{ Unit => IncUnit }
 import java.io.{ OutputStream, PrintWriter }
@@ -41,10 +42,10 @@ class Codegen(verifyCodegen: Boolean) {
 
     for {
       buf <- buffer
-      protobuf <- proto.Module.validate(buf).toEither.leftMap { t =>
+      mod <- Cbor.decode(buf).to[Module[Meta.Typed]].valueEither.leftMap { t =>
         List(CodegenError("Error while decoding inc module data from class file data", t))
       }
-    } yield Module.fromProto(protobuf)
+    } yield mod
   }
 
 
@@ -728,7 +729,7 @@ class Codegen(verifyCodegen: Boolean) {
       val staticInit = Asm.staticInitializer(modWriter)
       staticInit.visitCode()
 
-      modChecker.visitAttribute(Asm.InterfaceAttribute(mod.toProto.toByteArray))
+      modChecker.visitAttribute(Asm.InterfaceAttribute(Cbor.encode(mod).toByteArray))
 
       val classEnv = ClassEnvironment.empty(env, mod, modWriter, staticInit)
 

@@ -1,29 +1,15 @@
 package inc.common
 
-import java.lang.{ Exception, String }
+import io.bullet.borer.Codec
+import io.bullet.borer.derivation.ArrayBasedCodecs._
+import java.lang.String
 import java.util.concurrent.atomic.AtomicInteger
 import scala.{ Boolean, Int, Option, Some, None, Product, Serializable, StringContext }
 import scala.collection.immutable.{ List, Map, Set }
+import scala.Predef.augmentString
 
 sealed abstract class Type extends Product with Serializable {
   def kind: Kind
-
-  def toProto: proto.Type = this match {
-    case NamedTypeVariable(n, kind) =>
-      proto.TypeVariable(
-        proto.TypeVariable.TyVar.Named(
-          proto.NamedTypeVariable(n, kind.toProto)))
-    case InferredTypeVariable(i, kind) =>
-      proto.TypeVariable(
-        proto.TypeVariable.TyVar.Inferred(
-          proto.InferredTypeVariable(i, kind.toProto)))
-    case TypeApply(typ, params, kind) =>
-      proto.TypeApply(typ.toProto, params.map(_.toProto), kind.toProto)
-    case TypeConstructor(name, kind) =>
-      proto.TypeConstructor(name, kind.toProto)
-    case ErrorType =>
-      throw new Exception("Attempt to serialize ErrorType to proto")
-  }
 
   def isPrimitive = this match {
     case TypeConstructor(name, _) =>
@@ -195,20 +181,6 @@ object Type {
     }
   }
 
-  def fromProto(typ: proto.Type): Type = typ match {
-    case tyVar @ proto.TypeVariable(_, _) =>
-      TypeVariable.fromProto(tyVar)
-    case proto.TypeConstructor(name, kind, _) =>
-      TypeConstructor(name, Kind.fromProto(kind))
-    case proto.TypeApply(typ, params, kind, _) =>
-      TypeApply(
-        Type.fromProto(typ),
-        params.map(Type.fromProto).toList,
-        Kind.fromProto(kind))
-    case proto.Type.Empty =>
-      throw new Exception("Empty Type in protobuf")
-  }
-
   implicit val typeSubstitutableTypes: Substitutable[TypeVariable, Type, Type] = new Substitutable[TypeVariable, Type, Type] {
     def substitute(typ: Type, subst: Substitution[TypeVariable, Type]): Type =
       typ.substitute(subst.subst)
@@ -218,6 +190,8 @@ object Type {
     def substitute(typ: Type, subst: Substitution[KindVariable, Kind]): Type =
       typ.substituteKinds(subst.subst)
   }
+
+  implicit val typeCodec: Codec[Type] = deriveAllCodecs[Type]
 }
 
 sealed abstract class TypeVariable extends Type {
@@ -225,17 +199,6 @@ sealed abstract class TypeVariable extends Type {
 
   def occursIn(typ: Type) =
     typ.freeTypeVariables.exists(_.name == this.name)
-
-  override def toProto: proto.TypeVariable = this match {
-    case NamedTypeVariable(n, kind) =>
-      proto.TypeVariable(
-        proto.TypeVariable.TyVar.Named(
-          proto.NamedTypeVariable(n, kind.toProto)))
-    case InferredTypeVariable(i, kind) =>
-      proto.TypeVariable(
-        proto.TypeVariable.TyVar.Inferred(
-          proto.InferredTypeVariable(i, kind.toProto)))
-  }
 
   override def substituteKinds(subst: Map[KindVariable, Kind]): TypeVariable = this match {
     case tv @ NamedTypeVariable(_, _) =>
@@ -275,14 +238,7 @@ object TypeVariable {
     NamedTypeVariable(name, kind)
   def apply(kind: Kind = Atomic): InferredTypeVariable =
     InferredTypeVariable(nextId.getAndIncrement, kind)
-  def fromProto(tyVar: proto.TypeVariable) = tyVar.tyVar match {
-    case proto.TypeVariable.TyVar.Named(proto.NamedTypeVariable(name, kind, _)) =>
-      NamedTypeVariable(name, Kind.fromProto(kind))
-    case proto.TypeVariable.TyVar.Inferred(proto.InferredTypeVariable(id, kind, _)) =>
-      InferredTypeVariable(id, Kind.fromProto(kind))
-    case proto.TypeVariable.TyVar.Empty =>
-      throw new Exception("Empty TypeVariable in protobuf")
-  }
+  implicit val typeVariableCodec: Codec[TypeVariable] = deriveAllCodecs[TypeVariable]
 }
 
 case class TypeConstructor(name: String, kind: Kind) extends Type

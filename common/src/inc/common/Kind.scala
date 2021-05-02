@@ -1,9 +1,11 @@
 package inc.common
 
-import java.lang.Exception
+import io.bullet.borer.Codec
+import io.bullet.borer.derivation.ArrayBasedCodecs._
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.immutable.{ List, Map, Set }
 import scala.{ Int, Product, Serializable }
+import scala.Predef.augmentString
 
 sealed abstract class Kind extends Product with Serializable {
   def arity: Int = this match {
@@ -44,36 +46,17 @@ sealed abstract class Kind extends Product with Serializable {
     case Atomic =>
       Set.empty
   }
-
-  def toProto: proto.Kind = this match {
-    case Atomic =>
-      proto.Atomic()
-    case KindVariable(id) =>
-      proto.KindVariable(id)
-    case Parameterized(params, result) =>
-      proto.Parameterized(params.map(_.toProto), result.toProto)
-  }
 }
 
 object Kind {
   def Function(arity: Int): Kind =
     Parameterized(List.fill(arity)(KindVariable()), Atomic)
 
-  def fromProto(kind: proto.Kind): Kind = kind match {
-    case proto.Atomic(_) =>
-      Atomic
-    case proto.Parameterized(params, result, _) =>
-      Parameterized(params.map(Kind.fromProto).toList, Kind.fromProto(result))
-    case proto.KindVariable(_, _) =>
-      throw new Exception("Unexpected kind variable in protobuf")
-    case proto.Kind.Empty =>
-      throw new Exception("Empty Kind in protobuf")
-  }
-
   implicit val kindSubstitutableKinds: Substitutable[KindVariable, Kind, Kind] = new Substitutable[KindVariable, Kind, Kind] {
     def substitute(kind: Kind, subst: Substitution[KindVariable, Kind]): Kind =
       kind.substitute(subst.subst)
   }
+  implicit val kindCodec: Codec[Kind] = deriveAllCodecs[Kind]
 }
 
 case object Atomic extends Kind
