@@ -38,7 +38,6 @@ jobs:
       run: |
         chmod +x ./mill
         ./mill _.test
-        ./mill _.scoverage.xmlReport
         ./mill scoverage.xmlReportAll
 
     - name: Upload coverage reports
