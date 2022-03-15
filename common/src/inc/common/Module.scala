@@ -4,17 +4,19 @@ import cats.Functor
 import cats.syntax.functor._
 import io.bullet.borer.Codec
 import io.bullet.borer.derivation.ArrayBasedCodecs._
+
 import java.lang.String
 import scala.=:=
-import scala.collection.immutable.{ List, Map }
 import scala.Predef.ArrowAssoc
+import scala.collection.immutable.List
+import scala.collection.immutable.Map
 
 final case class Module[A](
   pkg: List[String],
   name: String,
   imports: List[Import],
   declarations: List[TopLevelDeclaration[A]],
-  meta: A,
+  meta: A
 ) extends SyntaxTree[A] {
 
   override def toString = pprint.apply(this).toString()
@@ -22,17 +24,16 @@ final case class Module[A](
   def fullName = (pkg :+ name).mkString("/")
 
   def symbolTable(implicit eqv: A =:= Meta.Untyped): Environment[A] = {
-    val to = eqv.liftCo[TopLevelDeclaration]
-    val envFrom = eqv.liftCo[Environment].flip
+    val to                = eqv.liftCo[TopLevelDeclaration]
+    val envFrom           = eqv.liftCo[Environment].flip
     val namedDeclarations = declarations.map(to.apply)
 
     val names = namedDeclarations.flatMap {
       case Let(name, _, meta) =>
         List(name -> meta.name)
       case Data(_, _, cases, _) =>
-        cases.map {
-          case DataConstructor(caseName, _, caseMeta) =>
-            caseName -> caseMeta.name
+        cases.map { case DataConstructor(caseName, _, caseMeta) =>
+          caseName -> caseMeta.name
         }
     }
 
@@ -52,7 +53,7 @@ final case class Module[A](
 
         val constrMembers = for {
           DataConstructor(_, params, constrMeta) <- cases
-          Param(_, _, paramMeta) <- params
+          Param(_, _, paramMeta)                 <- params
           constrMember = constrMeta.name -> paramMeta
         } yield constrMember
 
@@ -78,7 +79,7 @@ final case class Module[A](
   }
 
   def typeEnvironment(implicit eqv: A =:= Meta.Typed): Environment[A] = {
-    val to = eqv.liftCo[TopLevelDeclaration]
+    val to      = eqv.liftCo[TopLevelDeclaration]
     val envFrom = eqv.liftCo[Environment].flip
 
     val typedDeclarations = declarations.map(to.apply)
@@ -87,9 +88,8 @@ final case class Module[A](
       case Let(name, _, meta) =>
         List(name -> meta.name)
       case Data(_, _, cases, _) =>
-        cases.map {
-          case DataConstructor(caseName, _, caseMeta) =>
-            caseName -> caseMeta.name
+        cases.map { case DataConstructor(caseName, _, caseMeta) =>
+          caseName -> caseMeta.name
         }
     }
 
@@ -104,9 +104,8 @@ final case class Module[A](
       case Let(name, _, meta) =>
         List(name -> meta.typ)
       case Data(_, _, cases, _) =>
-        cases.map {
-          case DataConstructor(name, _, meta) =>
-            name -> meta.typ
+        cases.map { case DataConstructor(name, _, meta) =>
+          name -> meta.typ
         }
     }
 
@@ -144,9 +143,8 @@ final case class Module[A](
         List.empty
     }
 
-    val kinds = typedDeclarations.collect {
-      case Data(name, _, _, meta) =>
-        name -> meta.typ.typ.kind
+    val kinds = typedDeclarations.collect { case Data(name, _, _, meta) =>
+      name -> meta.typ.typ.kind
     }
 
     val env = Environment.empty
@@ -193,15 +191,23 @@ object Module {
     }
   }
 
-  implicit val moduleSubstitutableTypes: Substitutable[TypeVariable, Type, Module[Meta.Typed]] = new Substitutable[TypeVariable, Type, Module[Meta.Typed]] {
-    def substitute(mod: Module[Meta.Typed], subst: Substitution[TypeVariable, Type]): Module[Meta.Typed] =
-      mod.substitute(subst.subst)
-  }
+  implicit val moduleSubstitutableTypes: Substitutable[TypeVariable, Type, Module[Meta.Typed]] =
+    new Substitutable[TypeVariable, Type, Module[Meta.Typed]] {
+      def substitute(
+        mod: Module[Meta.Typed],
+        subst: Substitution[TypeVariable, Type]
+      ): Module[Meta.Typed] =
+        mod.substitute(subst.subst)
+    }
 
-  implicit val moduleSubstitutableKinds: Substitutable[KindVariable, Kind, Module[Meta.Typed]] = new Substitutable[KindVariable, Kind, Module[Meta.Typed]] {
-    def substitute(mod: Module[Meta.Typed], subst: Substitution[KindVariable, Kind]): Module[Meta.Typed] =
-      mod.substituteKinds(subst.subst)
-  }
+  implicit val moduleSubstitutableKinds: Substitutable[KindVariable, Kind, Module[Meta.Typed]] =
+    new Substitutable[KindVariable, Kind, Module[Meta.Typed]] {
+      def substitute(
+        mod: Module[Meta.Typed],
+        subst: Substitution[KindVariable, Kind]
+      ): Module[Meta.Typed] =
+        mod.substituteKinds(subst.subst)
+    }
 
   implicit val moduleCodec: Codec[Module[Meta.Typed]] = deriveCodec[Module[Meta.Typed]]
 }

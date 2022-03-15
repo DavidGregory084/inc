@@ -2,24 +2,50 @@ package inc.codegen
 
 import cats.syntax.either._
 import inc.common._
-import inc.rts.{ Unit => IncUnit }
-import java.lang.{ Class, Object, String }
-import java.lang.invoke.{ CallSite, LambdaMetafactory, MethodType, MethodHandle, MethodHandles }
-import org.objectweb.asm.{ Attribute, ByteVector, ClassReader, ClassVisitor, ClassWriter, Label, Handle, Type => AsmType }
+import inc.rts.{Unit => IncUnit}
+import org.objectweb.asm.Attribute
+import org.objectweb.asm.ByteVector
+import org.objectweb.asm.ClassReader
+import org.objectweb.asm.ClassVisitor
+import org.objectweb.asm.ClassWriter
+import org.objectweb.asm.Handle
+import org.objectweb.asm.Label
 import org.objectweb.asm.Opcodes._
+import org.objectweb.asm.commons.GeneratorAdapter
 import org.objectweb.asm.commons.Method
 import org.objectweb.asm.util.CheckClassAdapter
-import scala.{ Array, Byte, Char, Int, Unit }
-import scala.collection.immutable.List
+import org.objectweb.asm.{Type => AsmType}
+
+import java.lang.Class
+import java.lang.IllegalStateException
+import java.lang.Object
+import java.lang.String
+import java.lang.invoke.CallSite
+import java.lang.invoke.LambdaMetafactory
+import java.lang.invoke.MethodHandle
+import java.lang.invoke.MethodHandles
+import java.lang.invoke.MethodType
+import scala.Array
+import scala.Byte
+import scala.Char
+import scala.Int
 import scala.Predef.classOf
-import org.objectweb.asm.commons.GeneratorAdapter
+import scala.Unit
+import scala.collection.immutable.List
 
 object Asm {
   case class InterfaceAttribute(buffer: Array[Byte]) extends Attribute("IncInterface") {
-    override def read(classReader: ClassReader, offset: Int, length: Int, charBuffer: Array[Char], codeAttributeOffset: Int, labels: Array[Label]) = {
+    override def read(
+      classReader: ClassReader,
+      offset: Int,
+      length: Int,
+      charBuffer: Array[Char],
+      codeAttributeOffset: Int,
+      labels: Array[Label]
+    ) = {
       var readOffset = offset
-      var bytesRead = 0
-      val attrBytes = new Array[Byte](length)
+      var bytesRead  = 0
+      val attrBytes  = new Array[Byte](length)
       while (readOffset < (offset + length)) {
         attrBytes(bytesRead) = classReader.readByte(readOffset).toByte
         readOffset += 1
@@ -27,7 +53,13 @@ object Asm {
       }
       InterfaceAttribute(attrBytes)
     }
-    override def write(classWriter: ClassWriter, code: Array[Byte], codeLength: Int, maxStack: Int, maxLocals: Int): ByteVector = {
+    override def write(
+      classWriter: ClassWriter,
+      code: Array[Byte],
+      codeLength: Int,
+      maxStack: Int,
+      maxLocals: Int
+    ): ByteVector = {
       val byteVector = new ByteVector(buffer.length)
       byteVector.putByteArray(buffer, 0, buffer.length)
       byteVector
@@ -43,18 +75,20 @@ object Asm {
 
   val InterfaceAttributePrototype = InterfaceAttribute(Array.empty)
 
-  val BootstrapMethodDescriptor = MethodType.methodType(
-    // Return type
-    classOf[CallSite],
-    // Stacked by the VM
-    classOf[MethodHandles.Lookup], // caller
-    classOf[String],               // invokedName
-    classOf[MethodType],           // invokedType
-    // Must be provided
-    classOf[MethodType],           // samMethodType
-    classOf[MethodHandle],         // implMethod
-    classOf[MethodType]            // instantiatedMethodType
-  ).toMethodDescriptorString()
+  val BootstrapMethodDescriptor = MethodType
+    .methodType(
+      // Return type
+      classOf[CallSite],
+      // Stacked by the VM
+      classOf[MethodHandles.Lookup], // caller
+      classOf[String],               // invokedName
+      classOf[MethodType],           // invokedType
+      // Must be provided
+      classOf[MethodType],   // samMethodType
+      classOf[MethodHandle], // implMethod
+      classOf[MethodType]    // instantiatedMethodType
+    )
+    .toMethodDescriptorString()
 
   val BootstrapMethodHandle = new Handle(
     H_INVOKESTATIC,
@@ -65,10 +99,10 @@ object Asm {
   )
 
   def methodHandle(classEnv: ClassEnvironment, meta: Meta.Typed): Handle = {
-    val name = memberName(meta.name)
+    val name                  = memberName(meta.name)
     val Type.Function(tpArgs) = meta.typ.typ
-    val methodTypeArgs = tpArgs.map(Asm.asmType(classEnv, _))
-    val methodType = AsmType.getMethodType(methodTypeArgs.last, methodTypeArgs.init: _*)
+    val methodTypeArgs        = tpArgs.map(Asm.asmType(classEnv, _))
+    val methodType            = AsmType.getMethodType(methodTypeArgs.last, methodTypeArgs.init: _*)
     new Handle(
       H_INVOKESTATIC,
       moduleName(classEnv, meta.name),
@@ -147,16 +181,16 @@ object Asm {
   }
 
   def functionClass(arity: Int): Class[_] = arity match {
-    case 0 => classOf[inc.rts.Function0[_]]
-    case 1 => classOf[inc.rts.Function1[_, _]]
-    case 2 => classOf[inc.rts.Function2[_, _, _]]
-    case 3 => classOf[inc.rts.Function3[_, _, _, _]]
-    case 4 => classOf[inc.rts.Function4[_, _, _, _, _]]
-    case 5 => classOf[inc.rts.Function5[_, _, _, _, _, _]]
-    case 6 => classOf[inc.rts.Function6[_, _, _, _, _, _, _]]
-    case 7 => classOf[inc.rts.Function7[_, _, _, _, _, _, _, _]]
-    case 8 => classOf[inc.rts.Function8[_, _, _, _, _, _, _, _, _]]
-    case 9 => classOf[inc.rts.Function9[_, _, _, _, _, _, _, _, _, _]]
+    case 0  => classOf[inc.rts.Function0[_]]
+    case 1  => classOf[inc.rts.Function1[_, _]]
+    case 2  => classOf[inc.rts.Function2[_, _, _]]
+    case 3  => classOf[inc.rts.Function3[_, _, _, _]]
+    case 4  => classOf[inc.rts.Function4[_, _, _, _, _]]
+    case 5  => classOf[inc.rts.Function5[_, _, _, _, _, _]]
+    case 6  => classOf[inc.rts.Function6[_, _, _, _, _, _, _]]
+    case 7  => classOf[inc.rts.Function7[_, _, _, _, _, _, _, _]]
+    case 8  => classOf[inc.rts.Function8[_, _, _, _, _, _, _, _, _]]
+    case 9  => classOf[inc.rts.Function9[_, _, _, _, _, _, _, _, _, _]]
     case 10 => classOf[inc.rts.Function10[_, _, _, _, _, _, _, _, _, _, _]]
     case 11 => classOf[inc.rts.Function11[_, _, _, _, _, _, _, _, _, _, _, _]]
     case 12 => classOf[inc.rts.Function12[_, _, _, _, _, _, _, _, _, _, _, _, _]]
@@ -166,10 +200,16 @@ object Asm {
     case 16 => classOf[inc.rts.Function16[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]]
     case 17 => classOf[inc.rts.Function17[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]]
     case 18 => classOf[inc.rts.Function18[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]]
-    case 19 => classOf[inc.rts.Function19[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]]
-    case 20 => classOf[inc.rts.Function20[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]]
-    case 21 => classOf[inc.rts.Function21[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]]
-    case 22 => classOf[inc.rts.Function22[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]]
+    case 19 =>
+      classOf[inc.rts.Function19[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]]
+    case 20 =>
+      classOf[inc.rts.Function20[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]]
+    case 21 =>
+      classOf[inc.rts.Function21[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]]
+    case 22 =>
+      classOf[
+        inc.rts.Function22[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]
+      ]
   }
 
   def boxedAsmType(classEnv: ClassEnvironment, typ: Type): AsmType = {
@@ -201,6 +241,8 @@ object Asm {
         AsmType.getType(classOf[Object])
       case NamedTypeVariable(_, _) =>
         AsmType.getType(classOf[Object])
+      case ErrorType =>
+        throw new IllegalStateException("Error type found in codegen")
     }
   }
 
@@ -233,6 +275,8 @@ object Asm {
         AsmType.getType(classOf[Object])
       case NamedTypeVariable(_, _) =>
         AsmType.getType(classOf[Object])
+      case ErrorType =>
+        throw new IllegalStateException("Error type found in codegen")
     }
   }
 
@@ -243,14 +287,21 @@ object Asm {
       asmType(classEnv, typ.typ)
   }
 
-  def staticField[A](classEnv: ClassEnvironment, fieldName: String, fieldType: AsmType, initValue: A = null): Generate[Unit] = {
-    classEnv.moduleWriter.visitField(
-      ACC_PUBLIC + ACC_STATIC + ACC_FINAL,
-      fieldName,
-      fieldType.getDescriptor(),
-      null,
-      initValue
-    ).visitEnd()
+  def staticField[A](
+    classEnv: ClassEnvironment,
+    fieldName: String,
+    fieldType: AsmType,
+    initValue: A = null
+  ): Generate[Unit] = {
+    classEnv.moduleWriter
+      .visitField(
+        ACC_PUBLIC + ACC_STATIC + ACC_FINAL,
+        fieldName,
+        fieldType.getDescriptor(),
+        null,
+        initValue
+      )
+      .visitEnd()
 
     ().asRight
   }
@@ -260,15 +311,17 @@ object Asm {
     fieldName: String,
     fieldType: AsmType,
     refMod: AsmType,
-    refName: String,
+    refName: String
   ): Generate[Unit] = {
-    classEnv.moduleWriter.visitField(
-      ACC_PUBLIC + ACC_STATIC + ACC_FINAL,
-      fieldName,
-      fieldType.getDescriptor(),
-      null,
-      null
-    ).visitEnd()
+    classEnv.moduleWriter
+      .visitField(
+        ACC_PUBLIC + ACC_STATIC + ACC_FINAL,
+        fieldName,
+        fieldType.getDescriptor(),
+        null,
+        null
+      )
+      .visitEnd()
 
     classEnv.methodWriter.getStatic(refMod, refName, fieldType)
     classEnv.methodWriter.putStatic(asmType(classEnv, classEnv.module.meta), fieldName, fieldType)
@@ -306,18 +359,23 @@ object Asm {
     generatorAdapter
   }
 
-  def addDataConstructorFunction(classEnv: ClassEnvironment, data: Data[Meta.Typed], constr: DataConstructor[Meta.Typed]): Unit = {
+  def addDataConstructorFunction(
+    classEnv: ClassEnvironment,
+    data: Data[Meta.Typed],
+    constr: DataConstructor[Meta.Typed]
+  ): Unit = {
     val dataInternalName = Asm.internalName(data)
-    val dataAsmType = AsmType.getObjectType(dataInternalName)
+    val dataAsmType      = AsmType.getObjectType(dataInternalName)
 
-    val constrInternalName = Asm.internalName(constr)
-    val constrAsmType = AsmType.getObjectType(constrInternalName)
+    val constrInternalName  = Asm.internalName(constr)
+    val constrAsmType       = AsmType.getObjectType(constrInternalName)
     val constrParamAsmTypes = constr.params.map(param => Asm.asmType(classEnv, param.meta.typ.typ))
     val constrDescriptor = AsmType.getMethodDescriptor(AsmType.VOID_TYPE, constrParamAsmTypes: _*)
 
-    val methodType = AsmType.getMethodType(dataAsmType, constrParamAsmTypes: _*)
+    val methodType      = AsmType.getMethodType(dataAsmType, constrParamAsmTypes: _*)
     val methodSignature = JavaSignature.forMethod(classEnv, constr.meta.typ)
-    val methodWriter = Asm.staticMethod(classEnv, constr.name, methodType, methodSignature, ACC_PUBLIC + ACC_STATIC)
+    val methodWriter =
+      Asm.staticMethod(classEnv, constr.name, methodType, methodSignature, ACC_PUBLIC + ACC_STATIC)
 
     constr.params.foreach { param =>
       methodWriter.visitParameter(param.name, ACC_FINAL)
@@ -328,8 +386,8 @@ object Asm {
     methodWriter.newInstance(constrAsmType)
     methodWriter.dup()
 
-    constr.params.zipWithIndex.foreach {
-      case (_, idx) => methodWriter.loadArg(idx)
+    constr.params.zipWithIndex.foreach { case (_, idx) =>
+      methodWriter.loadArg(idx)
     }
 
     methodWriter.invokeConstructor(constrAsmType, new Method("<init>", constrDescriptor))
@@ -338,28 +396,40 @@ object Asm {
     methodWriter.endMethod()
   }
 
-  def addDataField(classEnv: ClassEnvironment, parent: Data[Meta.Typed], constrWriter: ClassWriter, param: Param[Meta.Typed]) = {
-    val paramType = param.meta.typ.typ
+  def addDataField(
+    classEnv: ClassEnvironment,
+    parent: Data[Meta.Typed],
+    constrWriter: ClassWriter,
+    param: Param[Meta.Typed]
+  ) = {
+    val paramType    = param.meta.typ.typ
     val paramAsmType = Asm.asmType(classEnv, paramType)
     // Check whether any type parameters appear in the field's type
     val paramGeneric = parent.meta.typ.bound.exists(_.occursIn(paramType))
     // Only fields with parametric types need a signature
     val paramSignature = if (paramGeneric) JavaSignature.forType(classEnv, paramType) else null
-    constrWriter.visitField(
-      ACC_PUBLIC + ACC_FINAL,
-      param.name,
-      paramAsmType.getDescriptor(),
-      paramSignature,
-      null
-    ).visitEnd()
+    constrWriter
+      .visitField(
+        ACC_PUBLIC + ACC_FINAL,
+        param.name,
+        paramAsmType.getDescriptor(),
+        paramSignature,
+        null
+      )
+      .visitEnd()
   }
 
-  def addDataConstructor(classEnv: ClassEnvironment, parent: Data[Meta.Typed], constr: DataConstructor[Meta.Typed], constrWriter: ClassWriter): Unit = {
+  def addDataConstructor(
+    classEnv: ClassEnvironment,
+    parent: Data[Meta.Typed],
+    constr: DataConstructor[Meta.Typed],
+    constrWriter: ClassWriter
+  ): Unit = {
 
     val Type.Function(constrFnArgs) = constr.meta.typ.typ
-    val constrFnAsmTypes = constrFnArgs.init.map(asmType(classEnv, _))
+    val constrFnAsmTypes            = constrFnArgs.init.map(asmType(classEnv, _))
     val constrDescriptor = AsmType.getMethodDescriptor(AsmType.VOID_TYPE, constrFnAsmTypes: _*)
-    val constrSignature = JavaSignature.forJavaConstructor(classEnv, constr.meta.typ.typ)
+    val constrSignature  = JavaSignature.forJavaConstructor(classEnv, constr.meta.typ.typ)
 
     val gen = new GeneratorAdapter(
       ACC_PUBLIC,
@@ -371,7 +441,7 @@ object Asm {
 
     // The parent constructor is a nullary void method
     val voidMethodDescriptor = AsmType.getMethodDescriptor(AsmType.VOID_TYPE)
-    val parentType = AsmType.getObjectType(Asm.internalName(parent))
+    val parentType           = AsmType.getObjectType(Asm.internalName(parent))
 
     // Call the parent constructor
     gen.loadThis()
@@ -382,13 +452,12 @@ object Asm {
     }
 
     // Put each constructor argument into its corresponding field
-    constr.params.zipWithIndex.foreach {
-      case (param, idx) =>
-        val constrType = AsmType.getObjectType(Asm.internalName(constr))
-        val paramType = Asm.asmType(classEnv, param.meta.typ.typ)
-        gen.loadThis()
-        gen.loadArg(idx)
-        gen.putField(constrType, param.name, paramType)
+    constr.params.zipWithIndex.foreach { case (param, idx) =>
+      val constrType = AsmType.getObjectType(Asm.internalName(constr))
+      val paramType  = Asm.asmType(classEnv, param.meta.typ.typ)
+      gen.loadThis()
+      gen.loadArg(idx)
+      gen.putField(constrType, param.name, paramType)
     }
 
     gen.returnValue()
@@ -397,18 +466,18 @@ object Asm {
 
   def visitLocals(classEnv: ClassEnvironment): Unit = {
     classEnv.localVars.toList
-      .sortBy {
-        case (_, local) => local.varIndex
-      }.foreach {
-        case (name, LocalVar(idx, desc, sig, start, end)) =>
-          classEnv.methodWriter.visitLocalVariable(
-            name.shortName,
-            desc,
-            sig,
-            start,
-            end,
-            idx
-          )
+      .sortBy { case (_, local) =>
+        local.varIndex
+      }
+      .foreach { case (name, LocalVar(idx, desc, sig, start, end)) =>
+        classEnv.methodWriter.visitLocalVariable(
+          name.shortName,
+          desc,
+          sig,
+          start,
+          end,
+          idx
+        )
       }
   }
 
@@ -437,7 +506,7 @@ object Asm {
     constr: DataConstructor[Meta.Typed]
   ): ClassWriter = {
     val constrClassWriter = new ClassWriter(ClassWriter.COMPUTE_FRAMES)
-    val constrSignature = JavaSignature.forDataConstructor(parent)
+    val constrSignature   = JavaSignature.forDataConstructor(parent)
 
     constrClassWriter.visit(
       V1_8,
@@ -453,7 +522,7 @@ object Asm {
 
   def dataWriter(data: Data[Meta.Typed]): ClassWriter = {
     val dataClassWriter = new ClassWriter(ClassWriter.COMPUTE_FRAMES)
-    val dataSignature = JavaSignature.forDataDeclaration(data)
+    val dataSignature   = JavaSignature.forDataDeclaration(data)
 
     dataClassWriter.visit(
       V1_8,

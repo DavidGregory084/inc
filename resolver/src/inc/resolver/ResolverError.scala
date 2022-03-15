@@ -1,40 +1,58 @@
 package inc.resolver
 
-import inc.common.{ Error, Pos, Name }
-import java.lang.String
-import scala.{ Either, Left, Nothing, StringContext }
-import scala.collection.immutable.List
 import inc.common.ConstrName
 import inc.common.DataName
-import inc.common.MemberName
+import inc.common.Error
 import inc.common.LocalName
-import inc.common.NoName
+import inc.common.MemberName
 import inc.common.ModuleName
+import inc.common.Name
+import inc.common.NoName
+import inc.common.Pos
+
+import java.lang.String
+import scala.Either
+import scala.Left
+import scala.Nothing
+import scala.StringContext
+import scala.collection.immutable.List
 
 sealed abstract class ResolverError(private val position: Pos) extends Error(position)
 
-case class UnknownMemberError(position: Pos, constr: String, member: String)(implicit file: sourcecode.File, line: sourcecode.Line) extends ResolverError(position) {
+case class UnknownMemberError(position: Pos, constr: String, member: String)(implicit
+  file: sourcecode.File,
+  line: sourcecode.Line
+) extends ResolverError(position) {
   val message: String = {
     val msg = s"Constructor ${constr} has no member ${member}"
     Error.formatMessage(file, line, msg)
   }
 }
 
-case class UnknownConstructorError(position: Pos, name: String)(implicit file: sourcecode.File, line: sourcecode.Line) extends ResolverError(position) {
+case class UnknownConstructorError(position: Pos, name: String)(implicit
+  file: sourcecode.File,
+  line: sourcecode.Line
+) extends ResolverError(position) {
   val message: String = {
     val msg = s"Reference to unknown constructor: ${name}"
     Error.formatMessage(file, line, msg)
   }
 }
 
-case class UndefinedSymbolError(position: Pos, name: String)(implicit file: sourcecode.File, line: sourcecode.Line) extends ResolverError(position) {
+case class UndefinedSymbolError(position: Pos, name: String)(implicit
+  file: sourcecode.File,
+  line: sourcecode.Line
+) extends ResolverError(position) {
   val message: String = {
     val msg = s"Reference to undefined symbol: ${name}"
     Error.formatMessage(file, line, msg)
   }
 }
 
-case class AlreadyDefinedSymbolError(position: Pos, name: String, existing: Name)(implicit file: sourcecode.File, line: sourcecode.Line) extends ResolverError(position) {
+case class AlreadyDefinedSymbolError(position: Pos, name: String, existing: Name)(implicit
+  file: sourcecode.File,
+  line: sourcecode.Line
+) extends ResolverError(position) {
   val message: String = {
     val msg = s"Symbol ${name} is already defined as ${ResolverError.formatName(existing)}"
     Error.formatMessage(file, line, msg)
@@ -62,14 +80,29 @@ object ResolverError {
       "<empty>"
   }
 
-  def unknownMember(pos: Pos, constr: String, member: String)(implicit file: sourcecode.File, line: sourcecode.Line): Either[List[ResolverError], Nothing] =
+  def unknownMember(pos: Pos, constr: String, member: String)(implicit
+    file: sourcecode.File,
+    line: sourcecode.Line
+  ): Either[List[ResolverError], Nothing] =
     Left(List(UnknownMemberError(pos, constr, member)))
-  def unknownConstructor(pos: Pos, name: String)(implicit file: sourcecode.File, line: sourcecode.Line): Either[List[ResolverError], Nothing] =
+  def unknownConstructor(pos: Pos, name: String)(implicit
+    file: sourcecode.File,
+    line: sourcecode.Line
+  ): Either[List[ResolverError], Nothing] =
     Left(List(UnknownConstructorError(pos, name)))
-  def undefined(pos: Pos, name: String)(implicit file: sourcecode.File, line: sourcecode.Line): Either[List[ResolverError], Nothing] =
+  def undefined(pos: Pos, name: String)(implicit
+    file: sourcecode.File,
+    line: sourcecode.Line
+  ): Either[List[ResolverError], Nothing] =
     Left(List(UndefinedSymbolError(pos, name)))
-  def alreadyDefined(pos: Pos, name: String, existing: Name)(implicit file: sourcecode.File, line: sourcecode.Line): Either[List[ResolverError], Nothing] =
+  def alreadyDefined(pos: Pos, name: String, existing: Name)(implicit
+    file: sourcecode.File,
+    line: sourcecode.Line
+  ): Either[List[ResolverError], Nothing] =
     Left(List(AlreadyDefinedSymbolError(pos, name, existing)))
-  def generic(pos: Pos, msg: String)(implicit file: sourcecode.File, line: sourcecode.Line): Either[List[ResolverError], Nothing] =
+  def generic(pos: Pos, msg: String)(implicit
+    file: sourcecode.File,
+    line: sourcecode.Line
+  ): Either[List[ResolverError], Nothing] =
     Left(List(GenericError(pos, Error.formatMessage(file, line, msg))))
 }

@@ -1,12 +1,13 @@
 package inc.typechecker
 
 import inc.common._
+
 import scala.Either
 
 object Typechecker {
   def typecheck(
     module: Module[Meta.Untyped],
-    importedEnv: Environment[Meta.Typed],
+    importedEnv: Environment[Meta.Typed]
   ): Infer[Module[Meta.Typed]] = {
     // Gather type constraints from the module's definitions
     val (typedMod, Gather.State(env, gatherErrors, constraints)) =
@@ -17,7 +18,7 @@ object Typechecker {
       Solve.solve(env, constraints.toList)
 
     // Ensure any unsolved kind variables are defaulted to *
-    val defaultedMod = typedMod.defaultKinds
+    val defaultedMod   = typedMod.defaultKinds
     val defaultedSubst = subst.defaultKinds
 
     // Apply the substition from the constraint solution to the module

@@ -1,12 +1,13 @@
 package inc.typechecker
 
+import cats.Monoid
+import cats.data.Chain
+import cats.syntax.monoid._
 import inc.common._
 
-import cats.Monoid
-import cats.syntax.monoid._
-import scala.collection.immutable.{ List, Map }
 import scala.Predef.ArrowAssoc
-import cats.data.Chain
+import scala.collection.immutable.List
+import scala.collection.immutable.Map
 
 object Solve {
   type Subst = Substitution[TypeVariable, Type]
@@ -48,10 +49,10 @@ object Solve {
       case t if tyVar.occursIn(t) =>
         State.empty.withError(TypeError.typeOccursCheck(pos, tyVar, typ))
       case t if tyVar.kind != t.kind =>
-        val kindState = Kindchecker.unify(env, tyVar.kind, t.kind, pos)
+        val kindState    = Kindchecker.unify(env, tyVar.kind, t.kind, pos)
         val updatedTyVar = tyVar.substituteKinds(kindState.subst.subst)
-        val updatedTyp = t.substituteKinds(kindState.subst.subst)
-        val newSubst = Substitution(Map(updatedTyVar -> updatedTyp))
+        val updatedTyp   = t.substituteKinds(kindState.subst.subst)
+        val newSubst     = Substitution(Map(updatedTyVar -> updatedTyp))
         State.empty.withSubst(newSubst).withErrors(kindState.errors)
       case _ =>
         State.empty.withSubst(Substitution(Map(tyVar -> typ)))
@@ -65,13 +66,12 @@ object Solve {
           State.empty.withError(TypeError.typeUnification(pos, left, right))
 
         case (TypeApply(ltyp, largs, _), TypeApply(rtyp, rargs, _)) =>
-            val tyConState = unify(env, ltyp, rtyp, pos)
+          val tyConState = unify(env, ltyp, rtyp, pos)
 
-            largs.zip(rargs).foldLeft(tyConState) {
-              case (stateSoFar, (ll, rr)) =>
-                val argState = unify(env, stateSoFar.subst(ll), stateSoFar.subst(rr), pos)
-                stateSoFar |+| argState
-            }
+          largs.zip(rargs).foldLeft(tyConState) { case (stateSoFar, (ll, rr)) =>
+            val argState = unify(env, stateSoFar.subst(ll), stateSoFar.subst(rr), pos)
+            stateSoFar |+| argState
+          }
 
         case (TypeConstructor(l, _), TypeConstructor(r, _)) if l == r =>
           State.empty
@@ -103,7 +103,7 @@ object Solve {
         currentState
       case (currentState, nextConstraint) =>
         val EqualType(l, r, pos) = currentState.subst(nextConstraint)
-        val newState = unify(env, l, r, pos)
+        val newState             = unify(env, l, r, pos)
         currentState |+| newState
     }
   }

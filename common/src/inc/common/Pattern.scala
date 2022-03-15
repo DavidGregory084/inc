@@ -4,10 +4,15 @@ import cats.Functor
 import cats.syntax.functor._
 import io.bullet.borer.Codec
 import io.bullet.borer.derivation.ArrayBasedCodecs._
+
 import java.lang.String
-import scala.{ Boolean, Option, =:= }
-import scala.collection.immutable.{ List, Map, Set }
+import scala.=:=
+import scala.Boolean
+import scala.Option
 import scala.Predef.augmentString
+import scala.collection.immutable.List
+import scala.collection.immutable.Map
+import scala.collection.immutable.Set
 
 sealed abstract class Pattern[A] extends SyntaxTree[A] {
   def meta: A
@@ -50,10 +55,10 @@ sealed abstract class Pattern[A] extends SyntaxTree[A] {
   }
 }
 
-
 case class IdentPattern[A](name: String, meta: A) extends Pattern[A]
 
-case class FieldPattern[A](name: String, pattern: Option[Pattern[A]], meta: A) extends SyntaxTree[A] {
+case class FieldPattern[A](name: String, pattern: Option[Pattern[A]], meta: A)
+  extends SyntaxTree[A] {
   def boundVariables(implicit eqv: A =:= Meta.Typed): Set[Name] =
     pattern.toList.flatMap(_.boundVariables).toSet
 
@@ -66,7 +71,9 @@ case class FieldPattern[A](name: String, pattern: Option[Pattern[A]], meta: A) e
     }
   }
 
-  def substituteKinds(subst: Map[KindVariable, Kind])(implicit to: A =:= Meta.Typed): FieldPattern[A] = {
+  def substituteKinds(
+    subst: Map[KindVariable, Kind]
+  )(implicit to: A =:= Meta.Typed): FieldPattern[A] = {
     if (subst.isEmpty)
       this
     else {
@@ -89,10 +96,16 @@ object FieldPattern {
     }
   }
 
-  implicit val fieldPatternCodec: Codec[FieldPattern[Meta.Typed]] = deriveCodec[FieldPattern[Meta.Typed]]
+  implicit val fieldPatternCodec: Codec[FieldPattern[Meta.Typed]] =
+    deriveCodec[FieldPattern[Meta.Typed]]
 }
 
-case class ConstrPattern[A](name: String, alias: Option[String], patterns: List[FieldPattern[A]], meta: A) extends Pattern[A]
+case class ConstrPattern[A](
+  name: String,
+  alias: Option[String],
+  patterns: List[FieldPattern[A]],
+  meta: A
+) extends Pattern[A]
 
 object Pattern {
   implicit val patternFunctor: Functor[Pattern] = new Functor[Pattern] {
@@ -100,9 +113,7 @@ object Pattern {
       case ident @ IdentPattern(_, _) =>
         ident.copy(meta = f(ident.meta))
       case constr @ ConstrPattern(_, _, _, _) =>
-        constr.copy(
-          patterns = constr.patterns.map(_.map(f)),
-          meta = f(constr.meta))
+        constr.copy(patterns = constr.patterns.map(_.map(f)), meta = f(constr.meta))
     }
   }
 

@@ -1,18 +1,22 @@
 package inc.common
 
 import cats.Monoid
+
 import java.lang.String
-import scala.{ =:=, Boolean, Nothing }
-import scala.collection.Iterable
-import scala.collection.immutable.{ List, Map }
+import scala.=:=
+import scala.Boolean
+import scala.Nothing
 import scala.Predef.ArrowAssoc
+import scala.collection.Iterable
+import scala.collection.immutable.List
+import scala.collection.immutable.Map
 
 case class Environment[A](
   valueNames: Map[String, Name] = Map.empty,
   typeNames: Map[String, Name] = Map.empty,
   types: Map[String, TypeScheme] = Map.empty,
   kinds: Map[String, Kind] = Map.empty,
-  members: Map[Name, List[A]] = Map.empty[Name, List[A]],
+  members: Map[Name, List[A]] = Map.empty[Name, List[A]]
 ) {
   def withValueName(name: String, fullName: Name) =
     copy(valueNames = valueNames.updated(name, fullName))
@@ -48,10 +52,9 @@ case class Environment[A](
       members.map { case (nm, mbrs) =>
         nm -> mbrs.map { m =>
           val typedMeta = eqv(m)
-          typedMeta.copy(
-            typ = typedMeta.typ.prefixed(prefix))
+          typedMeta.copy(typ = typedMeta.typ.prefixed(prefix))
         }
-      },
+      }
     )
   }
 
@@ -65,7 +68,7 @@ case class Environment[A](
       typeNames ++ env.typeNames,
       types ++ env.types,
       kinds ++ env.kinds,
-      members ++ env.members,
+      members ++ env.members
     )
   }
 
@@ -75,7 +78,7 @@ case class Environment[A](
       typeNames.view.filterKeys(pred).toMap,
       types.view.filterKeys(pred).toMap,
       kinds.view.filterKeys(pred).toMap,
-      members,
+      members
     )
   }
 
@@ -84,19 +87,25 @@ case class Environment[A](
     Environment(valueNames, typeNames, types, kinds, untypedMembers)
   }
 
-  def substituteTypes(subst: Map[TypeVariable, Type])(implicit to: A =:= Meta.Typed): Environment[A] = {
+  def substituteTypes(
+    subst: Map[TypeVariable, Type]
+  )(implicit to: A =:= Meta.Typed): Environment[A] = {
     val from = to.flip
     copy(
       types = types.view.mapValues(_.substitute(subst)).toMap,
-      members = members.view.mapValues(_.map(meta => from(meta.substitute(subst)))).toMap)
+      members = members.view.mapValues(_.map(meta => from(meta.substitute(subst)))).toMap
+    )
   }
 
-  def substituteKinds(subst: Map[KindVariable, Kind])(implicit to: A =:= Meta.Typed): Environment[A] = {
+  def substituteKinds(
+    subst: Map[KindVariable, Kind]
+  )(implicit to: A =:= Meta.Typed): Environment[A] = {
     val from = to.flip
     copy(
       types = types.view.mapValues(_.substituteKinds(subst)).toMap,
       kinds = kinds.view.mapValues(_.substitute(subst)).toMap,
-      members = members.view.mapValues(_.map(meta => from(meta.substituteKinds(subst)))).toMap)
+      members = members.view.mapValues(_.map(meta => from(meta.substituteKinds(subst)))).toMap
+    )
   }
 
   def defaultKinds(implicit to: A =:= Meta.Typed): Environment[A] = {
@@ -104,7 +113,8 @@ case class Environment[A](
     copy(
       types = types.view.mapValues(_.defaultKinds).toMap,
       kinds = kinds.view.mapValues(_.default).toMap,
-      members = members.view.mapValues(_.map(meta => from(meta.defaultKinds))).toMap)
+      members = members.view.mapValues(_.map(meta => from(meta.defaultKinds))).toMap
+    )
   }
 }
 
@@ -125,7 +135,7 @@ object Environment {
     Empty.asInstanceOf[Environment[A]]
 
   implicit def environmentMonoid[A]: Monoid[Environment[A]] = new Monoid[Environment[A]] {
-    def empty: Environment[A] = Environment.empty
+    def empty: Environment[A]                                         = Environment.empty
     def combine(l: Environment[A], r: Environment[A]): Environment[A] = l ++ r
   }
 }

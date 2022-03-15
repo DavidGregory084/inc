@@ -4,10 +4,12 @@ import cats.Functor
 import cats.syntax.functor._
 import io.bullet.borer.Codec
 import io.bullet.borer.derivation.ArrayBasedCodecs._
+
 import java.lang.String
 import scala.=:=
-import scala.collection.immutable.{ List, Map }
 import scala.Predef.augmentString
+import scala.collection.immutable.List
+import scala.collection.immutable.Map
 
 sealed abstract class TopLevelDeclaration[A] extends SyntaxTree[A] {
   def name: String
@@ -16,7 +18,9 @@ sealed abstract class TopLevelDeclaration[A] extends SyntaxTree[A] {
 
   def members: List[A]
 
-  def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= Meta.Typed): TopLevelDeclaration[A] = {
+  def substitute(
+    subst: Map[TypeVariable, Type]
+  )(implicit to: A =:= Meta.Typed): TopLevelDeclaration[A] = {
     if (subst.isEmpty)
       this
     else {
@@ -25,7 +29,9 @@ sealed abstract class TopLevelDeclaration[A] extends SyntaxTree[A] {
     }
   }
 
-  def substituteKinds(subst: Map[KindVariable, Kind])(implicit to: A =:= Meta.Typed): TopLevelDeclaration[A] = {
+  def substituteKinds(
+    subst: Map[KindVariable, Kind]
+  )(implicit to: A =:= Meta.Typed): TopLevelDeclaration[A] = {
     if (subst.isEmpty)
       this
     else {
@@ -41,33 +47,42 @@ sealed abstract class TopLevelDeclaration[A] extends SyntaxTree[A] {
 }
 
 object TopLevelDeclaration {
-  implicit val topLevelDeclarationFunctor: Functor[TopLevelDeclaration] = new Functor[TopLevelDeclaration] {
-    def map[A, B](ta: TopLevelDeclaration[A])(f: A => B): TopLevelDeclaration[B] = ta match {
-      case let @ Let(_, _, _) =>
-        let.copy(
-          binding = let.binding.map(f),
-          meta = f(let.meta))
-      case data @ Data(_, _, _, _) =>
-        data.copy(
-          typeParams = data.typeParams.map(_.map(f)),
-          cases = data.cases.map(_.map(f)),
-          meta = f(data.meta))
+  implicit val topLevelDeclarationFunctor: Functor[TopLevelDeclaration] =
+    new Functor[TopLevelDeclaration] {
+      def map[A, B](ta: TopLevelDeclaration[A])(f: A => B): TopLevelDeclaration[B] = ta match {
+        case let @ Let(_, _, _) =>
+          let.copy(binding = let.binding.map(f), meta = f(let.meta))
+        case data @ Data(_, _, _, _) =>
+          data.copy(
+            typeParams = data.typeParams.map(_.map(f)),
+            cases = data.cases.map(_.map(f)),
+            meta = f(data.meta)
+          )
+      }
     }
-  }
 
-  implicit val topLevelDeclarationSubstitutableTypes: Substitutable[TypeVariable, Type, TopLevelDeclaration[Meta.Typed]] =
+  implicit val topLevelDeclarationSubstitutableTypes
+    : Substitutable[TypeVariable, Type, TopLevelDeclaration[Meta.Typed]] =
     new Substitutable[TypeVariable, Type, TopLevelDeclaration[Meta.Typed]] {
-      def substitute(decl: TopLevelDeclaration[Meta.Typed], subst: Substitution[TypeVariable, Type]): TopLevelDeclaration[Meta.Typed] =
+      def substitute(
+        decl: TopLevelDeclaration[Meta.Typed],
+        subst: Substitution[TypeVariable, Type]
+      ): TopLevelDeclaration[Meta.Typed] =
         decl.substitute(subst.subst)
     }
 
-  implicit val topLevelDeclarationSubstitutableKinds: Substitutable[KindVariable, Kind, TopLevelDeclaration[Meta.Typed]] =
+  implicit val topLevelDeclarationSubstitutableKinds
+    : Substitutable[KindVariable, Kind, TopLevelDeclaration[Meta.Typed]] =
     new Substitutable[KindVariable, Kind, TopLevelDeclaration[Meta.Typed]] {
-      def substitute(decl: TopLevelDeclaration[Meta.Typed], subst: Substitution[KindVariable, Kind]): TopLevelDeclaration[Meta.Typed] =
+      def substitute(
+        decl: TopLevelDeclaration[Meta.Typed],
+        subst: Substitution[KindVariable, Kind]
+      ): TopLevelDeclaration[Meta.Typed] =
         decl.substituteKinds(subst.subst)
     }
 
-  implicit val topLevelDeclarationCodec: Codec[TopLevelDeclaration[Meta.Typed]] = deriveCodec[TopLevelDeclaration[Meta.Typed]]
+  implicit val topLevelDeclarationCodec: Codec[TopLevelDeclaration[Meta.Typed]] =
+    deriveCodec[TopLevelDeclaration[Meta.Typed]]
 }
 
 final case class DataConstructor[A](
@@ -75,7 +90,9 @@ final case class DataConstructor[A](
   params: List[Param[A]],
   meta: A
 ) extends SyntaxTree[A] {
-  def substitute(subst: Map[TypeVariable, Type])(implicit to: A =:= Meta.Typed): DataConstructor[A] = {
+  def substitute(
+    subst: Map[TypeVariable, Type]
+  )(implicit to: A =:= Meta.Typed): DataConstructor[A] = {
     if (subst.isEmpty)
       this
     else {
@@ -84,7 +101,9 @@ final case class DataConstructor[A](
     }
   }
 
-  def substituteKinds(subst: Map[KindVariable, Kind])(implicit to: A =:= Meta.Typed): DataConstructor[A] = {
+  def substituteKinds(
+    subst: Map[KindVariable, Kind]
+  )(implicit to: A =:= Meta.Typed): DataConstructor[A] = {
     if (subst.isEmpty)
       this
     else {
@@ -107,7 +126,8 @@ object DataConstructor {
     }
   }
 
-  implicit val dataConstructorCodec: Codec[DataConstructor[Meta.Typed]] = deriveCodec[DataConstructor[Meta.Typed]]
+  implicit val dataConstructorCodec: Codec[DataConstructor[Meta.Typed]] =
+    deriveCodec[DataConstructor[Meta.Typed]]
 }
 
 final case class Data[A](

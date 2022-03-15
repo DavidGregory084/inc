@@ -1,11 +1,15 @@
 package inc.codegen
 
 import inc.common._
-import java.lang.{ Object, String }
-import org.objectweb.asm.{ Type => AsmType }
-import org.objectweb.asm.signature.{ SignatureVisitor, SignatureWriter }
-import scala.Unit
+import org.objectweb.asm.signature.SignatureVisitor
+import org.objectweb.asm.signature.SignatureWriter
+import org.objectweb.asm.{Type => AsmType}
+
+import java.lang.IllegalStateException
+import java.lang.Object
+import java.lang.String
 import scala.Predef.classOf
+import scala.Unit
 
 object JavaSignature {
   def forDataConstructor(
@@ -60,7 +64,7 @@ object JavaSignature {
     classEnv: ClassEnvironment,
     typ: Type
   ): String = {
-    val visitor = new SignatureWriter
+    val visitor               = new SignatureWriter
     val Type.Function(params) = typ
 
     params.init.foreach { param =>
@@ -78,9 +82,9 @@ object JavaSignature {
     classEnv: ClassEnvironment,
     typ: TypeScheme
   ): String = {
-    val visitor = new SignatureWriter
+    val visitor               = new SignatureWriter
     val Type.Function(params) = typ.typ
-    val objectType = AsmType.getInternalName(classOf[Object])
+    val objectType            = AsmType.getInternalName(classOf[Object])
 
     typ.bound.foreach { tv =>
       visitor.visitFormalTypeParameter(tv.name)
@@ -145,6 +149,9 @@ object JavaSignature {
       }
 
       visitor.visitEnd()
+
+    case ErrorType =>
+      throw new IllegalStateException("Error type found in codegen")
   }
 
   def forType(classEnv: ClassEnvironment, typ: Type): String = {
@@ -216,5 +223,8 @@ object JavaSignature {
       }
 
       visitor.visitEnd()
+
+    case ErrorType =>
+      throw new IllegalStateException("Error type found in codegen")
   }
 }

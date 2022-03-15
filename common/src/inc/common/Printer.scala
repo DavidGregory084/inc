@@ -1,29 +1,35 @@
 package inc.common
 
 import org.typelevel.paiges._
-import scala.{ =:=, Boolean, Some, None, StringContext }
+
+import scala.=:=
+import scala.Boolean
+import scala.None
+import scala.Some
+import scala.StringContext
 
 object Printer {
-  private val White = Style.Ansi.Fg.White
+  private val White  = Style.Ansi.Fg.White
   private val Yellow = Style.Ansi.Fg.Yellow
-  private val Blue = Style.Ansi.Fg.Blue
+  private val Blue   = Style.Ansi.Fg.Blue
 
   def annotate(doc: Doc, typ: Type, annotated: Boolean): Doc = {
     if (annotated) {
-      val leftParen = Doc.char('(').style(Yellow)
+      val leftParen  = Doc.char('(').style(Yellow)
       val rightParen = Doc.char(')').style(Yellow)
-      val colon = Doc.char(':')
+      val colon      = Doc.char(':')
       val annotation = (colon & print(typ.kind)).style(Yellow)
       (doc + annotation).tightBracketBy(leftParen, rightParen)
     } else doc
   }
 
-  def annotate[A](doc: Doc, tree: SyntaxTree[A], annotated: Boolean)
-    (implicit eqv: A =:= Meta.Typed): Doc = {
+  def annotate[A](doc: Doc, tree: SyntaxTree[A], annotated: Boolean)(implicit
+    eqv: A =:= Meta.Typed
+  ): Doc = {
     if (annotated) {
-      val leftParen = Doc.char('(').style(Blue)
+      val leftParen  = Doc.char('(').style(Blue)
       val rightParen = Doc.char(')').style(Blue)
-      val colon = Doc.char(':').style(Blue)
+      val colon      = Doc.char(':').style(Blue)
       val annotation = colon & print(tree.meta.typ, annotated)
       (doc + annotation).tightBracketBy(leftParen, rightParen)
     } else doc
@@ -40,17 +46,21 @@ object Printer {
   }
 
   def printTypeSubst(subst: Substitution[TypeVariable, Type]): Doc = {
-    Doc.intercalate(Doc.hardLine, subst.subst.map {
-      case (tv, typ) =>
+    Doc.intercalate(
+      Doc.hardLine,
+      subst.subst.map { case (tv, typ) =>
         print(tv, true) + Doc.text(" \u21a6 ") + print(typ, true)
-    })
+      }
+    )
   }
 
   def printKindSubst(subst: Substitution[KindVariable, Kind]): Doc = {
-    Doc.intercalate(Doc.hardLine, subst.subst.map {
-      case (kv, kind) =>
+    Doc.intercalate(
+      Doc.hardLine,
+      subst.subst.map { case (kv, kind) =>
         print(kv) + Doc.text(" \u21a6 ") + print(kind)
-    })
+      }
+    )
   }
 
   def print(typ: Type, annotated: Boolean): Doc = {
@@ -77,19 +87,23 @@ object Printer {
           if (params.length == 2)
             withParens
           else {
-            Doc.intercalate(
-              Doc.char(',') + Doc.space,
-              params.init.map(print(_, annotated))
-            ).tightBracketBy(Doc.char('('), Doc.char(')'))
+            Doc
+              .intercalate(
+                Doc.char(',') + Doc.space,
+                params.init.map(print(_, annotated))
+              )
+              .tightBracketBy(Doc.char('('), Doc.char(')'))
           }
 
         paramDocs & Doc.text("->") & print(params.last, annotated)
 
       case TypeApply(typ, params, _) =>
-        print(typ, annotated) + Doc.intercalate(
-          Doc.char(',') + Doc.space,
-          params.map(print(_, annotated))
-        ).tightBracketBy(Doc.char('['), Doc.char(']'))
+        print(typ, annotated) + Doc
+          .intercalate(
+            Doc.char(',') + Doc.space,
+            params.map(print(_, annotated))
+          )
+          .tightBracketBy(Doc.char('['), Doc.char(']'))
 
       case ErrorType =>
         Doc.text("<error>")
@@ -102,7 +116,7 @@ object Printer {
     case Atomic =>
       Doc.char('*')
     case KindVariable(id) =>
-      Doc.text("K"+ id.toString)
+      Doc.text("K" + id.toString)
     case Parameterized(params, result) =>
       val withParens = params.headOption match {
         case Some(p @ Parameterized(_, _)) =>
@@ -117,7 +131,8 @@ object Printer {
         if (params.length == 1)
           withParens
         else
-          Doc.intercalate(Doc.char(',') + Doc.space, params.map(print))
+          Doc
+            .intercalate(Doc.char(',') + Doc.space, params.map(print))
             .tightBracketBy(Doc.char('('), Doc.char(')'))
 
       paramDocs & Doc.text("->") & print(result)
@@ -127,10 +142,12 @@ object Printer {
     if (typ.bound.isEmpty)
       print(typ.typ, annotated)
     else {
-      val bound = Doc.intercalate(
-        Doc.char(',') + Doc.space,
-        typ.bound.map(print(_, annotated))
-      ).tightBracketBy(Doc.char('['), Doc.char(']'))
+      val bound = Doc
+        .intercalate(
+          Doc.char(',') + Doc.space,
+          typ.bound.map(print(_, annotated))
+        )
+        .tightBracketBy(Doc.char('['), Doc.char(']'))
 
       val scheme = print(typ.typ, annotated)
         .bracketBy(Doc.char('{'), Doc.char('}'))
@@ -139,8 +156,7 @@ object Printer {
     }
   }
 
-  def print[A](expr: TypeExpr[A], annotated: Boolean)
-    (implicit eqv: A =:= Meta.Typed): Doc = {
+  def print[A](expr: TypeExpr[A], annotated: Boolean)(implicit eqv: A =:= Meta.Typed): Doc = {
     val tyExpDoc = expr match {
       case TypeApplyExpr(typ, args, _) if args.isEmpty =>
         print(typ, annotated)
@@ -160,18 +176,22 @@ object Printer {
           if (args.length == 2)
             withParens
           else
-            Doc.intercalate(
-              Doc.char(',') + Doc.space,
-              args.init.map(print(_, annotated))
-            ).tightBracketBy(Doc.char('('), Doc.char(')'))
+            Doc
+              .intercalate(
+                Doc.char(',') + Doc.space,
+                args.init.map(print(_, annotated))
+              )
+              .tightBracketBy(Doc.char('('), Doc.char(')'))
 
         argDocs & Doc.text("->") & print(args.last, annotated)
 
       case TypeApplyExpr(typ, args, _) =>
-        print(typ, annotated) + Doc.intercalate(
-          Doc.char(',') + Doc.space,
-          args.map(print(_, annotated))
-        ).tightBracketBy(Doc.char('['), Doc.char(']'))
+        print(typ, annotated) + Doc
+          .intercalate(
+            Doc.char(',') + Doc.space,
+            args.map(print(_, annotated))
+          )
+          .tightBracketBy(Doc.char('['), Doc.char(']'))
 
       case TypeConstructorExpr(name, _) =>
         Doc.text(name)
@@ -180,44 +200,47 @@ object Printer {
     annotate(tyExpDoc, expr, annotated)
   }
 
-  def print[A](p: Param[A], annotated: Boolean)
-    (implicit eqv: A =:= Meta.Typed): Doc = {
+  def print[A](p: Param[A], annotated: Boolean)(implicit eqv: A =:= Meta.Typed): Doc = {
     val paramDoc = Doc.text(p.name) +
-      p.ascribedAs.map { asc =>
-        Doc.char(':') & print(asc, annotated)
-      }.getOrElse(Doc.empty)
+      p.ascribedAs
+        .map { asc =>
+          Doc.char(':') & print(asc, annotated)
+        }
+        .getOrElse(Doc.empty)
 
     annotate(paramDoc, p, annotated)
   }
 
-  def print[A](p: FieldPattern[A], annotated: Boolean)
-    (implicit eqv: A =:= Meta.Typed): Doc = p match {
-    case FieldPattern(field, pattern, _) =>
-      val patDoc = Doc.text(field) + pattern.map { p =>
-        Doc.char(':') & print(p, annotated)
-      }.getOrElse(Doc.empty)
+  def print[A](p: FieldPattern[A], annotated: Boolean)(implicit eqv: A =:= Meta.Typed): Doc =
+    p match {
+      case FieldPattern(field, pattern, _) =>
+        val patDoc = Doc.text(field) + pattern
+          .map { p =>
+            Doc.char(':') & print(p, annotated)
+          }
+          .getOrElse(Doc.empty)
 
-      annotate(patDoc, p, annotated)
-  }
+        annotate(patDoc, p, annotated)
+    }
 
-  def print[A](p: Pattern[A], annotated: Boolean)
-    (implicit eqv: A =:= Meta.Typed): Doc = {
+  def print[A](p: Pattern[A], annotated: Boolean)(implicit eqv: A =:= Meta.Typed): Doc = {
     val patDoc = p match {
       case IdentPattern(name, _) =>
         Doc.text(name)
       case ConstrPattern(name, alias, patterns, _) =>
         alias.map(a => Doc.text(a) & Doc.char('@') + Doc.space).getOrElse(Doc.empty) +
-          Doc.text(name) & Doc.intercalate(
-            Doc.comma + Doc.space,
-            patterns.map(print(_, annotated))
-          ).bracketBy(Doc.char('{'), Doc.char('}'))
+          Doc.text(name) & Doc
+            .intercalate(
+              Doc.comma + Doc.space,
+              patterns.map(print(_, annotated))
+            )
+            .bracketBy(Doc.char('{'), Doc.char('}'))
     }
 
     annotate(patDoc, p, annotated)
   }
 
-  def print[A](e: Expr[A], annotated: Boolean)
-    (implicit eqv: A =:= Meta.Typed): Doc = {
+  def print[A](e: Expr[A], annotated: Boolean)(implicit eqv: A =:= Meta.Typed): Doc = {
     val exprDoc = e match {
       case LiteralInt(i, _) =>
         Doc.str(i)
@@ -248,20 +271,24 @@ object Printer {
       case Lambda(params, b, _) =>
         val args =
           if (params.length == 1)
-            params.head.ascribedAs.map { _ =>
-              print(params.head, annotated).tightBracketBy(Doc.char('('), Doc.char(')'))
-            }.getOrElse(print(params.head, annotated))
+            params.head.ascribedAs
+              .map { _ =>
+                print(params.head, annotated).tightBracketBy(Doc.char('('), Doc.char(')'))
+              }
+              .getOrElse(print(params.head, annotated))
           else
-            Doc.intercalate(
-              Doc.char(',') + Doc.space,
-              params.map(print(_, annotated))
-            ).tightBracketBy(Doc.char('('), Doc.char(')'))
+            Doc
+              .intercalate(
+                Doc.char(',') + Doc.space,
+                params.map(print(_, annotated))
+              )
+              .tightBracketBy(Doc.char('('), Doc.char(')'))
 
         args & Doc.text("->") & print(b, annotated).nested(2)
 
       case Apply(fn, args, _) =>
-        val prefix = print(fn, annotated) + Doc.char('(')
-        val suffix = Doc.char(')')
+        val prefix   = print(fn, annotated) + Doc.char('(')
+        val suffix   = Doc.char(')')
         val argsList = Doc.intercalate(Doc.char(',') + Doc.line, args.map(print(_, annotated)))
         argsList.tightBracketBy(prefix, suffix)
 
@@ -272,36 +299,42 @@ object Printer {
         ascribedExpr + Doc.text(": ") + print(ascribedAs, annotated)
 
       case Match(matchExpr, cases, _) =>
-        Doc.text("match") & print(matchExpr, annotated) & Doc.text("with") & Doc.intercalate(
-          Doc.hardLine,
-          cases.map {
-            case MatchCase(pattern, resultExpr, _) =>
+        Doc.text("match") & print(matchExpr, annotated) & Doc.text("with") & Doc
+          .intercalate(
+            Doc.hardLine,
+            cases.map { case MatchCase(pattern, resultExpr, _) =>
               Doc.text("case") & print(pattern, annotated) &
                 Doc.text("->") &
-                  print(resultExpr, annotated)
-        }).bracketBy(Doc.char('{'), Doc.char('}'))
+                print(resultExpr, annotated)
+            }
+          )
+          .bracketBy(Doc.char('{'), Doc.char('}'))
     }
 
     annotate(exprDoc, e, annotated)
   }
 
-  def print[A](constr: DataConstructor[A], annotated: Boolean)
-    (implicit eqv: A =:= Meta.Typed): Doc = constr match {
+  def print[A](constr: DataConstructor[A], annotated: Boolean)(implicit
+    eqv: A =:= Meta.Typed
+  ): Doc = constr match {
 
     case DataConstructor(name, params, _) =>
       val prefix = Doc.text("case") & Doc.text(name) + Doc.char('(')
       val suffix = Doc.char(')')
 
-      val constrDoc = Doc.intercalate(
-        Doc.char(',') + Doc.space,
-        params.map(print(_, annotated))
-      ).tightBracketBy(prefix, suffix)
+      val constrDoc = Doc
+        .intercalate(
+          Doc.char(',') + Doc.space,
+          params.map(print(_, annotated))
+        )
+        .tightBracketBy(prefix, suffix)
 
       annotate(constrDoc, constr, annotated)
   }
 
-  def print[A](decl: TopLevelDeclaration[A], annotated: Boolean)
-    (implicit eqv: A =:= Meta.Typed): Doc = decl match {
+  def print[A](decl: TopLevelDeclaration[A], annotated: Boolean)(implicit
+    eqv: A =:= Meta.Typed
+  ): Doc = decl match {
     case Let(name, binding, _) =>
       val letDoc = Doc.text("let") & Doc.text(name) & Doc.char('=') &
         print(binding, annotated).nested(2)
@@ -313,19 +346,23 @@ object Printer {
         if (tparams.isEmpty)
           Doc.empty
         else
-          Doc.intercalate(
-            Doc.text(", "),
-            tparams.map(print(_, annotated))
-          ).tightBracketBy(Doc.char('['), Doc.char(']'))
+          Doc
+            .intercalate(
+              Doc.text(", "),
+              tparams.map(print(_, annotated))
+            )
+            .tightBracketBy(Doc.char('['), Doc.char(']'))
 
       val prefix = Doc.text("data") & Doc.text(name) + typeParams & Doc.char('{')
       val suffix = Doc.char('}')
 
       val casesDoc =
-        Doc.intercalate(
-          Doc.hardLine,
-          cases.map(print(_, annotated))
-        ).indent(2)
+        Doc
+          .intercalate(
+            Doc.hardLine,
+            cases.map(print(_, annotated))
+          )
+          .indent(2)
 
       val dataDoc =
         prefix + Doc.hardLine +
@@ -335,21 +372,26 @@ object Printer {
       annotate(dataDoc, decl, annotated)
   }
 
-  def print[A](mod: Module[A], annotated: Boolean)
-    (implicit eqv: A =:= Meta.Typed): Doc = {
+  def print[A](mod: Module[A], annotated: Boolean)(implicit eqv: A =:= Meta.Typed): Doc = {
     val Module(pkg, name, imports, declarations @ _, _) = mod
     val prefix = Doc.text("module") & Doc.text((pkg :+ name).mkString("/")) & Doc.char('{')
     val suffix = Doc.char('}')
 
-    val imps = Doc.intercalate(Doc.hardLine, imports.map {
-      case ImportModule(pkg, name, _) =>
-        Doc.text("import") & Doc.text((pkg :+ name).mkString("/"))
-      case ImportSymbols(pkg, name, syms, _) =>
-        val impPrefix = Doc.text("import") & Doc.text((pkg :+ name).mkString("/")) + Doc.char('.') + Doc.char('{')
-        val impSuffix = Doc.char('}')
-        val impBody = Doc.intercalate(Doc.comma + Doc.line, syms.map(Doc.text))
-        impBody.bracketBy(impPrefix, impSuffix)
-    })
+    val imps = Doc.intercalate(
+      Doc.hardLine,
+      imports.map {
+        case ImportModule(pkg, name, _) =>
+          Doc.text("import") & Doc.text((pkg :+ name).mkString("/"))
+        case ImportSymbols(pkg, name, syms, _) =>
+          val impPrefix =
+            Doc.text("import") & Doc.text((pkg :+ name).mkString("/")) + Doc.char('.') + Doc.char(
+              '{'
+            )
+          val impSuffix = Doc.char('}')
+          val impBody   = Doc.intercalate(Doc.comma + Doc.line, syms.map(Doc.text))
+          impBody.bracketBy(impPrefix, impSuffix)
+      }
+    )
 
     val decls = Doc.intercalate(
       Doc.hardLine,
@@ -366,8 +408,10 @@ object Printer {
       if (annotated)
         Doc.text("Key: ").style(White) + Doc.hardLine +
           (bullet & Doc.text("Unstyled:") & Doc.text("original code")).indent(2) + Doc.hardLine +
-          (bullet & (Doc.text("Blue:") & Doc.text("inferred types")).style(Blue)).indent(2) + Doc.hardLine +
-          (bullet & (Doc.text("Yellow:") & Doc.text("inferred kinds")).style(Yellow)).indent(2) + (Doc.hardLine * 2)
+          (bullet & (Doc.text("Blue:") & Doc.text("inferred types")).style(Blue))
+            .indent(2) + Doc.hardLine +
+          (bullet & (Doc.text("Yellow:") & Doc.text("inferred kinds")).style(Yellow))
+            .indent(2) + (Doc.hardLine * 2)
       else
         Doc.empty
 

@@ -1,7 +1,9 @@
 package inc.main
 
 import java.lang.String
-import scala.{ Boolean, Option, None }
+import scala.Boolean
+import scala.None
+import scala.Option
 
 case class Configuration(
   classpath: String = ".",
@@ -17,7 +19,7 @@ case class Configuration(
 )
 
 object Configuration {
-  val default = Configuration()
-  val test = Configuration(verifyCodegen = true, exitOnError = false)
+  val default      = Configuration()
+  val test         = Configuration(verifyCodegen = true, exitOnError = false)
   val printTimings = Configuration(printPhaseTiming = true)
 }

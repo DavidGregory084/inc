@@ -1,11 +1,13 @@
 package inc.typechecker
 
-import inc.common._
 import cats.Monoid
 import cats.data.Chain
 import cats.syntax.monoid._
-import scala.collection.immutable.{ List, Map }
+import inc.common._
+
 import scala.Predef.ArrowAssoc
+import scala.collection.immutable.List
+import scala.collection.immutable.Map
 
 object Kindchecker {
   type Subst = Substitution[KindVariable, Kind]
@@ -37,17 +39,22 @@ object Kindchecker {
         else if (r.eq(State.empty))
           l
         else
-          State(l.env ++ r.env, l.subst |+| r.subst, l.errors ++ r.errors, l.constraints ++ r.constraints)
+          State(
+            l.env ++ r.env,
+            l.subst |+| r.subst,
+            l.errors ++ r.errors,
+            l.constraints ++ r.constraints
+          )
     }
   }
 
   def gather(env: Environment[Meta.Typed], expr: TypeExpr[Meta.Typed]): List[KindConstraint] =
     expr match {
       case tyApp @ TypeApplyExpr(appliedTyp, args, meta) =>
-        val typKind = appliedTyp.meta.typ.typ.kind
+        val typKind    = appliedTyp.meta.typ.typ.kind
         val resultKind = tyApp.meta.typ.typ.kind
 
-        val tpCsts = gather(env, appliedTyp)
+        val tpCsts     = gather(env, appliedTyp)
         val tparamCsts = args.flatMap(gather(env, _))
 
         val tparamKinds = args.map(_.meta.typ.typ.kind)
@@ -65,10 +72,11 @@ object Kindchecker {
         val typKind = meta.typ.typ.kind
         val envKind = env.kinds.getOrElse(name, typKind)
 
-        val conCst = if (typKind != envKind)
-          List(EqualKind(typKind, envKind, meta.pos))
-        else
-          List.empty
+        val conCst =
+          if (typKind != envKind)
+            List(EqualKind(typKind, envKind, meta.pos))
+          else
+            List.empty
 
         conCst
     }
@@ -76,13 +84,12 @@ object Kindchecker {
   def gather(env: Environment[Meta.Typed], constr: DataConstructor[Meta.Typed]): State =
     constr match {
       case DataConstructor(_, params, _) =>
-        params.foldLeft(State.empty) {
-          case (stateSoFar, Param(_, ascribedAs, meta)) =>
-            val paramType = meta.typ.typ
-            val paramKind = paramType.kind
-            val paramResultCst = List(EqualKind(paramKind, Atomic, meta.pos))
-            val paramCsts = gather(env, ascribedAs.get)
-            stateSoFar.withConstraints(paramResultCst ++ paramCsts)
+        params.foldLeft(State.empty) { case (stateSoFar, Param(_, ascribedAs, meta)) =>
+          val paramType      = meta.typ.typ
+          val paramKind      = paramType.kind
+          val paramResultCst = List(EqualKind(paramKind, Atomic, meta.pos))
+          val paramCsts      = gather(env, ascribedAs.get)
+          stateSoFar.withConstraints(paramResultCst ++ paramCsts)
         }
     }
 
@@ -97,9 +104,8 @@ object Kindchecker {
           else
             List(EqualKind(meta.typ.typ.kind, dataKind, meta.pos))
 
-        val constrState = cases.foldLeft(State.empty) {
-          case (stateSoFar, nextConstr) =>
-            stateSoFar |+| gather(env, nextConstr)
+        val constrState = cases.foldLeft(State.empty) { case (stateSoFar, nextConstr) =>
+          stateSoFar |+| gather(env, nextConstr)
         }
 
         constrState.withConstraints(parentConstraint) |+| constrState
@@ -118,14 +124,15 @@ object Kindchecker {
   def unify(env: Environment[Meta.Typed], left: Kind, right: Kind, pos: Pos): State = {
     def go(left: Kind, right: Kind): State = {
       (left, right) match {
-        case (Parameterized(lParams, _), Parameterized(rParams, _)) if lParams.length != rParams.length =>
+        case (Parameterized(lParams, _), Parameterized(rParams, _))
+            if lParams.length != rParams.length =>
           State.empty.withError(TypeError.kindUnification(pos, left, right))
 
         case (Parameterized(lArgs, lRes), Parameterized(rArgs, rRes)) =>
-          val paramState = lArgs.zip(rArgs).foldLeft(State.empty) {
-            case (stateSoFar, (lArg, rArg)) =>
+          val paramState =
+            lArgs.zip(rArgs).foldLeft(State.empty) { case (stateSoFar, (lArg, rArg)) =>
               unify(env, stateSoFar.subst(lArg), stateSoFar.subst(rArg), pos)
-          }
+            }
 
           unify(env, paramState.subst(lRes), paramState.subst(rRes), pos)
 
@@ -147,11 +154,10 @@ object Kindchecker {
   }
 
   def solve(env: Environment[Meta.Typed], constraints: List[KindConstraint]): State = {
-    constraints.foldLeft(State.empty) {
-      case (currentState, nextConstraint) =>
-        val EqualKind(l, r, pos) = currentState.subst(nextConstraint)
-        val newState = unify(env, l, r, pos)
-        currentState |+| newState
+    constraints.foldLeft(State.empty) { case (currentState, nextConstraint) =>
+      val EqualKind(l, r, pos) = currentState.subst(nextConstraint)
+      val newState             = unify(env, l, r, pos)
+      currentState |+| newState
     }
   }
 

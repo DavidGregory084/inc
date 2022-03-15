@@ -1,12 +1,15 @@
 package inc.main
 
 import java.lang.String
-import java.nio.file.{ Files, Paths }
-import scala.{ Boolean, StringContext, Unit }
+import java.nio.file.Files
+import java.nio.file.Paths
+import scala.Boolean
+import scala.StringContext
+import scala.Unit
 import scala.util.control.NonFatal
 
 object CmdParser extends scopt.OptionParser[Configuration]("inc") {
-  var dir = Paths.get(".")
+  var dir  = Paths.get(".")
   var file = ""
 
   head("inc", Build.version)
@@ -31,7 +34,8 @@ object CmdParser extends scopt.OptionParser[Configuration]("inc") {
         case NonFatal(e) =>
           failure(s"The destination $d is not valid: ${e.getMessage}")
       }
-    }.foreach { d =>
+    }
+    .foreach { d =>
       dir = Paths.get(d)
     }
 
@@ -68,7 +72,9 @@ object CmdParser extends scopt.OptionParser[Configuration]("inc") {
     .action((exitOnError, config) => config.copy(exitOnError = exitOnError))
 
   opt[String]("stop-before")
-    .text(s"""Stop before the named phase. Currently defined phases: ${Phase.names.mkString(", ")}""")
+    .text(s"""Stop before the named phase. Currently defined phases: ${Phase.names.mkString(
+        ", "
+      )}""")
     .action((stopBefore, config) => config.copy(stopBefore = Phase.withName(stopBefore)))
     .validate { stopBefore =>
       if (Phase.names.contains(stopBefore))
@@ -90,7 +96,8 @@ object CmdParser extends scopt.OptionParser[Configuration]("inc") {
         case NonFatal(e) =>
           failure(s"The file $f is not valid: ${e.getMessage}")
       }
-    }.foreach { f =>
+    }
+    .foreach { f =>
       file = f
     }
 }

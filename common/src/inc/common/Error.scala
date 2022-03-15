@@ -1,13 +1,18 @@
 package inc.common
 
-import java.lang.{ String, Throwable }
-import scala.{ Product, Serializable, StringContext }
+import java.lang.String
+import java.lang.Throwable
 import scala.Predef.wrapRefArray
+import scala.Product
+import scala.Serializable
+import scala.StringContext
 
 abstract class Error(
   val pos: Pos,
   val underlying: Throwable = null
-) extends Throwable(underlying) with Product with Serializable {
+) extends Throwable(underlying)
+  with Product
+  with Serializable {
   def message: String
 
   override def toString = {
