@@ -1,22 +1,24 @@
 package inc.main
 
-import java.lang.String
 import org.typelevel.paiges._
-import scala.{ Long, StringContext }
+
+import java.lang.String
+import scala.Long
+import scala.StringContext
 
 object Messages {
   def compilationTime(fileName: String, start: Long, end: Long) = {
-    val timeMillis = (end - start) / 1000000
-    val msgText = Doc.text(s"Compiled ${fileName} in").style(Style.Ansi.Fg.Blue)
-    val timingText = Doc.text(s"${timeMillis}ms").style(Style.Ansi.Fg.White)
+    val timeMillis   = (end - start) / 1000000
+    val msgText      = Doc.text(s"Compiled ${fileName} in").style(Style.Ansi.Fg.Blue)
+    val timingText   = Doc.text(s"${timeMillis}ms").style(Style.Ansi.Fg.White)
     val formattedMsg = Doc.hardLine + msgText & timingText
     formattedMsg.render(80)
   }
 
   def compilationErrorTime(fileName: String, start: Long, end: Long) = {
-    val timeMillis = (end - start) / 1000000
-    val msgText = Doc.text(s"Compiling ${fileName} failed after").style(Style.Ansi.Fg.Red)
-    val timingText = Doc.text(s"${timeMillis}ms").style(Style.Ansi.Fg.White)
+    val timeMillis   = (end - start) / 1000000
+    val msgText      = Doc.text(s"Compiling ${fileName} failed after").style(Style.Ansi.Fg.Red)
+    val timingText   = Doc.text(s"${timeMillis}ms").style(Style.Ansi.Fg.White)
     val formattedMsg = Doc.hardLine + msgText & timingText
     formattedMsg.render(80)
   }
@@ -24,7 +26,7 @@ object Messages {
   def phaseTime(phaseName: String, fileName: String, start: Long, end: Long) = {
     val timeMillis = (end - start) / 1000000
     val msgText = Doc.text(s"Completed ${phaseName} for ${fileName} in").style(Style.Ansi.Fg.Blue)
-    val timingText = Doc.text(s"${timeMillis}ms").style(Style.Ansi.Fg.White)
+    val timingText   = Doc.text(s"${timeMillis}ms").style(Style.Ansi.Fg.White)
     val formattedMsg = Doc.hardLine + msgText & timingText
     formattedMsg.render(80)
   }

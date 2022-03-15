@@ -2,10 +2,15 @@ package inc.common
 
 import io.bullet.borer.Codec
 import io.bullet.borer.derivation.ArrayBasedCodecs._
+
 import java.util.concurrent.atomic.AtomicInteger
-import scala.collection.immutable.{ List, Map, Set }
-import scala.{ Int, Product, Serializable }
+import scala.Int
 import scala.Predef.augmentString
+import scala.Product
+import scala.Serializable
+import scala.collection.immutable.List
+import scala.collection.immutable.Map
+import scala.collection.immutable.Set
 
 sealed abstract class Kind extends Product with Serializable {
   def arity: Int = this match {
@@ -29,14 +34,15 @@ sealed abstract class Kind extends Product with Serializable {
   def substitute(subst: Map[KindVariable, Kind]): Kind =
     if (subst.isEmpty)
       this
-    else this match {
-      case Atomic =>
-        Atomic
-      case kindVar @ KindVariable(_) =>
-        subst.getOrElse(kindVar, kindVar)
-      case Parameterized(params, result) =>
-        Parameterized(params.map(_.substitute(subst)), result.substitute(subst))
-    }
+    else
+      this match {
+        case Atomic =>
+          Atomic
+        case kindVar @ KindVariable(_) =>
+          subst.getOrElse(kindVar, kindVar)
+        case Parameterized(params, result) =>
+          Parameterized(params.map(_.substitute(subst)), result.substitute(subst))
+      }
 
   def kindVariables: Set[KindVariable] = this match {
     case kindVar @ KindVariable(_) =>
@@ -52,10 +58,11 @@ object Kind {
   def Function(arity: Int): Kind =
     Parameterized(List.fill(arity)(KindVariable()), Atomic)
 
-  implicit val kindSubstitutableKinds: Substitutable[KindVariable, Kind, Kind] = new Substitutable[KindVariable, Kind, Kind] {
-    def substitute(kind: Kind, subst: Substitution[KindVariable, Kind]): Kind =
-      kind.substitute(subst.subst)
-  }
+  implicit val kindSubstitutableKinds: Substitutable[KindVariable, Kind, Kind] =
+    new Substitutable[KindVariable, Kind, Kind] {
+      def substitute(kind: Kind, subst: Substitution[KindVariable, Kind]): Kind =
+        kind.substitute(subst.subst)
+    }
   implicit val kindCodec: Codec[Kind] = deriveAllCodecs[Kind]
 }
 
@@ -68,6 +75,6 @@ case class KindVariable(id: Int) extends Kind {
 }
 
 object KindVariable {
-  val nextId = new AtomicInteger(1)
+  val nextId                = new AtomicInteger(1)
   def apply(): KindVariable = KindVariable(nextId.getAndIncrement)
 }

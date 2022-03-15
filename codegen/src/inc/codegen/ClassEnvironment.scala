@@ -1,10 +1,14 @@
 package inc.codegen
 
 import inc.common._
-import java.lang.String
-import org.objectweb.asm.{ ClassVisitor, Label }
+import org.objectweb.asm.ClassVisitor
+import org.objectweb.asm.Label
 import org.objectweb.asm.commons.GeneratorAdapter
-import scala.{ Int, Option, None }
+
+import java.lang.String
+import scala.Int
+import scala.None
+import scala.Option
 import scala.collection.immutable.Map
 
 case class LocalVar(
@@ -23,7 +27,7 @@ case class ClassEnvironment(
   declName: Option[String],
   args: Map[Name, Int],
   localVars: Map[Name, LocalVar],
-  liftedLambdas: Int,
+  liftedLambdas: Int
 )
 
 object ClassEnvironment {
@@ -31,7 +35,7 @@ object ClassEnvironment {
     typeEnvironment: Environment[Meta.Typed],
     enclosingMod: Module[Meta.Typed],
     enclosingModWriter: ClassVisitor,
-    enclosingMethodWriter: GeneratorAdapter,
+    enclosingMethodWriter: GeneratorAdapter
   ): ClassEnvironment = ClassEnvironment(
     typeEnvironment,
     enclosingMod,

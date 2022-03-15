@@ -2,11 +2,21 @@ package inc.common
 
 import io.bullet.borer.Codec
 import io.bullet.borer.derivation.ArrayBasedCodecs._
+
 import java.lang.String
 import java.util.concurrent.atomic.AtomicInteger
-import scala.{ Boolean, Int, Option, Some, None, Product, Serializable, StringContext }
-import scala.collection.immutable.{ List, Map, Set }
+import scala.Boolean
+import scala.Int
+import scala.None
+import scala.Option
 import scala.Predef.augmentString
+import scala.Product
+import scala.Serializable
+import scala.Some
+import scala.StringContext
+import scala.collection.immutable.List
+import scala.collection.immutable.Map
+import scala.collection.immutable.Set
 
 sealed abstract class Type extends Product with Serializable {
   def kind: Kind
@@ -22,24 +32,26 @@ sealed abstract class Type extends Product with Serializable {
     case InferredTypeVariable(id, _) =>
       TypeConstructorExpr(
         name = s"T${id}",
-        meta = Meta.Typed(LocalName(s"T${id}"), TypeScheme(this), Pos.Empty))
+        meta = Meta.Typed(LocalName(s"T${id}"), TypeScheme(this), Pos.Empty)
+      )
     case NamedTypeVariable(name, _) =>
       TypeConstructorExpr(
         name = name,
-        meta = Meta.Typed(LocalName(name), TypeScheme(this), Pos.Empty))
+        meta = Meta.Typed(LocalName(name), TypeScheme(this), Pos.Empty)
+      )
     case TypeApply(typ, params, _) =>
       TypeApplyExpr(
         typ = typ.toExpr,
         args = params.map(_.toExpr),
-        meta = Meta.Typed(NoName, TypeScheme(this), Pos.Empty))
+        meta = Meta.Typed(NoName, TypeScheme(this), Pos.Empty)
+      )
     case TypeConstructor(name, _) =>
       TypeConstructorExpr(
         name = name,
-        meta = Meta.Typed(LocalName(name), TypeScheme(this), Pos.Empty))
+        meta = Meta.Typed(LocalName(name), TypeScheme(this), Pos.Empty)
+      )
     case ErrorType =>
-      TypeConstructorExpr(
-        name = "<error>",
-        meta = Meta.Typed(NoName, TypeScheme(this), Pos.Empty))
+      TypeConstructorExpr(name = "<error>", meta = Meta.Typed(NoName, TypeScheme(this), Pos.Empty))
   }
 
   def freeTypeVariables: Set[TypeVariable] = this match {
@@ -64,34 +76,32 @@ sealed abstract class Type extends Product with Serializable {
       tyVar
     case tyVar @ InferredTypeVariable(_, _) =>
       tyVar
-    case tyCon @ TypeConstructor(name, _)
-        if Type.builtIns.contains(name) =>
+    case tyCon @ TypeConstructor(name, _) if Type.builtIns.contains(name) =>
       tyCon
     case tyCon @ TypeConstructor(name, _) =>
       tyCon.copy(name = (prefix + "." + name))
     case ta @ TypeApply(typ, params, _) =>
-      ta.copy(
-        typ = typ.prefixed(prefix),
-        params = params.map(_.prefixed(prefix)))
+      ta.copy(typ = typ.prefixed(prefix), params = params.map(_.prefixed(prefix)))
+    case ErrorType =>
+      ErrorType
   }
 
   def substitute(subst: Map[TypeVariable, Type]): Type =
     if (subst.isEmpty)
       this
-    else this match {
-      case tyVar @ NamedTypeVariable(_, _) =>
-        subst.getOrElse(tyVar, tyVar)
-      case tyVar @ InferredTypeVariable(_, _) =>
-        subst.getOrElse(tyVar, tyVar)
-      case tyCon @ TypeConstructor(_, _) =>
-        tyCon
-      case ta @ TypeApply(typ, params, _) =>
-        ta.copy(
-          typ = typ.substitute(subst),
-          params = params.map(_.substitute(subst)))
-      case ErrorType =>
-        ErrorType
-    }
+    else
+      this match {
+        case tyVar @ NamedTypeVariable(_, _) =>
+          subst.getOrElse(tyVar, tyVar)
+        case tyVar @ InferredTypeVariable(_, _) =>
+          subst.getOrElse(tyVar, tyVar)
+        case tyCon @ TypeConstructor(_, _) =>
+          tyCon
+        case ta @ TypeApply(typ, params, _) =>
+          ta.copy(typ = typ.substitute(subst), params = params.map(_.substitute(subst)))
+        case ErrorType =>
+          ErrorType
+      }
 
   def defaultKinds: Type = this match {
     case tv @ NamedTypeVariable(_, _) =>
@@ -101,12 +111,9 @@ sealed abstract class Type extends Product with Serializable {
     case tc @ TypeConstructor(_, _) =>
       tc.copy(kind = tc.kind.default)
     case ta @ TypeApply(_, _, _) =>
-      val defaultedTyp = ta.typ.defaultKinds
+      val defaultedTyp     = ta.typ.defaultKinds
       val defaultedTparams = ta.params.map(_.defaultKinds)
-      ta.copy(
-        typ = defaultedTyp,
-        params = defaultedTparams,
-        kind = ta.kind.default)
+      ta.copy(typ = defaultedTyp, params = defaultedTparams, kind = ta.kind.default)
     case ErrorType =>
       ErrorType
   }
@@ -122,7 +129,8 @@ sealed abstract class Type extends Product with Serializable {
       ta.copy(
         typ = ta.typ.substituteKinds(subst),
         params = ta.params.map(_.substituteKinds(subst)),
-        kind = ta.kind.substitute(subst))
+        kind = ta.kind.substitute(subst)
+      )
     case ErrorType =>
       ErrorType
   }
@@ -145,18 +153,18 @@ sealed abstract class Type extends Product with Serializable {
 object Type {
   val primitives = Set("Int", "Long", "Float", "Double", "Boolean", "Char")
 
-  val Int = TypeConstructor("Int", Atomic)
-  val Long = TypeConstructor("Long", Atomic)
-  val Float = TypeConstructor("Float", Atomic)
-  val Double = TypeConstructor("Double", Atomic)
+  val Int     = TypeConstructor("Int", Atomic)
+  val Long    = TypeConstructor("Long", Atomic)
+  val Float   = TypeConstructor("Float", Atomic)
+  val Double  = TypeConstructor("Double", Atomic)
   val Boolean = TypeConstructor("Boolean", Atomic)
-  val Char = TypeConstructor("Char", Atomic)
-  val String = TypeConstructor("String", Atomic)
-  val Module = TypeConstructor("Module", Atomic)
-  val Unit = TypeConstructor("Unit", Atomic)
+  val Char    = TypeConstructor("Char", Atomic)
+  val String  = TypeConstructor("String", Atomic)
+  val Module  = TypeConstructor("Module", Atomic)
+  val Unit    = TypeConstructor("Unit", Atomic)
 
   val builtInTypes = Set(Int, Long, Float, Double, Boolean, Char, String, Module, Unit)
-  val builtIns = builtInTypes.map(_.name) + "->"
+  val builtIns     = builtInTypes.map(_.name) + "->"
 
   def isFunction(typ: Type) = typ match {
     case Type.Function(_) =>
@@ -169,7 +177,7 @@ object Type {
     def apply(from: List[Type], to: Type) = {
       val typeArgs = (from :+ to)
       val kindArgs = typeArgs.map(_ => Atomic)
-      val funKind = Parameterized(kindArgs, Atomic)
+      val funKind  = Parameterized(kindArgs, Atomic)
       TypeApply(TypeConstructor("->", funKind), typeArgs, Atomic)
     }
 
@@ -181,15 +189,17 @@ object Type {
     }
   }
 
-  implicit val typeSubstitutableTypes: Substitutable[TypeVariable, Type, Type] = new Substitutable[TypeVariable, Type, Type] {
-    def substitute(typ: Type, subst: Substitution[TypeVariable, Type]): Type =
-      typ.substitute(subst.subst)
-  }
+  implicit val typeSubstitutableTypes: Substitutable[TypeVariable, Type, Type] =
+    new Substitutable[TypeVariable, Type, Type] {
+      def substitute(typ: Type, subst: Substitution[TypeVariable, Type]): Type =
+        typ.substitute(subst.subst)
+    }
 
-  implicit val typeSubstitutableKinds: Substitutable[KindVariable, Kind, Type] = new Substitutable[KindVariable, Kind, Type] {
-    def substitute(typ: Type, subst: Substitution[KindVariable, Kind]): Type =
-      typ.substituteKinds(subst.subst)
-  }
+  implicit val typeSubstitutableKinds: Substitutable[KindVariable, Kind, Type] =
+    new Substitutable[KindVariable, Kind, Type] {
+      def substitute(typ: Type, subst: Substitution[KindVariable, Kind]): Type =
+        typ.substituteKinds(subst.subst)
+    }
 
   implicit val typeCodec: Codec[Type] = deriveAllCodecs[Type]
 }
@@ -218,11 +228,13 @@ sealed abstract class TypeVariable extends Type {
     case InferredTypeVariable(id, _) =>
       TypeConstructorExpr(
         name = s"T${id}",
-        meta = Meta.Typed(LocalName(s"T${id}"), TypeScheme(List.empty, this), Pos.Empty))
+        meta = Meta.Typed(LocalName(s"T${id}"), TypeScheme(List.empty, this), Pos.Empty)
+      )
     case NamedTypeVariable(name, _) =>
       TypeConstructorExpr(
         name = name,
-        meta = Meta.Typed(LocalName(name), TypeScheme(List.empty, this), Pos.Empty))
+        meta = Meta.Typed(LocalName(name), TypeScheme(List.empty, this), Pos.Empty)
+      )
   }
 }
 

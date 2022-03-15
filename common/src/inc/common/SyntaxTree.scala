@@ -1,7 +1,8 @@
 package inc.common
 
 import java.io.Serializable
-import scala.{ =:=, Product }
+import scala.=:=
+import scala.Product
 import scala.collection.immutable.Map
 
 abstract class SyntaxTree[A] extends Product with Serializable {

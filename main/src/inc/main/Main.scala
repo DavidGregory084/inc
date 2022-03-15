@@ -3,28 +3,37 @@ package inc.main
 import cats.data.OptionT
 import cats.instances.either._
 import cats.syntax.flatMap._
+import com.typesafe.scalalogging.LazyLogging
+import inc.codegen.ClassFile
+import inc.codegen.Codegen
 import inc.common._
 import inc.parser.Parser
 import inc.resolver.Resolver
 import inc.typechecker.Typechecker
-import inc.codegen.{ Codegen, ClassFile }
-import com.typesafe.scalalogging.LazyLogging
-import java.lang.{ String, System }
+
+import java.lang.String
+import java.lang.System
 import java.net.URLClassLoader
 import java.nio.charset.StandardCharsets
-import java.nio.file.{Files, Path, Paths}
-import scala.{ Array, Boolean, Unit, Either }
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
+import scala.Array
+import scala.Boolean
+import scala.Either
+import scala.Predef.println
+import scala.Predef.wrapRefArray
+import scala.Unit
 import scala.collection.immutable.List
 import scala.jdk.CollectionConverters._
-import scala.Predef.{ println, wrapRefArray }
 
 object Main extends LazyLogging {
   def main(args: Array[String]): Unit = {
     CmdParser.parse(args, Configuration()).foreach { config =>
-      val dir = CmdParser.dir
-      val file = CmdParser.file
-      val path = Paths.get(file)
-      val source = readFileAsString(path)
+      val dir      = CmdParser.dir
+      val file     = CmdParser.file
+      val path     = Paths.get(file)
+      val source   = readFileAsString(path)
       val fileName = dir.resolve(path).toString
 
       compileModule(dir, fileName, config, source).value.left.foreach { errors =>
@@ -40,7 +49,8 @@ object Main extends LazyLogging {
 
   def readFileAsString(path: Path) = Files
     .readAllLines(path, StandardCharsets.UTF_8)
-    .asScala.mkString(System.lineSeparator)
+    .asScala
+    .mkString(System.lineSeparator)
 
   def runPhase[A](
     phaseName: Phase,
@@ -52,8 +62,8 @@ object Main extends LazyLogging {
       logger.info(NL + pprint.apply(a, height = 1000))
     }
   ): Compile[A] = {
-    val before = System.nanoTime
-    val shouldRun = config.stopBefore.map(_ != phaseName).getOrElse(true)
+    val before     = System.nanoTime
+    val shouldRun  = config.stopBefore.map(_ != phaseName).getOrElse(true)
     val shouldRunF = OptionT.pure[Either[List[Error], *]](shouldRun)
 
     for {
@@ -70,7 +80,12 @@ object Main extends LazyLogging {
     } yield out
   }
 
-  def compileModule(dest: Path, fileName: String, config: Configuration = Configuration.default, source: String): Compile[List[Path]] = {
+  def compileModule(
+    dest: Path,
+    fileName: String,
+    config: Configuration = Configuration.default,
+    source: String
+  ): Compile[List[Path]] = {
     val beforeAll = System.nanoTime
 
     val codegen = new Codegen(config.verifyCodegen)
@@ -78,19 +93,45 @@ object Main extends LazyLogging {
     val res = for {
       urls <- Classpath.parseUrls(config.classpath)
 
-      mod <- runPhase[Module[Pos]](Phase.Parser, fileName, config, _.printParser, Parser.parse(source))
+      mod <- runPhase[Module[Pos]](
+        Phase.Parser,
+        fileName,
+        config,
+        _.printParser,
+        Parser.parse(source)
+      )
 
       importedEnv <- Classpath.readEnvironment(mod.imports, new URLClassLoader(urls))
 
-      resolved <- runPhase[Module[Meta.Untyped]](Phase.Resolver, fileName, config, _.printResolver, Resolver.resolve(mod, importedEnv.forgetMemberTypes))
+      resolved <- runPhase[Module[Meta.Untyped]](
+        Phase.Resolver,
+        fileName,
+        config,
+        _.printResolver,
+        Resolver.resolve(mod, importedEnv.forgetMemberTypes)
+      )
 
-      checked <- runPhase[Module[Meta.Typed]](Phase.Typer, fileName, config, _.printTyper, Typechecker.typecheck(resolved, importedEnv), mod => println(Printer.print(mod, true).render(80)))
+      checked <- runPhase[Module[Meta.Typed]](
+        Phase.Typer,
+        fileName,
+        config,
+        _.printTyper,
+        Typechecker.typecheck(resolved, importedEnv),
+        mod => println(Printer.print(mod, true).render(80))
+      )
 
-      classFiles <- runPhase[List[ClassFile]](Phase.Codegen, fileName, config, _.printCodegen, codegen.generate(checked, importedEnv), _.foreach(f => codegen.print(f.bytes)))
+      classFiles <- runPhase[List[ClassFile]](
+        Phase.Codegen,
+        fileName,
+        config,
+        _.printCodegen,
+        codegen.generate(checked, importedEnv),
+        _.foreach(f => codegen.print(f.bytes))
+      )
 
     } yield {
-      val outDir = mod.pkg.foldLeft(dest) {
-        case (path, next) => path.resolve(next)
+      val outDir = mod.pkg.foldLeft(dest) { case (path, next) =>
+        path.resolve(next)
       }
 
       val outFiles = classFiles.map { classFile =>

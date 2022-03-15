@@ -5,10 +5,15 @@ import cats.Functor
 import cats.syntax.functor._
 import io.bullet.borer.Codec
 import io.bullet.borer.derivation.ArrayBasedCodecs._
+
 import java.lang.String
-import scala.{ =:=, Option, Some, None }
-import scala.collection.immutable.{ List, Map }
+import scala.=:=
+import scala.None
+import scala.Option
 import scala.Predef.augmentString
+import scala.Some
+import scala.collection.immutable.List
+import scala.collection.immutable.Map
 
 sealed abstract class TypeExpr[A] extends SyntaxTree[A] {
   def meta: A
@@ -22,7 +27,9 @@ sealed abstract class TypeExpr[A] extends SyntaxTree[A] {
     }
   }
 
-  def substituteKinds(subst: Map[KindVariable, Kind])(implicit to: A =:= Meta.Typed): TypeExpr[A] = {
+  def substituteKinds(
+    subst: Map[KindVariable, Kind]
+  )(implicit to: A =:= Meta.Typed): TypeExpr[A] = {
     if (subst.isEmpty)
       this
     else {
@@ -47,14 +54,10 @@ object TypeExpr {
     }
   }
 
-
   implicit val typeExprFunctor: Functor[TypeExpr] = new Functor[TypeExpr] {
     def map[A, B](expr: TypeExpr[A])(f: A => B): TypeExpr[B] = expr match {
       case TypeApplyExpr(typ, args, meta) =>
-        TypeApplyExpr(
-         typ = map(typ)(f),
-         args = args.map(map(_)(f)),
-         meta = f(meta))
+        TypeApplyExpr(typ = map(typ)(f), args = args.map(map(_)(f)), meta = f(meta))
       case tyCon @ TypeConstructorExpr(_, meta) =>
         tyCon.copy(meta = f(meta))
     }
@@ -64,21 +67,27 @@ object TypeExpr {
 }
 
 case class TypeConstructorExpr[A](name: String, meta: A) extends TypeExpr[A] {
-  override def substitute(subst: Map[TypeVariable,Type])(implicit to: A =:= Meta.Typed): TypeConstructorExpr[A] =
+  override def substitute(subst: Map[TypeVariable, Type])(implicit
+    to: A =:= Meta.Typed
+  ): TypeConstructorExpr[A] =
     to.flip.liftCo[TypeConstructorExpr](this.map(_.substitute(subst)))
-  override def substituteKinds(subst: Map[KindVariable,Kind])(implicit to: A =:= Meta.Typed): TypeConstructorExpr[A] =
+  override def substituteKinds(subst: Map[KindVariable, Kind])(implicit
+    to: A =:= Meta.Typed
+  ): TypeConstructorExpr[A] =
     to.flip.liftCo[TypeConstructorExpr](this.map(_.substituteKinds(subst)))
   override def defaultKinds(implicit to: A =:= Meta.Typed): TypeConstructorExpr[A] =
     to.flip.liftCo[TypeConstructorExpr](this.map(_.defaultKinds))
 }
 
 object TypeConstructorExpr {
-  implicit val typeConstructorExprFunctor: Functor[TypeConstructorExpr] = new Functor[TypeConstructorExpr] {
-    def map[A, B](expr: TypeConstructorExpr[A])(f: A => B): TypeConstructorExpr[B] =
-      expr.copy(meta = f(expr.meta))
-  }
+  implicit val typeConstructorExprFunctor: Functor[TypeConstructorExpr] =
+    new Functor[TypeConstructorExpr] {
+      def map[A, B](expr: TypeConstructorExpr[A])(f: A => B): TypeConstructorExpr[B] =
+        expr.copy(meta = f(expr.meta))
+    }
 
-  implicit val typeConstructorExprCodec: Codec[TypeConstructorExpr[Meta.Typed]] = deriveCodec[TypeConstructorExpr[Meta.Typed]]
+  implicit val typeConstructorExprCodec: Codec[TypeConstructorExpr[Meta.Typed]] =
+    deriveCodec[TypeConstructorExpr[Meta.Typed]]
 }
 
 case class TypeApplyExpr[A](typ: TypeExpr[A], args: List[TypeExpr[A]], meta: A) extends TypeExpr[A]

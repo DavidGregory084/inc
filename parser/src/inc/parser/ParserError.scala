@@ -1,8 +1,12 @@
 package inc.parser
 
-import inc.common.{ Error, Pos }
+import inc.common.Error
+import inc.common.Pos
+
 import java.lang.String
-import scala.{ Either, Left, Nothing }
+import scala.Either
+import scala.Left
+import scala.Nothing
 import scala.collection.immutable.List
 
 case class ParserError(private val position: Pos, val message: String) extends Error(position)

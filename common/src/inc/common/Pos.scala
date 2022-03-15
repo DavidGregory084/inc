@@ -1,6 +1,9 @@
 package inc.common
 
-import io.bullet.borer.{Codec, Decoder, Encoder}
+import io.bullet.borer.Codec
+import io.bullet.borer.Decoder
+import io.bullet.borer.Encoder
+
 import scala.Int
 
 case class Pos(from: Int, to: Int) {
@@ -8,8 +11,8 @@ case class Pos(from: Int, to: Int) {
 }
 
 object Pos {
-  def Empty = Pos(0, 0)
+  def Empty               = Pos(0, 0)
   implicit val posEncoder = Encoder.forUnit.contramap[Pos](_ => ())
   implicit val posDecoder = Decoder.forUnit.map(_ => Pos.Empty)
-  implicit val posCodec = Codec(posEncoder, posDecoder)
+  implicit val posCodec   = Codec(posEncoder, posDecoder)
 }

@@ -1,23 +1,23 @@
 package inc.common
 
-import io.bullet.borer.{Codec, Decoder, Encoder}
+import io.bullet.borer.Codec
+import io.bullet.borer.Decoder
+import io.bullet.borer.Encoder
 import io.bullet.borer.derivation.ArrayBasedCodecs._
+
 import java.lang.String
-import scala.collection.immutable.{ List, Map, Set, Vector }
+import scala.collection.immutable.List
+import scala.collection.immutable.Map
+import scala.collection.immutable.Set
+import scala.collection.immutable.Vector
 
 case class TypeScheme(bound: List[TypeVariable], typ: Type) {
   def toExpr: TypeExpr[Meta.Typed] =
     this.typ.toExpr match {
       case tyCon @ TypeConstructorExpr(_, meta @ Meta.Typed(_, typ, _)) =>
-        tyCon.copy(
-          meta = meta.copy(
-            typ = typ.copy(
-              bound = this.bound)))
+        tyCon.copy(meta = meta.copy(typ = typ.copy(bound = this.bound)))
       case tyApp @ TypeApplyExpr(_, _, meta @ Meta.Typed(_, typ, _)) =>
-        tyApp.copy(
-          meta = meta.copy(
-            typ = typ.copy(
-              bound = this.bound)))
+        tyApp.copy(meta = meta.copy(typ = typ.copy(bound = this.bound)))
     }
 
   def freeTypeVariables: Set[TypeVariable] =
@@ -27,14 +27,13 @@ case class TypeScheme(bound: List[TypeVariable], typ: Type) {
     TypeScheme(bound, typ.substitute(subst -- bound))
 
   def defaultKinds: TypeScheme =
-    copy(
-      bound = bound.map(_.defaultKinds.asInstanceOf[TypeVariable]),
-      typ = typ.defaultKinds)
+    copy(bound = bound.map(_.defaultKinds.asInstanceOf[TypeVariable]), typ = typ.defaultKinds)
 
   def substituteKinds(subst: Map[KindVariable, Kind]): TypeScheme =
     copy(
       bound = bound.map(_.substituteKinds(subst).asInstanceOf[TypeVariable]),
-      typ = typ.substituteKinds(subst))
+      typ = typ.substituteKinds(subst)
+    )
 
   def prefixed(prefix: String) =
     copy(typ = typ.prefixed(prefix))
@@ -52,7 +51,7 @@ case class TypeScheme(bound: List[TypeVariable], typ: Type) {
       typ
     else {
       val freshVars = bound.map(b => TypeVariable(b.kind))
-      val subst = bound.zip(freshVars)
+      val subst     = bound.zip(freshVars)
       typ.substitute(subst.toMap)
     }
 }
@@ -65,7 +64,7 @@ object TypeScheme {
 
     val bound = (typ.freeTypeVariables diff freeInEnv).toList.distinctBy {
       case InferredTypeVariable(id, _) => id.toString
-      case NamedTypeVariable(name, _) => name
+      case NamedTypeVariable(name, _)  => name
     }
 
     val scheme = TypeScheme(bound.toList, typ)
@@ -89,16 +88,17 @@ object TypeScheme {
 
   implicit val typeSchemeDecoder: Decoder[TypeScheme] = deriveDecoder[TypeScheme].map { scheme =>
     // Instantiate the type scheme with fresh type variables for this compilation run
-    val typ = scheme.typ
+    val typ    = scheme.typ
     val tyVars = scheme.bound
 
-    val (freshVars, subst) = tyVars.foldLeft((Vector.empty[TypeVariable], Map.empty[TypeVariable, Type])) {
-      case ((vars, subst), named @ NamedTypeVariable(_, _)) =>
-        (vars :+ named, subst)
-      case ((vars, subst), inferred @ InferredTypeVariable(_, kind)) =>
-        val freshVar = TypeVariable(kind)
-        (vars :+ freshVar, subst.updated(inferred, freshVar))
-    }
+    val (freshVars, subst) =
+      tyVars.foldLeft((Vector.empty[TypeVariable], Map.empty[TypeVariable, Type])) {
+        case ((vars, subst), named @ NamedTypeVariable(_, _)) =>
+          (vars :+ named, subst)
+        case ((vars, subst), inferred @ InferredTypeVariable(_, kind)) =>
+          val freshVar = TypeVariable(kind)
+          (vars :+ freshVar, subst.updated(inferred, freshVar))
+      }
 
     TypeScheme(freshVars.toList, typ.substitute(subst))
   }

@@ -1,14 +1,29 @@
 package inc.parser
 
-import fastparse._, ScalaWhitespace._
+import fastparse._
 import inc.common._
-import java.lang.{ Boolean, Character, Double, Float, Integer, Long, String }
-import scala.{ Either, Right, Int, Some, None, StringContext }
-import scala.collection.immutable.{ List, Seq }
+
+import java.lang.Boolean
+import java.lang.Character
+import java.lang.Double
+import java.lang.Float
+import java.lang.Integer
+import java.lang.Long
+import java.lang.String
+import scala.Either
+import scala.Int
+import scala.None
 import scala.Predef.augmentString
+import scala.Right
+import scala.Some
+import scala.StringContext
+import scala.collection.immutable.List
+import scala.collection.immutable.Seq
+
+import ScalaWhitespace._
 
 object Parser {
-  def ReservedWords[_: P] = P(
+  def ReservedWords[Ctx: P] = P(
     StringIn(
       "module",
       "import",
@@ -24,50 +39,53 @@ object Parser {
   )
 
   // Whitespace
-  def nonZeroWs[_: P] = P(CharsWhile(Character.isWhitespace, 1))
+  def nonZeroWs[Ctx: P] = P(CharsWhile(Character.isWhitespace, 1))
 
   // Separators
-  def maybeSemi[_: P] = P(";".?)
-  def comma[_: P] = P(",")
+  def maybeSemi[Ctx: P] = P(";".?)
+  def comma[Ctx: P]     = P(",")
 
   // Literals
-  def zero[_: P] = P("0".!)
-  def oneToNine[_: P] = P(CharIn("1-9").!)
-  def zeroToNine[_: P] = P(CharIn("0-9").!)
-  def digits[_: P] = P(CharsWhileIn("0-9", 0).!)
-  def digitsLeadingOneToNine[_: P] = P((oneToNine ~~ digits) map { case (first, rest) => first + rest })
+  def zero[Ctx: P]       = P("0".!)
+  def oneToNine[Ctx: P]  = P(CharIn("1-9").!)
+  def zeroToNine[Ctx: P] = P(CharIn("0-9").!)
+  def digits[Ctx: P]     = P(CharsWhileIn("0-9", 0).!)
+  def digitsLeadingOneToNine[Ctx: P] = P((oneToNine ~~ digits) map { case (first, rest) =>
+    first + rest
+  })
 
-  def literalBoolean[_: P] = P(Index ~ StringIn("true", "false").! ~ Index).map {
+  def literalBoolean[Ctx: P] = P(Index ~ StringIn("true", "false").! ~ Index).map {
     case (from, b, to) =>
       LiteralBoolean(Boolean.parseBoolean(b), Pos(from, to))
   }
 
-  val disallowedChars = "\\\n\r"
-  val charDisallowedChars = "\'" + disallowedChars
+  val disallowedChars       = "\\\n\r"
+  val charDisallowedChars   = "\'" + disallowedChars
   val stringDisallowedChars = "\"" + disallowedChars
 
-  def literalChar[_: P] = P(Index ~ "'" ~~/ CharPred(c => !charDisallowedChars.contains(c)).! ~~ "'" ~ Index).map {
-    case (from, s, to) => LiteralChar(s(0), Pos(from, to))
-  }
+  def literalChar[Ctx: P] =
+    P(Index ~ "'" ~~/ CharPred(c => !charDisallowedChars.contains(c)).! ~~ "'" ~ Index).map {
+      case (from, s, to) => LiteralChar(s(0), Pos(from, to))
+    }
 
-  def literalString[_: P] = P(
+  def literalString[Ctx: P] = P(
     Index ~
       "\"" ~~/ CharsWhile(c => !stringDisallowedChars.contains(c), 0).! ~~ "\"" ~
       Index
-  ).map {
-    case (from, s, to) =>
-      LiteralString(s, Pos(from, to))
+  ).map { case (from, s, to) =>
+    LiteralString(s, Pos(from, to))
   }
 
-  def literalIntegral[_: P] = P(Index ~ (zero | digitsLeadingOneToNine) ~~ CharIn("lL").?.! ~ Index).map {
-    case (from, num, suffix, to) =>
-      if (suffix.isEmpty)
-        LiteralInt(Integer.parseInt(num), Pos(from, to))
-      else
-        LiteralLong(Long.parseLong(num), Pos(from, to))
-  }
+  def literalIntegral[Ctx: P] =
+    P(Index ~ (zero | digitsLeadingOneToNine) ~~ CharIn("lL").?.! ~ Index).map {
+      case (from, num, suffix, to) =>
+        if (suffix.isEmpty)
+          LiteralInt(Integer.parseInt(num), Pos(from, to))
+        else
+          LiteralLong(Long.parseLong(num), Pos(from, to))
+    }
 
-  def exponentPart[_: P] = P(
+  def exponentPart[Ctx: P] = P(
     (CharIn("eE").! ~~/ CharIn("+\\-").?.! ~~ digits).?
   ).map {
     case Some((exponentIndicator, sign, digits)) =>
@@ -76,25 +94,35 @@ object Parser {
       ""
   }
 
-  def literalFloatingPoint[_: P] = P(
+  def literalFloatingPoint[Ctx: P] = P(
     Index ~
       (zero | digitsLeadingOneToNine) ~~ "." ~~/ digits ~~ exponentPart ~~ CharIn("dDfF").?.! ~
       Index
   ).map {
     case (from, wholeNumberPart, fractionPart, exponentPart, "", to) =>
-      LiteralDouble(Double.parseDouble(wholeNumberPart + "." + fractionPart + exponentPart), Pos(from, to))
-    case (from, wholeNumberPart, fractionPart, exponentPart, suffix, to) if suffix.toUpperCase == "D" =>
-      LiteralDouble(Double.parseDouble(wholeNumberPart + "." + fractionPart + exponentPart), Pos(from, to))
-    case (from, wholeNumberPart, fractionPart, exponentPart, suffix, to) if suffix.toUpperCase == "F" =>
-      LiteralFloat(Float.parseFloat(wholeNumberPart + "." + fractionPart + exponentPart), Pos(from, to))
+      LiteralDouble(
+        Double.parseDouble(wholeNumberPart + "." + fractionPart + exponentPart),
+        Pos(from, to)
+      )
+    case (from, wholeNumberPart, fractionPart, exponentPart, suffix, to)
+        if suffix.toUpperCase == "D" =>
+      LiteralDouble(
+        Double.parseDouble(wholeNumberPart + "." + fractionPart + exponentPart),
+        Pos(from, to)
+      )
+    case (from, wholeNumberPart, fractionPart, exponentPart, suffix, to)
+        if suffix.toUpperCase == "F" =>
+      LiteralFloat(
+        Float.parseFloat(wholeNumberPart + "." + fractionPart + exponentPart),
+        Pos(from, to)
+      )
   }
 
-  def literalUnit[_: P] = P(Index ~ "()" ~ Index).map {
-    case (from, to) =>
-      LiteralUnit(Pos(from, to))
+  def literalUnit[Ctx: P] = P(Index ~ "()" ~ Index).map { case (from, to) =>
+    LiteralUnit(Pos(from, to))
   }
 
-  def literal[_: P] =
+  def literal[Ctx: P] =
     literalFloatingPoint |
       literalIntegral |
       literalChar |
@@ -103,143 +131,150 @@ object Parser {
       literalUnit
 
   // Identifiers
-  def identifier[_: P] = !ReservedWords ~~ P((CharPred(Character.isJavaIdentifierStart).! ~~ CharsWhile(Character.isJavaIdentifierPart, 0).!).map {
-    case (first, rest) => first + rest
-  })
+  def identifier[Ctx: P] = !ReservedWords ~~ P(
+    (CharPred(Character.isJavaIdentifierStart).! ~~ CharsWhile(Character.isJavaIdentifierPart, 0).!)
+      .map { case (first, rest) =>
+        first + rest
+      }
+  )
 
   // Blocks
-  def inBraces[_: P, A](p: => P[A]) = P("{" ~/ p ~ "}")
-  def inParens[_: P, A](p: => P[A]) = P("(" ~/ p ~ ")")
-  def inSquareBraces[_: P, A](p: => P[A]) = P("[" ~/ p ~ "]")
+  def inBraces[Ctx: P, A](p: => P[A])       = P("{" ~/ p ~ "}")
+  def inParens[Ctx: P, A](p: => P[A])       = P("(" ~/ p ~ ")")
+  def inSquareBraces[Ctx: P, A](p: => P[A]) = P("[" ~/ p ~ "]")
 
-  def reference[_: P] = P(Index ~ (identifier.rep(sep = "/", min = 0) ~ ".").? ~ identifier ~ Index).map {
-    case (from, Some(mod), id, to) =>
-      Reference(mod.toList, id, Pos(from, to))
-    case (from, None, id, to) =>
-      Reference(List.empty, id, Pos(from, to))
-  }
+  def reference[Ctx: P] =
+    P(Index ~ (identifier.rep(sep = "/", min = 0) ~ ".").? ~ identifier ~ Index).map {
+      case (from, Some(mod), id, to) =>
+        Reference(mod.toList, id, Pos(from, to))
+      case (from, None, id, to) =>
+        Reference(List.empty, id, Pos(from, to))
+    }
 
   // Expressions
-  def ifExpr[_: P] = P(
+  def ifExpr[Ctx: P] = P(
     Index ~
-    "if" ~/ expression ~
+      "if" ~/ expression ~
       "then" ~ expression ~
       "else" ~ expression ~ Index
-  ).map {
-    case (from, cond, thenExpr, elseExpr, to) =>
-      If(cond, thenExpr, elseExpr, Pos(from, to))
+  ).map { case (from, cond, thenExpr, elseExpr, to) =>
+    If(cond, thenExpr, elseExpr, Pos(from, to))
   }
 
-  def constrPattern[_: P]: P[Pattern[Pos]] = P(
+  def constrPattern[Ctx: P]: P[Pattern[Pos]] = P(
     Index ~
       (identifier ~ "@").? ~ reference ~ "{" ~/ fieldPattern.rep(sep = comma./) ~ "}" ~
       Index
-  ).map {
-    case (from, alias, ref, patterns, to) =>
-      ConstrPattern(ref.fullName, alias, patterns.toList, Pos(from, to))
+  ).map { case (from, alias, ref, patterns, to) =>
+    ConstrPattern(ref.fullName, alias, patterns.toList, Pos(from, to))
   }
 
-  def fieldPattern[_: P]: P[FieldPattern[Pos]] = P(
+  def fieldPattern[Ctx: P]: P[FieldPattern[Pos]] = P(
     Index ~
       identifier ~ (":" ~/ pattern).? ~
       Index
-  ).map {
-    case (from, field, pattern, to) =>
-      FieldPattern(field, pattern, Pos(from, to))
+  ).map { case (from, field, pattern, to) =>
+    FieldPattern(field, pattern, Pos(from, to))
   }
 
-  def idPattern[_: P]: P[Pattern[Pos]] = P(
+  def idPattern[Ctx: P]: P[Pattern[Pos]] = P(
     Index ~ identifier ~ Index
-  ).map {
-    case (from, name, to) =>
-      IdentPattern(name, Pos(from, to))
+  ).map { case (from, name, to) =>
+    IdentPattern(name, Pos(from, to))
   }
 
-  def pattern[_: P]: P[Pattern[Pos]] = P( constrPattern | idPattern )
+  def pattern[Ctx: P]: P[Pattern[Pos]] = P(constrPattern | idPattern)
 
-  def matchCase[_: P] = P(
+  def matchCase[Ctx: P] = P(
     Index ~
       "case" ~/ pattern ~ "->" ~ expression ~ Index
-  ).map {
-    case (from, pat, resultExpr, to) =>
-      MatchCase(pat, resultExpr, Pos(from, to))
+  ).map { case (from, pat, resultExpr, to) =>
+    MatchCase(pat, resultExpr, Pos(from, to))
   }
 
-  def matchExpr[_: P] = P(
+  def matchExpr[Ctx: P] = P(
     Index ~
       "match" ~/ expression ~
       "with" ~ inBraces(matchCase.rep(min = 1, sep = maybeSemi)) ~ Index
-  ).map {
-    case (from, expr, cases, to) =>
-      Match(expr, cases.toList, Pos(from, to))
+  ).map { case (from, expr, cases, to) =>
+    Match(expr, cases.toList, Pos(from, to))
   }
 
-  def constructorParam[_: P] = P(
+  def constructorParam[Ctx: P] = P(
     Index ~ identifier ~ ":" ~ typeExpr ~ Index
-  ).map {
-    case (from, name, ascribedAs, to) =>
-      Param(name, Some(ascribedAs), Pos(from, to))
+  ).map { case (from, name, ascribedAs, to) =>
+    Param(name, Some(ascribedAs), Pos(from, to))
   }
 
-  def lambdaParam[_: P] = P(
+  def lambdaParam[Ctx: P] = P(
     Index ~ identifier ~ (":" ~ typeExpr).? ~ Index
-  ).map {
-    case (from, name, ascribedAs, to) =>
-      Param(name, ascribedAs, Pos(from, to))
+  ).map { case (from, name, ascribedAs, to) =>
+    Param(name, ascribedAs, Pos(from, to))
   }
 
-  def lambda[_: P] = P(
+  def lambda[Ctx: P] = P(
     Index ~
-    (inParens(lambdaParam.rep(sep = comma./)) | lambdaParam.map(Seq(_))) ~ "->" ~/
+      (inParens(lambdaParam.rep(sep = comma./)) | lambdaParam.map(Seq(_))) ~ "->" ~/
       expression ~
       Index
-  ).map {
-    case (from, params, expr, to) =>
-      Lambda(params.toList, expr, Pos(from, to))
+  ).map { case (from, params, expr, to) =>
+    Lambda(params.toList, expr, Pos(from, to))
   }
 
-  def typeVarExpr[_: P]: P[TypeConstructorExpr[Pos]] = P(
+  def typeVarExpr[Ctx: P]: P[TypeConstructorExpr[Pos]] = P(
     Index ~ identifier ~ Index
-  ).map {
-    case (from, id, to) =>
-      TypeConstructorExpr(id, Pos(from, to))
+  ).map { case (from, id, to) =>
+    TypeConstructorExpr(id, Pos(from, to))
   }
 
-  def funTypeExpr[_: P]: P[TypeExpr[Pos]] = P(
-    Index ~ (inParens(typeExpr.rep(sep = comma./)) | primaryTypeExpr.map(Seq(_))) ~ "->" ~/ typeExpr ~ Index
-  ).map {
-    case (from, paramTyps, returnTyp, to) =>
-      TypeApplyExpr(TypeConstructorExpr("->", Pos(from, to)), (paramTyps :+ returnTyp).toList, Pos(from, to))
+  def funTypeExpr[Ctx: P]: P[TypeExpr[Pos]] = P(
+    Index ~ (inParens(typeExpr.rep(sep = comma./)) | primaryTypeExpr.map(
+      Seq(_)
+    )) ~ "->" ~/ typeExpr ~ Index
+  ).map { case (from, paramTyps, returnTyp, to) =>
+    TypeApplyExpr(
+      TypeConstructorExpr("->", Pos(from, to)),
+      (paramTyps :+ returnTyp).toList,
+      Pos(from, to)
+    )
   }
 
-  def primaryTypeExpr[_: P]: P[TypeExpr[Pos]] = P(
-    Index ~  (identifier.rep(sep = "/", min = 0) ~ ".").? ~ identifier ~ Index ~ inSquareBraces(typeExpr.rep(min = 1, sep = comma./)).? ~ Index
+  def primaryTypeExpr[Ctx: P]: P[TypeExpr[Pos]] = P(
+    Index ~ (identifier.rep(sep = "/", min = 0) ~ ".").? ~ identifier ~ Index ~ inSquareBraces(
+      typeExpr.rep(min = 1, sep = comma./)
+    ).? ~ Index
   ).map {
     case (from, mod, name, _, None, to) =>
       val fullName = if (mod.isEmpty) name else mod.mkString("/") + "." + name
       TypeConstructorExpr(fullName, Pos(from, to))
     case (from, mod, name, endTyCon, Some(params), endTyApp) =>
       val fullName = if (mod.isEmpty) name else mod.mkString("/") + "." + name
-      TypeApplyExpr(TypeConstructorExpr(fullName, Pos(from, endTyCon)), params.toList, Pos(from, endTyApp))
+      TypeApplyExpr(
+        TypeConstructorExpr(fullName, Pos(from, endTyCon)),
+        params.toList,
+        Pos(from, endTyApp)
+      )
   }
 
-  def typeExpr[_: P]: P[TypeExpr[Pos]] =
-    P( NoCut(funTypeExpr) | primaryTypeExpr | inParens(typeExpr) )
+  def typeExpr[Ctx: P]: P[TypeExpr[Pos]] =
+    P(NoCut(funTypeExpr) | primaryTypeExpr | inParens(typeExpr))
 
-  def application[_: P]: P[Expr[Pos] => Expr[Pos]] = P(
+  def application[Ctx: P]: P[Expr[Pos] => Expr[Pos]] = P(
     inParens(expression.rep(sep = comma./)) ~ Index
-  ).map {
-    case (args, to) =>
-      fn => Apply(fn, args.toList, Pos(fn.meta.from, to))
+  ).map { case (args, to) =>
+    fn => Apply(fn, args.toList, Pos(fn.meta.from, to))
   }
 
   // NoCut allows us to backtrack out of a nullary lambda into a unit literal, and from an if statement into an identifier starting with "if"
-  def primaryExpr[_:P] = P( (NoCut(lambda) | NoCut(ifExpr) | matchExpr | literal | reference | inParens(expression)) ~ application.rep ).map {
-    case (expr, applications) =>
-      applications.foldLeft(expr) { case (expr, app) => app(expr) }
+  def primaryExpr[Ctx: P] = P(
+    (NoCut(lambda) | NoCut(ifExpr) | matchExpr | literal | reference | inParens(
+      expression
+    )) ~ application.rep
+  ).map { case (expr, applications) =>
+    applications.foldLeft(expr) { case (expr, app) => app(expr) }
   }
 
-  def expression[_: P]: P[Expr[Pos]] = P(
+  def expression[Ctx: P]: P[Expr[Pos]] = P(
     Index ~
       primaryExpr ~ (":" ~ typeExpr).? ~
       Index
@@ -251,44 +286,43 @@ object Parser {
   }
 
   // Top level declarations
-  def letDeclaration[_: P] = {
+  def letDeclaration[Ctx: P] = {
     P(
       Index ~ "let" ~/ identifier ~ "=" ~
         (inBraces(expression) | expression) ~
         Index
-    ).map {
-      case (from, name, expr, to) =>
-        Let(name, expr, Pos(from, to))
+    ).map { case (from, name, expr, to) =>
+      Let(name, expr, Pos(from, to))
     }
   }
 
-  def dataConstructor[_: P] = {
+  def dataConstructor[Ctx: P] = {
     P(
       Index ~ "case" ~/ identifier ~ inParens(constructorParam.rep(sep = comma./)) ~ Index
-    ).map {
-      case (from, name, params, to) =>
-        DataConstructor(name, params.toList, Pos(from, to))
+    ).map { case (from, name, params, to) =>
+      DataConstructor(name, params.toList, Pos(from, to))
     }
   }
 
-  def typeParams[_: P] = P(
+  def typeParams[Ctx: P] = P(
     inSquareBraces(typeVarExpr.rep(min = 1, sep = comma./))
   )
 
-  def dataDeclaration[_: P] = P(
+  def dataDeclaration[Ctx: P] = P(
     Index ~ "data" ~/ identifier ~ typeParams.? ~
       inBraces(dataConstructor.rep(sep = maybeSemi./)) ~
       Index
-  ).map {
-    case (from, name, tparams, cases, to) =>
-      Data(name, tparams.map(_.toList).getOrElse(List.empty), cases.toList, Pos(from, to))
+  ).map { case (from, name, tparams, cases, to) =>
+    Data(name, tparams.map(_.toList).getOrElse(List.empty), cases.toList, Pos(from, to))
   }
 
-  def decl[_: P] = P(letDeclaration | dataDeclaration)
+  def decl[Ctx: P] = P(letDeclaration | dataDeclaration)
 
-  def importedSymbols[_: P] = P( inBraces(identifier.rep(min = 1, sep = comma./)) | identifier.map(Seq(_)) )
+  def importedSymbols[Ctx: P] = P(
+    inBraces(identifier.rep(min = 1, sep = comma./)) | identifier.map(Seq(_))
+  )
 
-  def imports[_: P] = P {
+  def imports[Ctx: P] = P {
     Index ~
       "import" ~/ identifier.rep(min = 1, sep = "/") ~
       ("." ~ importedSymbols).? ~
@@ -306,20 +340,27 @@ object Parser {
         ImportModule(List.empty, ident.head, Pos(from, to))
   }
 
-  def bracesBlock[_: P] = P(inBraces(imports.rep(sep = maybeSemi) ~ maybeSemi ~ decl.rep(sep = maybeSemi)))
+  def bracesBlock[Ctx: P] = P(
+    inBraces(imports.rep(sep = maybeSemi) ~ maybeSemi ~ decl.rep(sep = maybeSemi))
+  )
 
-  def module[_: P] = P {
+  def module[Ctx: P] = P {
     Index ~
-    "module" ~/ identifier.rep(min = 1, sep = "/") ~
+      "module" ~/ identifier.rep(min = 1, sep = "/") ~
       bracesBlock ~ Index ~
       End
-  }.map {
-    case (from, moduleName, (imports, decls), to) =>
-      val pos = Pos(from, to)
-      if (moduleName.length > 1)
-        Module(moduleName.dropRight(1).toList, moduleName.lastOption.getOrElse(""), imports.toList, decls.toList, pos)
-      else
-        Module(List.empty, moduleName.headOption.getOrElse(""), imports.toList, decls.toList, pos)
+  }.map { case (from, moduleName, (imports, decls), to) =>
+    val pos = Pos(from, to)
+    if (moduleName.length > 1)
+      Module(
+        moduleName.dropRight(1).toList,
+        moduleName.lastOption.getOrElse(""),
+        imports.toList,
+        decls.toList,
+        pos
+      )
+    else
+      Module(List.empty, moduleName.headOption.getOrElse(""), imports.toList, decls.toList, pos)
   }
 
   def parse(fileContents: String): Either[List[ParserError], Module[Pos]] = {

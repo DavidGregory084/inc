@@ -1,9 +1,11 @@
 package inc.main
 
-import inc.common.{ Error, Pos }
+import inc.common.Error
+import inc.common.Pos
+
 import java.lang.String
-import scala.collection.immutable.List
 import scala.StringContext
+import scala.collection.immutable.List
 
 case class ConfigError(private val position: Pos, val message: String) extends Error(position)
 

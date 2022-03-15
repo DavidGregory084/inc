@@ -1,7 +1,9 @@
 package inc
 
 import org.typelevel.paiges.Style
-import java.lang.{ String, System }
+
+import java.lang.String
+import java.lang.System
 
 package object common {
   val NL = System.lineSeparator
